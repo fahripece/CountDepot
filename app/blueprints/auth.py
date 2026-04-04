@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, session, redirect, url_for
+from flask import Blueprint, render_template, request, session, redirect, url_for, g
 
 import secrets as _secrets
 
@@ -53,7 +53,8 @@ def login_page():
             email = user["email"] if "email" in user.keys() else None
             if email and not email_verified:
                 error = "Please verify your email address before logging in. Check your inbox for the verification link."
-                return render_template("login.html", error=error)
+                return render_template("login.html", error=error,
+                                       unverified=True, unverified_username=username)
             clear_login_rate(ip)
             perms = get_user_perms(
                 user["id"], user["role"],
@@ -185,3 +186,34 @@ def verify_email(token):
     execute("UPDATE users SET email_verified=1 WHERE id=?", [row["user_id"]])
     execute("UPDATE email_verification_tokens SET used=1 WHERE id=?", [row["id"]])
     return render_template("verify_email.html", success=True)
+
+
+@bp.route("/resend-verification", methods=["POST"])
+def resend_verification():
+    """Resend email verification link. Rate limited to 3 per 15 min per IP."""
+    ip = request.remote_addr or "unknown"
+    allowed, reset_in = check_rate_limit(ip, "resend-verification", max_attempts=3, window=900)
+    if not allowed:
+        return render_template("login.html",
+                               error=f"Too many requests. Try again in {reset_in // 60 + 1} minutes.",
+                               unverified=False)
+
+    username = request.form.get("username", "").strip()
+    if username:
+        user = query("SELECT * FROM users WHERE username=?", [username], one=True)
+        email_verified = user["email_verified"] if user and "email_verified" in user.keys() else 1
+        email = user["email"] if user and "email" in user.keys() else None
+        if user and email and not email_verified:
+            from app.mailer import send_verification_email
+            token      = _secrets.token_urlsafe(32)
+            expires_at = (datetime.utcnow() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
+            execute("UPDATE email_verification_tokens SET used=1 WHERE user_id=? AND used=0",
+                    [user["id"]])
+            execute("INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?,?,?)",
+                    [user["id"], token, expires_at])
+            send_verification_email(email, g.tenant_slug, token)
+
+    # Always show the same message — don't reveal whether account exists or is unverified
+    return render_template("login.html",
+                           error="If your account exists and is unverified, a new link has been sent. Check your inbox.",
+                           unverified=False)

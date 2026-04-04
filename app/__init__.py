@@ -71,7 +71,7 @@ def create_app():
         # Routes that don't need the intercept checks
         skip = ("/onboarding", "/login", "/logout", "/change-password",
                 "/forgot-password", "/reset-password", "/verify-email",
-                "/static", "/signup")
+                "/resend-verification", "/static", "/signup")
         if any(request.path.startswith(s) for s in skip):
             return
 

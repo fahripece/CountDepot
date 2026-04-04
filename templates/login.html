@@ -26,6 +26,14 @@ input:focus{border-color:#1d4ed8;background:#fff}
     <div class="logo-sub">Inventory Storage &amp; Management</div>
   </div>
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if unverified %}
+  <form method="POST" action="/resend-verification" style="margin-bottom:18px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="username" value="{{ unverified_username }}">
+    <button class="btn" type="submit" style="background:#d97706">Resend verification email →</button>
+  </form>
+  <div style="text-align:center;margin-bottom:14px;font-size:12px;color:#94a3b8">— or sign in with a different account —</div>
+  {% endif %}
   <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Username</label>
