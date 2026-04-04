@@ -63,25 +63,28 @@ def signup():
             # 2. Bootstrap inventory DB (schema + seed + admin account)
             _bootstrap_tenant_db(slug, password)
 
-            # 3. Stamp the admin's email + set email_verified=0, generate verify token
+            # 3. Stamp the admin's email; only require verification if SMTP is configured
+            smtp_enabled = bool(Config.SMTP_HOST)
             db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
             db = sqlite3.connect(db_path)
             db.execute(
-                "UPDATE users SET email=?, must_change_password=0, email_verified=0 "
+                "UPDATE users SET email=?, must_change_password=0, email_verified=? "
                 "WHERE username='admin'",
-                [email])
-            user_id = db.execute(
-                "SELECT id FROM users WHERE username='admin'").fetchone()[0]
-            verify_token  = secrets.token_urlsafe(32)
-            token_expires = (datetime.utcnow() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
-            db.execute(
-                "INSERT INTO email_verification_tokens (user_id, token, expires_at) "
-                "VALUES (?,?,?)",
-                [user_id, verify_token, token_expires])
+                [email, 0 if smtp_enabled else 1])
+            verify_token = None
+            if smtp_enabled:
+                user_id = db.execute(
+                    "SELECT id FROM users WHERE username='admin'").fetchone()[0]
+                verify_token  = secrets.token_urlsafe(32)
+                token_expires = (datetime.utcnow() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
+                db.execute(
+                    "INSERT INTO email_verification_tokens (user_id, token, expires_at) "
+                    "VALUES (?,?,?)",
+                    [user_id, verify_token, token_expires])
             db.commit()
             db.close()
 
-            # 4. Send welcome email with verification link (no-op if SMTP not configured)
+            # 4. Send welcome email (no-op if SMTP not configured)
             send_welcome_email(email, name, slug, password, verify_token=verify_token)
 
             return render_template("signup_success.html",

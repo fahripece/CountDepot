@@ -50,14 +50,12 @@ a.signin:hover{text-decoration:underline}
       <div class="field">
         <label>Company name</label>
         <input name="name" id="name-input" autofocus required
-               placeholder="e.g. Acme IT Services"
                oninput="suggestSlug(this.value)">
       </div>
 
       <div class="field">
         <label>Your subdomain</label>
         <input name="slug" id="slug-input" required
-               placeholder="acme"
                pattern="[a-z0-9\-]{2,32}"
                style="font-family:'IBM Plex Mono',monospace"
                oninput="updatePreview(this.value)">
@@ -67,13 +65,12 @@ a.signin:hover{text-decoration:underline}
 
       <div class="field">
         <label>Work email</label>
-        <input name="email" type="email" required placeholder="you@company.com">
+        <input name="email" type="email" required>
       </div>
 
       <div class="field">
         <label>Password</label>
-        <input name="password" type="password" required minlength="8"
-               placeholder="At least 8 characters">
+        <input name="password" type="password" required minlength="8">
         <div class="hint">Min 8 characters.</div>
       </div>
 
