@@ -18,5 +18,5 @@ jobs:
           cd /home/countdepot/countdepot
           ./venv/bin/pip install -r requirements.txt --quiet
 
-      - name: Reload app
-        run: sudo systemctl reload countdepot
+      - name: Restart app
+        run: sudo systemctl restart countdepot
