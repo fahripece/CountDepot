@@ -59,7 +59,9 @@ MIGRATIONS = [
     ("audit_log", "product_name", "TEXT"),
 
     # users — email verification (default 1 = verified for all pre-existing accounts)
-    ("users", "email_verified", "INTEGER NOT NULL DEFAULT 1"),
+    ("users", "email_verified",  "INTEGER NOT NULL DEFAULT 1"),
+    # users — session token for server-side invalidation
+    ("users", "session_token",   "TEXT"),
 
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
     # Example: ("items", "condition_notes", "TEXT")
@@ -86,6 +88,7 @@ def _init_db_conn(db):
             permissions          TEXT NOT NULL DEFAULT '',
             email                TEXT,
             email_verified       INTEGER NOT NULL DEFAULT 1,
+            session_token        TEXT,
             must_change_password INTEGER NOT NULL DEFAULT 0,
             last_login           TEXT
         );

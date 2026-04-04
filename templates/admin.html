@@ -40,6 +40,9 @@
         <span style="font-size:11px;color:#94a3b8;margin-right:4px" id="permtoggle-{{ u.id }}">▸ Permissions</span>
         {% endif %}
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openResetPw({{ u.id }},'{{ u.username }}')">Reset PW</button>
+        {% if u.id != current_user_id %}
+        <button class="btn btn-secondary btn-sm" style="color:#b45309;border-color:#fcd34d" onclick="event.stopPropagation();forceLogout({{ u.id }},'{{ u.username }}')">Force Logout</button>
+        {% endif %}
         <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteUser({{ u.id }},'{{ u.username }}')">Delete</button>
       </div>
     </div>
@@ -269,6 +272,12 @@ async function deleteUser(id,name){
   if(!confirm(`Delete user "${name}"?`))return;
   const res=await api('/api/user/delete',{id});
   if(res.ok){toast('User deleted','warn');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+async function forceLogout(id,name){
+  if(!confirm(`Force logout "${name}"? Their current session will be immediately invalidated.`))return;
+  const res=await api('/api/user/force-logout',{id});
+  if(res.ok){toast(`${name} has been logged out`,'ok');}
   else toast(res.msg||'Error','err');
 }
 

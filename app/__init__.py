@@ -83,8 +83,20 @@ def create_app():
         if not check_session_expiry():
             return redirect(url_for("auth.login_page"))
 
-        # Force password change on first login
+        # Verify session token — catches force-logged-out users
+        db_tok = query("SELECT session_token FROM users WHERE id=?",
+                       [session["user_id"]], one=True)
+        if not db_tok or db_tok["session_token"] != session.get("session_token"):
+            session.clear()
+            if request.path.startswith("/api/") or request.is_json:
+                return jsonify({"ok": False, "msg": "Session invalidated"}), 401
+            return redirect(url_for("auth.login_page"))
+
+        # Force password change on first login — block API too
         if session.get("must_change_password"):
+            if request.path.startswith("/api/") or request.is_json:
+                return jsonify({"ok": False,
+                                "msg": "Password change required. Please log in via the web interface."}), 403
             return redirect(url_for("auth.change_password"))
 
         # Sector onboarding — must pick business type before using app

@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import re
 import time
 from datetime import datetime
 from functools import wraps
@@ -16,6 +17,18 @@ from app.db import query, execute
 def hash_pw(pw):
     """Hash a password with bcrypt."""
     return _bcrypt.hashpw(pw.encode(), _bcrypt.gensalt()).decode()
+
+def validate_password(pw):
+    """Returns an error string if the password fails complexity rules, else None.
+    Rules: 8+ chars, at least one uppercase letter, at least one digit or symbol."""
+    if len(pw) < 8:
+        return "Password must be at least 8 characters."
+    if not re.search(r'[A-Z]', pw):
+        return "Password must contain at least one uppercase letter."
+    if not re.search(r'[0-9!@#$%^&*()\-_=+\[\]{}|;:,.<>?/\\\'"`~]', pw):
+        return "Password must contain at least one number or special character."
+    return None
+
 
 def verify_pw(pw, stored_hash):
     """Verify a password against a stored hash.

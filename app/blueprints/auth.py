@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, session, redirect, url_for
 
+import secrets as _secrets
+
 from app.db import query, execute
-from app.helpers import (hash_pw, verify_pw, check_login_rate, clear_login_rate,
+from app.helpers import (hash_pw, verify_pw, validate_password,
+                         check_login_rate, clear_login_rate, check_rate_limit,
                          get_user_perms, log_auth_event)
 
 bp = Blueprint("auth", __name__)
@@ -27,7 +30,9 @@ def login_page():
         return redirect(url_for("main.inventory"))
     error = None
     if request.method == "POST":
-        ip = request.remote_addr or "unknown"
+        ip       = request.remote_addr or "unknown"
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
         allowed, reset_in = check_login_rate(ip)
         if not allowed:
             log_auth_event("RATE_LIMITED", username=username, ip=ip,
@@ -37,8 +42,6 @@ def login_page():
                 "login.html",
                 error=f"Too many login attempts. Try again in {reset_in} seconds."
             ), 429
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
         user = query("SELECT * FROM users WHERE username=?", [username], one=True)
         if user and verify_pw(password, user["password"]):
             # Auto-migrate legacy HMAC-SHA256 hashes to bcrypt on first successful login
@@ -56,6 +59,7 @@ def login_page():
                 user["id"], user["role"],
                 user["permissions"] if "permissions" in user.keys() else "")
             now = datetime.utcnow()
+            tok = _secrets.token_hex(32)
             session.clear()
             session["user_id"]              = user["id"]
             session["username"]             = user["username"]
@@ -63,8 +67,9 @@ def login_page():
             session["permissions"]          = ",".join(perms)
             session["must_change_password"] = bool(user["must_change_password"])
             session["expires_at"]           = (now + timedelta(hours=SESSION_LIFETIME_HOURS)).isoformat()
-            execute("UPDATE users SET last_login=? WHERE id=?",
-                    [now.strftime("%Y-%m-%d %H:%M:%S"), user["id"]])
+            session["session_token"]        = tok
+            execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
+                    [now.strftime("%Y-%m-%d %H:%M:%S"), tok, user["id"]])
             log_auth_event("LOGIN_OK", username=user["username"], ip=ip,
                            tenant=getattr(g, "tenant_slug", ""))
             return redirect(url_for("main.inventory"))
@@ -79,7 +84,13 @@ def logout():
     log_auth_event("LOGOUT", username=session.get("username", ""),
                    ip=request.remote_addr or "",
                    tenant=getattr(g, "tenant_slug", ""))
+    uid = session.get("user_id")
     session.clear()
+    if uid:
+        try:
+            execute("UPDATE users SET session_token=NULL WHERE id=?", [uid])
+        except Exception:
+            pass
     return redirect(url_for("auth.login_page"))
 
 
@@ -92,11 +103,10 @@ def change_password():
     if request.method == "POST":
         new_pw  = request.form.get("new_password", "")
         confirm = request.form.get("confirm_password", "")
-        if len(new_pw) < 8:
-            error = "Password must be at least 8 characters."
-        elif new_pw != confirm:
+        error = validate_password(new_pw)
+        if not error and new_pw != confirm:
             error = "Passwords do not match."
-        else:
+        if not error:
             execute("UPDATE users SET password=?, must_change_password=0 WHERE id=?",
                     [hash_pw(new_pw), session["user_id"]])
             session["must_change_password"] = False
@@ -114,6 +124,11 @@ def forgot_password():
         return redirect(url_for("main.inventory"))
     sent = False
     if request.method == "POST":
+        ip = request.remote_addr or "unknown"
+        allowed, reset_in = check_rate_limit(ip, "forgot-password", max_attempts=5, window=900)
+        if not allowed:
+            return render_template("forgot_password.html", sent=False,
+                                   error=f"Too many requests. Try again in {reset_in // 60 + 1} minutes.")
         email = request.form.get("email", "").strip().lower()
         if email:
             user = query("SELECT * FROM users WHERE LOWER(COALESCE(email,''))=?",
@@ -131,7 +146,7 @@ def forgot_password():
                         [user["id"], token, expires_at])
                 send_password_reset_email(email, g.tenant_slug, token)
         sent = True   # always show "sent" — don't reveal whether email exists
-    return render_template("forgot_password.html", sent=sent)
+    return render_template("forgot_password.html", sent=sent, error=None)
 
 
 @bp.route("/reset-password/<token>", methods=["GET", "POST"])
@@ -147,11 +162,10 @@ def reset_password(token):
     if request.method == "POST":
         new_pw  = request.form.get("new_password", "")
         confirm = request.form.get("confirm_password", "")
-        if len(new_pw) < 8:
-            error = "Password must be at least 8 characters."
-        elif new_pw != confirm:
+        error = validate_password(new_pw)
+        if not error and new_pw != confirm:
             error = "Passwords do not match."
-        else:
+        if not error:
             execute("UPDATE users SET password=?, must_change_password=0 WHERE id=?",
                     [hash_pw(new_pw), row["user_id"]])
             execute("UPDATE password_reset_tokens SET used=1 WHERE id=?", [row["id"]])

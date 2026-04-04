@@ -134,7 +134,8 @@ def admin_page():
     for u in users:
         u["perm_set"] = set(u["permissions"].split(",")) if u["permissions"] else set()
     return render_template("admin.html", users=users,
-                           all_permissions=ALL_PERMISSIONS, perm_keys=PERM_KEYS)
+                           all_permissions=ALL_PERMISSIONS, perm_keys=PERM_KEYS,
+                           current_user_id=session.get("user_id"))
 
 
 @bp.route("/contacts")

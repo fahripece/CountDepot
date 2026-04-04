@@ -9,7 +9,7 @@ from flask import Blueprint, request, jsonify, session, send_file
 from app.db import query, execute
 from app.helpers import (login_required, perm_required, admin_required,
                          log_action, get_low_stock_alerts, hash_pw, verify_pw,
-                         api_rate_limit,
+                         validate_password, api_rate_limit,
                          _item_missing_fields, sync_item_task,
                          _parse_date_range, _date_filter_sql,
                          ALL_PERMISSIONS, PERM_KEYS,
@@ -1064,6 +1064,9 @@ def api_user_add():
     d    = request.json
     if not d.get("username") or not d.get("password"):
         return jsonify({"ok": False, "msg": "Username and password required"})
+    pw_err = validate_password(d["password"])
+    if pw_err:
+        return jsonify({"ok": False, "msg": pw_err})
     role = d.get("role", "worker")
     if role == "admin":
         perm_str = ",".join(ADMIN_DEFAULT_PERMS)
@@ -1102,7 +1105,10 @@ def api_user_permissions():
 def api_user_password():
     d = request.json
     if not d.get("password"): return jsonify({"ok": False, "msg": "Password required"})
-    execute("UPDATE users SET password=? WHERE id=?", [hash_pw(d["password"]), d["id"]])
+    pw_err = validate_password(d["password"])
+    if pw_err: return jsonify({"ok": False, "msg": pw_err})
+    execute("UPDATE users SET password=?, session_token=NULL WHERE id=?",
+            [hash_pw(d["password"]), d["id"]])
     return jsonify({"ok": True})
 
 
@@ -1118,6 +1124,24 @@ def api_user_delete():
     return jsonify({"ok": True})
 
 
+@bp.route("/api/user/force-logout", methods=["POST"])
+@login_required
+@admin_required
+def api_user_force_logout():
+    d = request.json
+    uid = d.get("id")
+    if not uid:
+        return jsonify({"ok": False, "msg": "User ID required"})
+    if uid == session.get("user_id"):
+        return jsonify({"ok": False, "msg": "Cannot force-logout yourself"})
+    user = query("SELECT username FROM users WHERE id=?", [uid], one=True)
+    if not user:
+        return jsonify({"ok": False, "msg": "User not found"})
+    execute("UPDATE users SET session_token=NULL WHERE id=?", [uid])
+    log_action("FORCE_LOGOUT", detail=f"Force-logged-out user: {user['username']}")
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/change_password", methods=["POST"])
 @login_required
 def api_change_password():
@@ -1125,7 +1149,10 @@ def api_change_password():
     user = query("SELECT * FROM users WHERE id=?", [session["user_id"]], one=True)
     if not user or not verify_pw(d.get("old_password", ""), user["password"]):
         return jsonify({"ok": False, "msg": "Current password incorrect"})
-    execute("UPDATE users SET password=? WHERE id=?", [hash_pw(d["new_password"]), session["user_id"]])
+    pw_err = validate_password(d.get("new_password", ""))
+    if pw_err: return jsonify({"ok": False, "msg": pw_err})
+    execute("UPDATE users SET password=? WHERE id=?",
+            [hash_pw(d["new_password"]), session["user_id"]])
     return jsonify({"ok": True})
 
 
