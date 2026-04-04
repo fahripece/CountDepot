@@ -1,0 +1,654 @@
+{% extends "base.html" %}
+{% block title %}Add Item · CountDepot{% endblock %}
+{% block content %}
+
+<!-- ══ ADD ITEM MODAL (auto-opens on page load) ══ -->
+<div class="overlay open" id="addItemModal">
+  <div class="modal" style="width:660px;max-height:90vh">
+
+    <!-- Header -->
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Add Item</div>
+        <div id="fi-sku-display" style="display:none;font-size:11px;font-family:'IBM Plex Mono',monospace;color:#1d4ed8;margin-top:2px"></div>
+      </div>
+      <a href="/" class="modal-close" title="Cancel">✕</a>
+    </div>
+
+    <!-- Body -->
+    <div class="modal-body" style="padding:18px 22px">
+      <input type="hidden" id="fi-cat">
+
+      <!-- Step 1: Product picker -->
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+        <label class="label" style="color:#15803d;margin-bottom:5px">1. Select a Product <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#6b7280">— optional, pre-fills fields</span></label>
+        <div style="display:flex;gap:6px">
+          <select class="select" id="fi-product" onchange="onProductChange()" style="flex:1">
+            <option value="">— Choose a product template —</option>
+            {% for cat in categories %}
+            <optgroup label="{{ cat.name }}">
+              {% for p in products if p.category_id == cat.id %}
+              <option value="{{ p.id }}"
+                data-cat="{{ p.category_id }}"
+                data-serial="{{ p.serial_tracked }}"
+                data-qty="{{ p.qty_tracked }}"
+                data-scan="{{ p.require_scan_checkout }}"
+                data-label="{{ p.print_scan_label }}"
+                data-req-serial="{{ p.require_serial }}"
+                data-req-vendor="{{ p.require_vendor_sku }}"
+                data-req-internal="{{ p.require_internal_sku }}"
+                data-cost="{{ p.default_cost or '' }}"
+                data-sale="{{ p.default_sale or '' }}"
+                data-mfr="{{ p.manufacturer or '' }}"
+                data-model="{{ p.model or '' }}"
+                data-name="{{ p.name }}">{{ p.name }}{% if p.manufacturer %} — {{ p.manufacturer }}{% endif %}</option>
+              {% endfor %}
+            </optgroup>
+            {% endfor %}
+          </select>
+          <a href="/products" class="btn btn-secondary btn-sm" style="white-space:nowrap" title="Manage products">Manage</a>
+        </div>
+        <div id="fi-product-info" style="display:none;margin-top:8px;font-size:12px;color:#475569;background:#fff;border-radius:6px;padding:7px 10px;border:1px solid #e5e7eb"></div>
+        <div style="margin-top:8px">
+          <button class="btn btn-secondary btn-sm" id="skipBtn" onclick="skipProduct()">Skip — enter manually</button>
+        </div>
+      </div>
+
+      <!-- Category display (auto-filled from product) -->
+      <div id="catDisplay" style="display:none;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 13px;margin-bottom:12px;font-size:12.5px;color:#1e40af">
+        <strong>Category:</strong> <span id="catDisplayName"></span>
+        <span style="margin-left:8px;font-size:11px;color:#94a3b8">(from product)</span>
+      </div>
+
+      <!-- Manual category picker (shown when skipping product) -->
+      <div id="manualCatPicker" style="display:none;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+        <label class="label" style="color:#1e40af;margin-bottom:6px">Category *</label>
+        <select class="select" id="fi-cat-manual" onchange="onManualCatChange()">
+          <option value="">— Select a category —</option>
+          {% for cat in categories %}<option value="{{ cat.id }}" data-name="{{ cat.name }}">{{ cat.name }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <!-- All fields (shown after product selected or skip) -->
+      <div id="fi-step2" style="display:none">
+
+        <div class="section-hdr" style="margin-top:0">Product Info</div>
+        <div class="field"><label class="label">Item Name *</label><input class="input" id="fi-name" placeholder="e.g. Dell Latitude 5540"></div>
+        <div class="field-row">
+          <div class="field"><label class="label">Manufacturer</label><input class="input" id="fi-manufacturer" placeholder="e.g. Dell"></div>
+          <div class="field"><label class="label">Model / Part #</label><input class="input mono" id="fi-model" placeholder="e.g. Latitude 5540"></div>
+        </div>
+
+        <div id="fi-ident-section" style="display:none">
+          <div class="section-hdr" id="fi-ident-hdr">Identifiers</div>
+          <div class="field-row">
+            <div class="field" id="fi-serial-wrap" style="display:none">
+              <label class="label">Serial Number <span style="color:#b91c1c">*</span></label>
+              <input class="input mono" id="fi-serial" placeholder="e.g. SN123456" oninput="this.style.borderColor=''">
+            </div>
+            <div class="field" id="fi-vendor-sku-wrap" style="display:none">
+              <label class="label">Vendor SKU <span style="color:#b91c1c">*</span></label>
+              <input class="input mono" id="fi-sku" placeholder="e.g. MFR-PART-12345" oninput="this.style.borderColor=''">
+            </div>
+            <div class="field" id="fi-internal-sku-note" style="display:none">
+              <label class="label">Internal SKU</label>
+              <div style="padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;font-size:12px;color:#0369a1;font-family:'IBM Plex Mono',monospace">⚙ Auto-generated on save</div>
+            </div>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="label">Condition *</label>
+            <select class="select" id="fi-condition">
+              <option value="New">New</option>
+              <option value="Used-VG">Used — Very Good</option>
+              <option value="Used-Good">Used — Good</option>
+              <option value="Used">Used</option>
+              <option value="For Parts">For Parts</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Dynamic category-specific fields injected here -->
+        <div id="fi-cat-fields"></div>
+
+        <div class="section-hdr">Purchase Info</div>
+        <div class="field-row">
+          <div class="field">
+            <label class="label">Purchased From</label>
+            <div style="display:flex;gap:6px">
+              <select class="select" id="fi-purchased-from" style="flex:1">
+                <option value="">— None —</option>
+                {% for d in distributors %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="quickAddDistributor()" title="Add new">+</button>
+            </div>
+          </div>
+          <div class="field"><label class="label">PO # / Order #</label><input class="input mono" id="fi-po" placeholder="e.g. PO-2024-001"></div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="label">Purchase Date</label>
+            <div style="display:flex;gap:6px">
+              <input class="input" id="fi-date" type="date" style="flex:1">
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('fi-date').value=new Date().toISOString().split('T')[0]">Today</button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">Shelf Location</label>
+            <input class="input" id="fi-shelf" placeholder="e.g. A3, Rack 2">
+          </div>
+        </div>
+        <div class="field">
+          <label class="label">Owner / Company</label>
+          <div style="display:flex;gap:6px">
+            <select class="select" id="fi-owner" style="flex:1">
+              <option value="">— Select owner —</option>
+              {% for co in companies %}<option value="{{ co.name }}">{{ co.name }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-secondary btn-sm" onclick="quickAddOwner()" title="Add new">+</button>
+          </div>
+        </div>
+
+        <div class="field-row" id="fi-qty-row" style="display:none">
+          <div class="field"><label class="label">Quantity</label><input class="input" id="fi-qty" type="number" min="0" placeholder="0"></div>
+        </div>
+
+        <div class="section-hdr">Cost &amp; Pricing</div>
+        <div class="field-row">
+          <div class="field"><label class="label">Cost Price ($)</label><input class="input" id="fi-cost" type="number" step="0.01" min="0" oninput="updateProfitPreview()" placeholder="0.00"></div>
+          <div class="field"><label class="label">Sale Price ($)</label><input class="input" id="fi-sale" type="number" step="0.01" min="0" oninput="updateProfitPreview()" placeholder="0.00"></div>
+        </div>
+        <div id="profit-preview" style="font-size:12px;color:#475569;min-height:18px;margin-bottom:12px"></div>
+        <div class="field-row">
+          <div class="field">
+            <label class="label">Tax Paid</label>
+            <div style="display:flex;align-items:center;gap:14px;margin-top:8px">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="fi-tax" id="fi-tax-yes" value="1" onchange="onTaxChange()"> Yes</label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="fi-tax" id="fi-tax-no" value="0" onchange="onTaxChange()"> No</label>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">Sale State <span style="font-weight:400;font-size:10px;color:#94a3b8">(auto-fills tax rate)</span></label>
+            <select class="select" id="fi-state" onchange="onStateChange()">
+              <option value="">— Select state —</option>
+              <option value="Alabama">Alabama</option><option value="Alaska">Alaska</option><option value="Arizona">Arizona</option><option value="Arkansas">Arkansas</option><option value="California">California</option><option value="Colorado">Colorado</option><option value="Connecticut">Connecticut</option><option value="Delaware">Delaware</option><option value="Florida">Florida</option><option value="Georgia">Georgia</option><option value="Hawaii">Hawaii</option><option value="Idaho">Idaho</option><option value="Illinois">Illinois</option><option value="Indiana">Indiana</option><option value="Iowa">Iowa</option><option value="Kansas">Kansas</option><option value="Kentucky">Kentucky</option><option value="Louisiana">Louisiana</option><option value="Maine">Maine</option><option value="Maryland">Maryland</option><option value="Massachusetts">Massachusetts</option><option value="Michigan">Michigan</option><option value="Minnesota">Minnesota</option><option value="Mississippi">Mississippi</option><option value="Missouri">Missouri</option><option value="Montana">Montana</option><option value="Nebraska">Nebraska</option><option value="Nevada">Nevada</option><option value="New Hampshire">New Hampshire</option><option value="New Jersey">New Jersey</option><option value="New Mexico">New Mexico</option><option value="New York">New York</option><option value="North Carolina">North Carolina</option><option value="North Dakota">North Dakota</option><option value="Ohio">Ohio</option><option value="Oklahoma">Oklahoma</option><option value="Oregon">Oregon</option><option value="Pennsylvania">Pennsylvania</option><option value="Rhode Island">Rhode Island</option><option value="South Carolina">South Carolina</option><option value="South Dakota">South Dakota</option><option value="Tennessee">Tennessee</option><option value="Texas">Texas</option><option value="Utah">Utah</option><option value="Vermont">Vermont</option><option value="Virginia">Virginia</option><option value="Washington">Washington</option><option value="West Virginia">West Virginia</option><option value="Wisconsin">Wisconsin</option><option value="Wyoming">Wyoming</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row" id="fi-taxrate-row" style="display:none">
+          <div class="field"><label class="label">Tax Rate (%)</label><input class="input" id="fi-taxrate" type="number" step="0.01" min="0" placeholder="8.875"></div>
+        </div>
+
+        <div class="field"><label class="label">Notes</label><textarea class="input" id="fi-notes" style="min-height:52px;resize:vertical"></textarea></div>
+
+        <!-- Advanced options collapsed -->
+        <details style="margin-top:4px">
+          <summary style="cursor:pointer;font-size:11.5px;color:#94a3b8;font-weight:600;letter-spacing:.4px;text-transform:uppercase;padding:6px 0;user-select:none">Advanced Options</summary>
+          <div style="margin-top:10px">
+            <div class="field">
+              <label class="label">Barcode Scan on Checkout</label>
+              <select class="select" id="fi-scan-checkout">
+                <option value="-1">Use product default</option>
+                <option value="0">No — skip scan for this item</option>
+                <option value="1">Yes — require scan for this item</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label">eBay Status</label>
+              <select class="select" id="fi-ebay-status" onchange="document.getElementById('fi-ebay-fields').style.display=this.value!=='not_listed'?'':'none'">
+                <option value="not_listed">Not Listed</option>
+                <option value="listed">Listed on eBay</option>
+                <option value="sold">Sold on eBay</option>
+              </select>
+            </div>
+            <div class="field-row" id="fi-ebay-fields" style="display:none">
+              <div class="field"><label class="label">eBay Listing ID</label><input class="input mono" id="fi-ebay-id"></div>
+              <div class="field"><label class="label">Listed Price</label><input class="input" id="fi-ebay-price" type="number" step="0.01"></div>
+            </div>
+          </div>
+        </details>
+
+      </div><!-- end fi-step2 -->
+    </div><!-- end modal-body -->
+
+    <!-- Footer -->
+    <div class="modal-footer">
+      <a href="/" class="btn btn-secondary">Cancel</a>
+      <button class="btn btn-primary" id="saveItemBtn" onclick="saveItem()">Save Item</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ERROR MODAL -->
+<div class="overlay" id="errModal">
+  <div class="modal" style="width:440px">
+    <div class="modal-header" style="background:#fef2f2;border-bottom:1px solid #fecaca">
+      <div class="modal-title" style="color:#b91c1c">⚠ Cannot Save Item</div>
+      <button class="modal-close" onclick="closeModal('errModal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:20px">
+      <div id="errMsg" style="font-size:14px;line-height:1.6;color:#1e293b"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('errModal')">OK, Got It</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.section-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#64748b;padding:10px 0 8px;border-bottom:1px solid #f0efec;margin-bottom:14px;margin-top:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+
+<script>
+const CATEGORY_FIELDS = {{ category_fields|tojson }};
+const STATE_TAX_RATES = {Alabama:4,Alaska:0,Arizona:5.6,Arkansas:6.5,California:7.25,Colorado:2.9,Connecticut:6.35,Delaware:0,Florida:6,Georgia:4,Hawaii:4,Idaho:6,Illinois:6.25,Indiana:7,Iowa:6,Kansas:6.5,Kentucky:6,Louisiana:4.45,Maine:5.5,Maryland:6,Massachusetts:6.25,Michigan:6,Minnesota:6.875,Mississippi:7,Missouri:4.225,Montana:0,Nebraska:5.5,Nevada:6.85,"New Hampshire":0,"New Jersey":6.625,"New Mexico":5.125,"New York":8.875,"North Carolina":4.75,"North Dakota":5,Ohio:5.75,Oklahoma:4.5,Oregon:0,Pennsylvania:6,"Rhode Island":7,"South Carolina":6,"South Dakota":4.5,Tennessee:7,Texas:6.25,Utah:6.1,Vermont:6,Virginia:5.3,Washington:6.5,"West Virginia":6,Wisconsin:5,Wyoming:4};
+
+function onProductChange(){
+  const sel=document.getElementById('fi-product');
+  const opt=sel.options[sel.selectedIndex];
+  if(!opt||!opt.value)return;
+  const catId=opt.dataset.cat;
+  document.getElementById('fi-cat').value=catId;
+  const catDisplay=document.getElementById('catDisplay');
+  catDisplay.style.display='';
+  document.getElementById('catDisplayName').textContent=opt.closest('optgroup')?.label||'';
+  document.getElementById('manualCatPicker').style.display='none';
+  document.getElementById('fi-name').value=opt.dataset.name||opt.text.split(' — ')[0];
+  if(opt.dataset.mfr) document.getElementById('fi-manufacturer').value=opt.dataset.mfr;
+  if(opt.dataset.model) document.getElementById('fi-model').value=opt.dataset.model;
+  if(opt.dataset.cost) document.getElementById('fi-cost').value=opt.dataset.cost;
+  if(opt.dataset.sale) document.getElementById('fi-sale').value=opt.dataset.sale;
+  updateProfitPreview();
+  const isQty=opt.dataset.qty==='1'||opt.dataset.qty==='true';
+  document.getElementById('fi-qty-row').style.display=isQty?'':'none';
+  // Identifier fields — show/hide based on product flags
+  const reqSerial = opt.dataset.reqSerial==='1'||opt.dataset.reqSerial==='True';
+  const reqVendor = opt.dataset.reqVendor==='1'||opt.dataset.reqVendor==='True';
+  const reqInternal = opt.dataset.reqInternal==='1'||opt.dataset.reqInternal==='True';
+  const anyIdent = reqSerial || reqVendor || reqInternal;
+  document.getElementById('fi-ident-section').style.display = anyIdent ? '' : 'none';
+  document.getElementById('fi-serial-wrap').style.display = reqSerial ? '' : 'none';
+  document.getElementById('fi-vendor-sku-wrap').style.display = reqVendor ? '' : 'none';
+  document.getElementById('fi-internal-sku-note').style.display = reqInternal ? '' : 'none';
+  // Clear values when hidden
+  if(!reqSerial) document.getElementById('fi-serial').value='';
+  if(!reqVendor) document.getElementById('fi-sku').value='';
+  const flags=[];
+  if(opt.dataset.serial==='1') flags.push('Serial tracked');
+  if(isQty) flags.push('Qty tracked');
+  if(opt.dataset.scan==='1') flags.push('Scan required on checkout');
+  if(opt.dataset.label==='1') flags.push('Print & scan label on add');
+  const info=document.getElementById('fi-product-info');
+  info.textContent='Template: '+(flags.join(' · ')||'Standard item');
+  info.style.display='';
+  document.getElementById('fi-step2').style.display='';
+  renderCatFields(catId);
+  setTimeout(()=>document.getElementById('fi-name').focus(),50);
+}
+
+function skipProduct(){
+  document.getElementById('fi-product').value='';
+  document.getElementById('fi-product-info').style.display='none';
+  document.getElementById('catDisplay').style.display='none';
+  document.getElementById('manualCatPicker').style.display='';
+  document.getElementById('fi-step2').style.display='';
+  document.getElementById('skipBtn').textContent='✓ Manual entry mode';
+  document.getElementById('skipBtn').disabled=true;
+  setTimeout(()=>document.getElementById('fi-cat-manual').focus(),50);
+}
+
+function onManualCatChange(){
+  const sel=document.getElementById('fi-cat-manual');
+  document.getElementById('fi-cat').value=sel.value;
+  renderCatFields(sel.value);
+}
+
+function renderCatFields(catId){
+  const fields=CATEGORY_FIELDS[String(catId)]||[];
+  const container=document.getElementById('fi-cat-fields');
+  if(!fields.length){container.innerHTML='';return;}
+  const catName=document.getElementById('fi-cat-manual')?.options[document.getElementById('fi-cat-manual')?.selectedIndex]?.text
+    ||document.getElementById('fi-product')?.options[document.getElementById('fi-product')?.selectedIndex]?.closest('optgroup')?.label||'';
+  const pairs=[],singles=[];
+  fields.forEach(f=>{
+    const eid='fi-dyn-'+f.field_key;
+    const req=f.required?'<span style="color:#b91c1c"> *</span>':'';
+    if(f.field_type==='checkbox'){
+      singles.push(`<div class="field"><label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px"><input type="checkbox" id="${eid}" style="width:15px;height:15px"> ${f.field_label}</label></div>`);
+    } else if(f.field_type==='dropdown'){
+      const opts=(f.dropdown_options||[]).map(o=>`<option value="${o}">${o}</option>`).join('');
+      pairs.push(`<div class="field"><label class="label">${f.field_label}${req}</label><select class="select" id="${eid}"><option value="">—</option>${opts}</select></div>`);
+    } else if(f.field_type==='number'){
+      pairs.push(`<div class="field"><label class="label">${f.field_label}${req}</label><input class="input" type="number" id="${eid}"></div>`);
+    } else if(f.field_type==='date'){
+      pairs.push(`<div class="field"><label class="label">${f.field_label}${req}</label><input class="input" type="date" id="${eid}"></div>`);
+    } else {
+      pairs.push(`<div class="field"><label class="label">${f.field_label}${req}</label><input class="input" id="${eid}"></div>`);
+    }
+  });
+  let html=`<div class="section-hdr">${catName} Fields</div>`;
+  for(let i=0;i<pairs.length;i+=2) html+=pairs[i+1]?`<div class="field-row">${pairs[i]}${pairs[i+1]}</div>`:pairs[i];
+  singles.forEach(s=>html+=s);
+  container.innerHTML=html;
+}
+
+function onStateChange(){
+  const state=document.getElementById('fi-state').value;
+  if(state&&STATE_TAX_RATES[state]!==undefined){
+    document.getElementById('fi-taxrate').value=STATE_TAX_RATES[state];
+    if(STATE_TAX_RATES[state]===0){document.getElementById('fi-tax-no').checked=true;document.getElementById('fi-taxrate-row').style.display='none';}
+    else if(document.getElementById('fi-tax-yes').checked) document.getElementById('fi-taxrate-row').style.display='';
+  }
+}
+function onTaxChange(){
+  const yes=document.getElementById('fi-tax-yes').checked;
+  document.getElementById('fi-taxrate-row').style.display=yes?'':'none';
+  if(yes){const state=document.getElementById('fi-state').value;if(state&&STATE_TAX_RATES[state]!==undefined)document.getElementById('fi-taxrate').value=STATE_TAX_RATES[state];}
+}
+function updateProfitPreview(){
+  const c=parseFloat(document.getElementById('fi-cost').value)||0;
+  const s=parseFloat(document.getElementById('fi-sale').value)||0;
+  const el=document.getElementById('profit-preview');
+  if(c&&s){const p=s-c;el.innerHTML=`Projected profit: <strong style="color:${p>=0?'#15803d':'#b91c1c'}">${p>=0?'+':''}$${p.toFixed(2)}</strong>`;}
+  else el.innerHTML='';
+}
+async function quickAddOwner(){
+  const name=prompt('New owner/company name:');if(!name?.trim())return;
+  const res=await api('/api/company/add',{name:name.trim(),notes:''});
+  if(res.ok){const sel=document.getElementById('fi-owner');const opt=document.createElement('option');opt.value=name.trim();opt.text=name.trim();sel.appendChild(opt);sel.value=name.trim();toast('Owner added ✓','ok');}
+  else toast(res.msg||'Error','err');
+}
+async function quickAddDistributor(){
+  const name=prompt('New distributor name:');if(!name?.trim())return;
+  const res=await api('/api/distributor/add',{name:name.trim()});
+  if(res.ok){const sel=document.getElementById('fi-purchased-from');const opt=document.createElement('option');opt.value=name.trim();opt.text=name.trim();sel.appendChild(opt);sel.value=name.trim();toast('Distributor added ✓','ok');}
+  else toast(res.msg||'Error','err');
+}
+
+let _savingItem=false;
+async function saveItem(){
+  if(_savingItem)return;
+  const catId=document.getElementById('fi-cat').value;
+  if(!catId){toast('Please select a product or pick a category manually','warn');return;}
+  const name=document.getElementById('fi-name').value.trim();
+  if(!name){toast('Item name is required','warn');document.getElementById('fi-name').focus();return;}
+  const taxYes=document.getElementById('fi-tax-yes').checked;
+  const taxNo=document.getElementById('fi-tax-no').checked;
+  const catFieldDefs=CATEGORY_FIELDS[String(catId)]||[];
+  for(const f of catFieldDefs){
+    if(f.required&&f.field_type!=='checkbox'){
+      const el=document.getElementById('fi-dyn-'+f.field_key);
+      if(el&&!el.value.trim()){toast(f.field_label+' is required','warn');el.focus();return;}
+    }
+  }
+  // Identifier validation — check product's requirements
+  const prodSel=document.getElementById('fi-product');
+  const prodOpt=prodSel?.options[prodSel?.selectedIndex];
+  if(prodOpt&&prodOpt.value){
+    const needSerial=prodOpt.dataset.reqSerial==='1'||prodOpt.dataset.reqSerial==='True';
+    const needVendor=prodOpt.dataset.reqVendor==='1'||prodOpt.dataset.reqVendor==='True';
+    if(needSerial&&!document.getElementById('fi-serial').value.trim()){
+      const sf=document.getElementById('fi-serial');
+      sf.style.borderColor='#b91c1c';sf.focus();
+      toast('Serial number is required for this product','warn');return;
+    }
+    if(needVendor&&!document.getElementById('fi-sku').value.trim()){
+      const sf=document.getElementById('fi-sku');
+      sf.style.borderColor='#b91c1c';sf.focus();
+      toast('Vendor SKU is required for this product','warn');return;
+    }
+  }
+  _savingItem=true;
+  const saveBtn=document.getElementById('saveItemBtn');
+  if(saveBtn){
+    saveBtn.disabled=true;
+    saveBtn.innerHTML='<span style="width:13px;height:13px;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;flex-shrink:0"></span>&nbsp;Saving…';
+  }
+  const extra_fields={};
+  catFieldDefs.forEach(f=>{const el=document.getElementById('fi-dyn-'+f.field_key);if(!el)return;extra_fields[f.field_key]=el.type==='checkbox'?el.checked?1:0:el.value.trim()||null;});
+  const d={
+    name,
+    product_id:document.getElementById('fi-product').value||null,
+    manufacturer:document.getElementById('fi-manufacturer').value.trim(),
+    model:document.getElementById('fi-model').value.trim(),
+    serial:document.getElementById('fi-serial').value.trim(),
+    sku:document.getElementById('fi-sku').value.trim(),
+    category_id:parseInt(catId)||null,
+    condition:document.getElementById('fi-condition').value,
+    owner_company:document.getElementById('fi-owner').value||null,
+    purchase_date:document.getElementById('fi-date').value,
+    shelf:document.getElementById('fi-shelf').value.trim(),
+    qty:document.getElementById('fi-qty').value!==''?parseInt(document.getElementById('fi-qty').value):null,
+    low_stock_threshold:0,
+    notes:document.getElementById('fi-notes').value.trim(),
+    cost_price:document.getElementById('fi-cost').value||null,
+    sale_price:document.getElementById('fi-sale').value||null,
+    tax_paid:taxYes?1:(taxNo?0:-1),
+    tax_rate:parseFloat(document.getElementById('fi-taxrate').value)||0,
+    require_scan_checkout:parseInt(document.getElementById('fi-scan-checkout').value)||-1,
+    ebay_status:document.getElementById('fi-ebay-status').value,
+    ebay_listing_id:document.getElementById('fi-ebay-id').value.trim()||null,
+    ebay_listed_price:document.getElementById('fi-ebay-price').value||null,
+    purchased_from:document.getElementById('fi-purchased-from').value.trim()||null,
+    sale_state:document.getElementById('fi-state').value||null,
+    po_number:document.getElementById('fi-po').value.trim()||null,
+    extra_fields,
+  };
+  try{
+    const res=await api('/api/item/add',d);
+    if(res.ok && res.id){
+      toast('Item added ✓','ok');
+      const newId=res.id;
+      // Check if the selected product requires a SKU label
+      const prodSel=document.getElementById('fi-product');
+      const prodOpt=prodSel?.options[prodSel?.selectedIndex];
+      const hasPrintLabel=prodOpt&&prodOpt.value&&(prodOpt.dataset.label==='1'||prodOpt.dataset.label==='True');
+      const hasInternalSku=prodOpt&&prodOpt.value&&(prodOpt.dataset.reqInternal==='1'||prodOpt.dataset.reqInternal==='True');
+      const requiresLabel=hasPrintLabel||hasInternalSku;
+      if(!requiresLabel){
+        // No label required — go straight to inventory
+        setTimeout(()=>window.location.href='/',400);
+        return;
+      }
+      // Label required — fetch item and show print/scan workflow
+      let newItem=null;
+      try{
+        const scanRes=await fetch('/api/scan?code=ID-'+newId).then(r=>r.json());
+        if(!scanRes.found){
+          const searchRes=await fetch('/api/items?q='+encodeURIComponent('#'+newId)+'&hide_out=0').then(r=>r.json());
+          newItem=searchRes.find(i=>i.id===newId)||null;
+        } else {
+          newItem=scanRes.item;
+        }
+        if(!newItem) newItem={id:newId,name:d.name,internal_sku:'',serial:d.serial||'',sku:d.sku||''};
+      }catch(e){newItem={id:newId,name:d.name,internal_sku:'',serial:d.serial||'',sku:d.sku||''};}
+      openPrintModal(newItem);
+      _savingItem=false;
+      if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save Item';}
+    } else {
+      // Show error — highlight serial field if it's a duplicate error
+      const msg = res.msg || 'Error saving item';
+      document.getElementById('errMsg').innerHTML = msg;
+      openModal('errModal');
+      // If it's a serial/SKU dupe, highlight the field
+      if(msg.toLowerCase().includes('serial')){
+        const sf=document.getElementById('fi-serial');
+        if(sf){sf.style.borderColor='#b91c1c';sf.focus();}
+      } else if(msg.toLowerCase().includes('sku')){
+        const sf=document.getElementById('fi-sku');
+        if(sf){sf.style.borderColor='#b91c1c';sf.focus();}
+      }
+      _savingItem=false;
+      if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save Item';}
+    }
+  }catch(e){
+    document.getElementById('errMsg').innerHTML='Network error — please try again';
+    openModal('errModal');
+    _savingItem=false;
+    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save Item';}
+  }
+}
+
+// ── Print + Scan workflow ─────────────────────────────────────────────────────
+let _workflowItem=null;
+
+function openPrintModal(item){
+  _workflowItem=item;
+  const code=item.internal_sku||item.sku||item.serial||(item.id?'ID-'+item.id:'');
+  document.getElementById('wf-item-name').textContent=item.name||'New Item';
+  document.getElementById('wf-sku-code').textContent=code||'(auto-generated)';
+  // Render barcode preview
+  const bcSvg=document.getElementById('wf-barcode');
+  if(code&&typeof JsBarcode!=='undefined'){
+    try{JsBarcode(bcSvg,code,{format:'CODE128',width:2,height:40,displayValue:true,fontSize:12,margin:4,background:'#ffffff',lineColor:'#0f172a'});}catch(e){}
+  }
+  document.getElementById('wf-print-btn').disabled=false;
+  document.getElementById('wf-print-btn').textContent='🖨 Print Label';
+  // Hide the add item modal — item is saved, we don't need it anymore
+  document.getElementById('addItemModal').classList.remove('open');
+  _showWfModal('printModal');
+}
+
+function doPrintLabel(){
+  const item=_workflowItem;if(!item)return;
+  const code=item.internal_sku||item.sku||item.serial||(item.id?'ID-'+item.id:'');
+  // Open print window
+  const content=`<!DOCTYPE html><html><head><title>Label</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"><\/script>
+  <style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff}
+  .lbl{width:3.5in;height:1.5in;border:2px solid #0f172a;border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between;font-family:sans-serif}
+  .lname{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lmeta{font-size:9px;color:#555;margin-top:2px}.lbc{width:100%}
+  .lbrand{font-size:8px;color:#bbb;letter-spacing:.3px}
+  @media print{@page{margin:0}body{min-height:unset}}</style></head>
+  <body><div class="lbl">
+  <div><div class="lname">${item.name||''}</div>${item.internal_sku?`<div class="lmeta">SKU: ${item.internal_sku}</div>`:''}${item.serial?`<div class="lmeta">SN: ${item.serial}</div>`:''}${item.shelf?`<div class="lmeta">📍 ${item.shelf}</div>`:''}</div>
+  <svg id="bc" class="lbc"></svg>
+  <div class="lbrand">CountDepot</div></div>
+  <script>JsBarcode('#bc','${code}',{format:'CODE128',width:2,height:36,displayValue:true,fontSize:11,margin:0,background:'#ffffff',lineColor:'#0f172a'});setTimeout(()=>window.print(),300);<\/script>
+  </body></html>`;
+  const w=window.open('','_blank','width=600,height=400');
+  if(w){w.document.write(content);w.document.close();}
+  // Move to scan step immediately — don't wait on print dialog which blocks JS
+  _hideWfModal('printModal');
+  openScanModal();
+}
+
+function openScanModal(){
+  document.getElementById('scan-input').value='';
+  document.getElementById('scan-status').style.display='none';
+  _showWfModal('scanModal');
+  setTimeout(()=>document.getElementById('scan-input').focus(),100);
+}
+
+async function confirmScan(){
+  const code=document.getElementById('scan-input').value.trim();
+  const statusEl=document.getElementById('scan-status');
+  if(!code){
+    statusEl.style.display='';statusEl.style.background='#fef3c7';statusEl.style.color='#92400e';
+    statusEl.textContent='⚠ Please scan or type the SKU/barcode on the label.';return;
+  }
+  const item=_workflowItem;
+  const valid=[item.internal_sku,item.sku,item.serial,item.id?'ID-'+item.id:null].filter(Boolean);
+  // Also try the API scan for flexibility
+  const scanRes=await fetch('/api/scan?code='+encodeURIComponent(code)).then(r=>r.json());
+  const matchesThis=scanRes.found&&scanRes.item&&scanRes.item.id===item.id;
+  const matchesDirect=valid.some(v=>v===code||code.includes(v)||v.includes(code));
+  if(matchesThis||matchesDirect){
+    statusEl.style.display='';statusEl.style.background='#f0fdf4';statusEl.style.color='#15803d';
+    statusEl.textContent='✓ Confirmed! Label matches item.';
+    document.getElementById('scan-confirm-btn').disabled=true;
+    setTimeout(()=>{
+      document.getElementById('scanModal').style.display='none';
+      window.location.href='/';
+    },800);
+  } else {
+    statusEl.style.display='';statusEl.style.background='#fef2f2';statusEl.style.color='#b91c1c';
+    statusEl.textContent='✕ No match — scan the label you just printed for this item.';
+  }
+}
+
+function skipScanConfirm(){
+  // Allow skip but item will remain incomplete (missing scan confirmation is surfaced via is_incomplete)
+  window.location.href='/';
+}
+
+// Auto-select product from URL param ?product_id=
+(function(){
+  const pid=new URLSearchParams(window.location.search).get('product_id');
+  if(!pid)return;
+  const sel=document.getElementById('fi-product');
+  for(let i=0;i<sel.options.length;i++){
+    if(String(sel.options[i].value)===String(pid)){sel.selectedIndex=i;break;}
+  }
+  if(sel.value) onProductChange();
+})();
+</script>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+<script>
+// Build print and scan modals directly on body so they are never
+// inside the addItemModal overlay's stacking context
+(function(){
+  const printHTML=`<div class="overlay" id="printModal" style="z-index:9999;position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px)">
+    <div class="modal" style="width:480px">
+      <div class="modal-header" style="background:#f0fdf4;border-bottom:1px solid #bbf7d0">
+        <div>
+          <div class="modal-title" style="color:#15803d">✓ Item Saved — Print Label</div>
+          <div style="font-size:11.5px;color:#6b7280;margin-top:2px">Step 1 of 2 — Print the label for this item</div>
+        </div>
+      </div>
+      <div class="modal-body" style="padding:20px 22px">
+        <div style="background:#f8f8f7;border-radius:8px;padding:12px 14px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:14px" id="wf-item-name"></div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#1d4ed8;margin-top:4px" id="wf-sku-code"></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e3de;border-radius:8px;padding:14px;text-align:center;margin-bottom:16px">
+          <svg id="wf-barcode" style="max-width:100%"></svg>
+        </div>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:10px 13px;font-size:12.5px;color:#92400e;line-height:1.5">
+          <strong>⚠ Required:</strong> You must print this label and attach it to the physical item before proceeding. After printing you'll scan it to confirm.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="wf-print-btn" onclick="doPrintLabel()" style="background:#15803d">🖨 Print Label</button>
+      </div>
+    </div>
+  </div>`;
+
+  const scanHTML=`<div id="scanModal" style="z-index:9999;position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px)">
+    <div class="modal" style="width:440px">
+      <div class="modal-header" style="background:#f0f7ff;border-bottom:1px solid #bfdbfe">
+        <div>
+          <div class="modal-title" style="color:#1e40af">🔍 Scan to Confirm</div>
+          <div style="font-size:11.5px;color:#6b7280;margin-top:2px">Step 2 of 2 — Scan the label you just printed</div>
+        </div>
+      </div>
+      <div class="modal-body" style="padding:20px 22px">
+        <div style="font-size:13px;color:#475569;margin-bottom:14px;line-height:1.6">
+          Scan the barcode on the printed label with your scanner, or type the SKU/serial below.
+          This confirms the label is correctly attached to the physical item.
+        </div>
+        <input class="input mono" id="scan-input" placeholder="Scan barcode or type SKU…" style="font-size:14px;width:100%;margin-bottom:10px" onkeydown="if(event.key==='Enter')confirmScan()">
+        <div id="scan-status" style="display:none;padding:10px 12px;border-radius:7px;font-size:13px;font-weight:500;line-height:1.4"></div>
+      </div>
+      <div class="modal-footer" style="justify-content:space-between">
+        <button class="btn btn-secondary" onclick="skipScanConfirm()" style="color:#94a3b8;font-size:12px">Skip (item will be marked incomplete)</button>
+        <button class="btn btn-primary" id="scan-confirm-btn" onclick="confirmScan()">✓ Verify Scan</button>
+      </div>
+    </div>
+  </div>`;
+
+  // Inject both directly onto body — completely outside the page layout
+  document.body.insertAdjacentHTML('beforeend', printHTML);
+  document.body.insertAdjacentHTML('beforeend', scanHTML);
+})();
+
+function _showWfModal(id){document.getElementById(id).style.display='flex';}
+function _hideWfModal(id){document.getElementById(id).style.display='none';}
+</script>
+{% endblock %}

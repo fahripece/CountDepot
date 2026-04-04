@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform Admin · CountDepot</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#0f172a;color:#f8fafc;min-height:100vh}
+.topbar{background:#1e293b;border-bottom:1px solid #334155;
+  padding:0 24px;height:52px;display:flex;align-items:center;
+  justify-content:space-between}
+.topbar-brand{font-size:13px;font-weight:700;color:#f8fafc;letter-spacing:.3px}
+.topbar-brand span{color:#3b82f6}
+.topbar-right{display:flex;align-items:center;gap:14px}
+.topbar-right a{font-size:12px;color:#94a3b8;text-decoration:none}
+.topbar-right a:hover{color:#f8fafc}
+.main{max-width:1100px;margin:0 auto;padding:28px 24px}
+.page-hdr{display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:24px}
+h1{font-size:20px;font-weight:600}
+.sub{font-size:13px;color:#94a3b8;margin-top:3px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;
+  border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;
+  border:none;text-decoration:none;transition:background .15s}
+.btn-primary{background:#3b82f6;color:#fff}
+.btn-primary:hover{background:#2563eb}
+.btn-sm{padding:5px 11px;font-size:12px}
+.btn-danger{background:#7f1d1d;color:#fca5a5}
+.btn-danger:hover{background:#991b1b}
+.btn-muted{background:#1e293b;color:#94a3b8;border:1px solid #334155}
+.btn-muted:hover{background:#334155;color:#f8fafc}
+.btn-green{background:#14532d;color:#86efac}
+.btn-green:hover{background:#166534}
+
+/* Summary cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:14px;margin-bottom:28px}
+.card{background:#1e293b;border:1px solid #334155;border-radius:10px;
+  padding:18px 20px}
+.card-val{font-size:26px;font-weight:700;color:#f8fafc;margin-bottom:3px}
+.card-lbl{font-size:12px;color:#94a3b8;font-weight:500}
+
+/* Table */
+.tbl-wrap{background:#1e293b;border:1px solid #334155;border-radius:10px;
+  overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+  color:#64748b;padding:11px 16px;text-align:left;
+  border-bottom:1px solid #334155;background:#1e293b}
+td{padding:12px 16px;font-size:13px;border-bottom:1px solid #1e293b;
+  vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#263548}
+.badge{display:inline-block;padding:3px 8px;border-radius:5px;
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.badge-active{background:#14532d;color:#86efac}
+.badge-suspended{background:#450a0a;color:#fca5a5}
+.badge-standard{background:#1e3a5f;color:#93c5fd}
+.badge-pro{background:#2e1065;color:#c4b5fd}
+.badge-healthcare{background:#4a1942;color:#f0abfc}
+.slug{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#94a3b8}
+.stat{font-size:12px;color:#64748b}
+.stat strong{color:#94a3b8}
+
+/* Inline edit form */
+.edit-form{display:none;background:#0f172a;border:1px solid #334155;
+  border-radius:8px;padding:14px 16px;margin-top:8px}
+.edit-form.open{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.edit-form input,.edit-form select{padding:7px 10px;background:#1e293b;
+  border:1px solid #334155;border-radius:6px;color:#f8fafc;font-size:13px;
+  outline:none}
+.edit-form input:focus,.edit-form select:focus{border-color:#3b82f6}
+
+/* New tenant modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);
+  display:none;align-items:center;justify-content:center;z-index:100;
+  backdrop-filter:blur(2px)}
+.overlay.open{display:flex}
+.modal{background:#1e293b;border:1px solid #334155;border-radius:12px;
+  width:100%;max-width:480px;overflow:hidden}
+.modal-hdr{padding:18px 22px 14px;border-bottom:1px solid #334155}
+.modal-hdr h2{font-size:16px;font-weight:600}
+.modal-body{padding:20px 22px}
+.modal-foot{padding:14px 22px;border-top:1px solid #334155;
+  display:flex;justify-content:flex-end;gap:10px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:6px}
+.field input,.field select{width:100%;padding:9px 12px;background:#0f172a;
+  border:1px solid #334155;border-radius:7px;color:#f8fafc;font-size:13px;
+  outline:none;transition:border-color .15s}
+.field input:focus,.field select:focus{border-color:#3b82f6}
+.field .hint{font-size:11.5px;color:#475569;margin-top:4px}
+.err-banner{background:#450a0a;border:1px solid #7f1d1d;color:#fca5a5;
+  border-radius:7px;padding:9px 12px;font-size:13px;margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand">CountDepot <span>Platform</span></div>
+  <div class="topbar-right">
+    <span style="font-size:12px;color:#475569">Super-admin</span>
+    <a href="{{ url_for('platform.logout') }}">Sign out</a>
+  </div>
+</div>
+
+<div class="main">
+  <div class="page-hdr">
+    <div>
+      <h1>Tenants</h1>
+      <div class="sub">{{ tenants|length }} tenant{{ 's' if tenants|length != 1 else '' }} · {{ total_items }} total items · {{ total_users }} total users</div>
+    </div>
+    <button class="btn btn-primary" onclick="openNew()">+ New Tenant</button>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-val">{{ tenants|length }}</div>
+      <div class="card-lbl">Total tenants</div>
+    </div>
+    <div class="card">
+      <div class="card-val">{{ tenants|selectattr('active','equalto',1)|list|length }}</div>
+      <div class="card-lbl">Active</div>
+    </div>
+    <div class="card">
+      <div class="card-val">{{ total_items }}</div>
+      <div class="card-lbl">Items across all tenants</div>
+    </div>
+    <div class="card">
+      <div class="card-val">{{ total_users }}</div>
+      <div class="card-lbl">Users across all tenants</div>
+    </div>
+  </div>
+
+  <!-- Tenant table -->
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Tenant</th>
+          <th>Slug</th>
+          <th>Plan</th>
+          <th>Status</th>
+          <th>Stats</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tenants %}
+        <tr>
+          <td>
+            <div style="font-weight:600;font-size:13.5px">{{ t.name }}</div>
+            <div id="edit-{{ t.slug }}" class="edit-form">
+              <form method="POST" action="{{ url_for('platform.tenant_edit', slug=t.slug) }}"
+                    style="display:contents">
+                <input name="name" value="{{ t.name }}" placeholder="Company name" style="width:180px">
+                <select name="plan">
+                  <option value="standard"  {% if t.plan=='standard'  %}selected{% endif %}>Standard</option>
+                  <option value="pro"        {% if t.plan=='pro'        %}selected{% endif %}>Pro</option>
+                  <option value="healthcare" {% if t.plan=='healthcare' %}selected{% endif %}>Healthcare</option>
+                </select>
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <button type="button" class="btn btn-muted btn-sm"
+                        onclick="toggleEdit('{{ t.slug }}')">Cancel</button>
+              </form>
+            </div>
+          </td>
+          <td><span class="slug">{{ t.slug }}</span></td>
+          <td>
+            <span class="badge badge-{{ t.plan }}">{{ t.plan }}</span>
+          </td>
+          <td>
+            {% if t.active %}
+              <span class="badge badge-active">Active</span>
+            {% else %}
+              <span class="badge badge-suspended">Suspended</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="stat">
+              <strong>{{ t.stats.items }}</strong> items ·
+              <strong>{{ t.stats.users }}</strong> users ·
+              <strong>{{ t.stats.db_size_kb }}</strong> KB
+            </span>
+          </td>
+          <td>
+            <span class="stat">{{ t.created_at[:10] }}</span>
+          </td>
+          <td>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-muted btn-sm"
+                      onclick="toggleEdit('{{ t.slug }}')">Edit</button>
+              {% if t.active %}
+              <form method="POST"
+                    action="{{ url_for('platform.tenant_suspend', slug=t.slug) }}"
+                    onsubmit="return confirm('Suspend {{ t.name }}? Users will be blocked immediately.')">
+                <button type="submit" class="btn btn-danger btn-sm">Suspend</button>
+              </form>
+              {% else %}
+              <form method="POST"
+                    action="{{ url_for('platform.tenant_activate', slug=t.slug) }}">
+                <button type="submit" class="btn btn-green btn-sm">Reactivate</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" style="text-align:center;padding:40px;color:#475569">
+            No tenants yet. Click "+ New Tenant" to create your first one.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- New tenant modal -->
+<div class="overlay" id="newModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h2>New Tenant</h2>
+    </div>
+    <div class="modal-body">
+      <div id="modal-err" class="err-banner" style="display:none"></div>
+      <div class="field">
+        <label>Company name</label>
+        <input id="t-name" placeholder="e.g. Acme Corp" oninput="suggestSlug()">
+      </div>
+      <div class="field">
+        <label>Slug <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#475569">— becomes the subdomain</span></label>
+        <input id="t-slug" placeholder="e.g. acme" style="font-family:'IBM Plex Mono',monospace">
+        <div class="hint" id="slug-preview"></div>
+      </div>
+      <div class="field">
+        <label>Plan</label>
+        <select id="t-plan">
+          <option value="standard">Standard</option>
+          <option value="pro">Pro</option>
+          <option value="healthcare">Healthcare</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Admin password <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#475569">— for this tenant's admin account</span></label>
+        <input id="t-pw" type="password" placeholder="Min 8 characters">
+        <div class="hint">The tenant will use username <strong>admin</strong> with this password.</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-muted" onclick="closeNew()">Cancel</button>
+      <button class="btn btn-primary" onclick="createTenant()">Create Tenant</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function openNew(){document.getElementById('newModal').classList.add('open');}
+function closeNew(){document.getElementById('newModal').classList.remove('open');
+  document.getElementById('modal-err').style.display='none';}
+
+function suggestSlug(){
+  const name=document.getElementById('t-name').value;
+  const slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,32);
+  document.getElementById('t-slug').value=slug;
+  updateSlugPreview(slug);
+}
+
+document.getElementById('t-slug').addEventListener('input',function(){
+  updateSlugPreview(this.value);
+});
+
+function updateSlugPreview(slug){
+  const el=document.getElementById('slug-preview');
+  if(slug) el.textContent='URL: '+slug+'.yourdomain.com';
+  else el.textContent='';
+}
+
+async function createTenant(){
+  const name=document.getElementById('t-name').value.trim();
+  const slug=document.getElementById('t-slug').value.trim().toLowerCase();
+  const plan=document.getElementById('t-plan').value;
+  const pw=document.getElementById('t-pw').value;
+  const errEl=document.getElementById('modal-err');
+  errEl.style.display='none';
+
+  if(!name){showErr('Company name is required.');return;}
+  if(!slug){showErr('Slug is required.');return;}
+  if(!/^[a-z0-9][a-z0-9\-]{1,31}$/.test(slug)){
+    showErr('Slug must be lowercase letters, numbers and hyphens (2–32 chars).');return;}
+  if(pw.length<8){showErr('Admin password must be at least 8 characters.');return;}
+
+  // Submit as a form POST
+  const form=document.createElement('form');
+  form.method='POST';
+  form.action='{{ url_for("platform.tenant_new") }}';
+  [['name',name],['slug',slug],['plan',plan],['admin_password',pw]].forEach(([k,v])=>{
+    const i=document.createElement('input');i.name=k;i.value=v;form.appendChild(i);
+  });
+  document.body.appendChild(form);
+  form.submit();
+}
+
+function showErr(msg){
+  const el=document.getElementById('modal-err');
+  el.textContent=msg;el.style.display='';
+}
+
+function toggleEdit(slug){
+  const el=document.getElementById('edit-'+slug);
+  el.classList.toggle('open');
+}
+
+// Close modal on backdrop click
+document.getElementById('newModal').addEventListener('click',function(e){
+  if(e.target===this)closeNew();
+});
+</script>
+
+</body>
+</html>

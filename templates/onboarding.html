@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome to CountDepot · Choose your sector</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#f8f7f4;min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:24px}
+.wrap{width:100%;max-width:760px}
+.logo{font-size:13px;font-weight:700;color:#94a3b8;text-transform:uppercase;
+  letter-spacing:.8px;text-align:center;margin-bottom:32px}
+h1{font-size:26px;font-weight:700;color:#0f172a;text-align:center;margin-bottom:8px}
+.sub{font-size:15px;color:#64748b;text-align:center;margin-bottom:36px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;
+  margin-bottom:32px}
+.sector-card{background:#fff;border:2px solid #e5e3de;border-radius:12px;
+  padding:22px 18px;cursor:pointer;transition:border-color .15s,box-shadow .15s;
+  text-align:left;position:relative}
+.sector-card:hover{border-color:#1d4ed8;box-shadow:0 4px 16px rgba(29,78,216,.1)}
+.sector-card.selected{border-color:#1d4ed8;background:#eff6ff;
+  box-shadow:0 4px 16px rgba(29,78,216,.12)}
+.sector-card input[type=radio]{position:absolute;opacity:0;width:0;height:0}
+.sector-icon{font-size:28px;margin-bottom:10px;display:block}
+.sector-name{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px}
+.sector-desc{font-size:12.5px;color:#64748b;line-height:1.5}
+.sector-cats{margin-top:10px;display:flex;flex-wrap:wrap;gap:4px}
+.sector-cat{font-size:10.5px;background:#f1f0ec;color:#64748b;
+  border-radius:4px;padding:2px 7px;font-weight:500}
+.checkmark{position:absolute;top:12px;right:12px;width:20px;height:20px;
+  background:#1d4ed8;border-radius:50%;display:none;
+  align-items:center;justify-content:center}
+.sector-card.selected .checkmark{display:flex}
+.checkmark::after{content:'';width:6px;height:10px;border:2px solid #fff;
+  border-top:none;border-left:none;transform:rotate(45deg) translate(-1px,-1px)}
+
+.footer{text-align:center}
+.btn{padding:13px 36px;background:#1d4ed8;color:#fff;border:none;
+  border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;
+  transition:background .15s;opacity:.4;pointer-events:none}
+.btn.active{opacity:1;pointer-events:auto}
+.btn.active:hover{background:#1e40af}
+.hint{font-size:12px;color:#94a3b8;margin-top:10px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="logo">CountDepot · Welcome, {{ tenant.name }}</div>
+  <h1>What type of business are you?</h1>
+  <div class="sub">We'll set up the right categories and fields for your team. You can always add more later.</div>
+
+  <form method="POST" action="{{ url_for('onboarding.choose') }}" id="form">
+    <div class="grid">
+      {% for key, sector in sectors.items() %}
+      <label class="sector-card" id="card-{{ key }}" onclick="select('{{ key }}')">
+        <input type="radio" name="sector" value="{{ key }}" id="sector-{{ key }}">
+        <div class="checkmark"></div>
+        <span class="sector-icon">{{ sector.icon }}</span>
+        <div class="sector-name">{{ sector.label }}</div>
+        <div class="sector-desc">{{ sector.description }}</div>
+        <div class="sector-cats">
+          {% for cat in sector.categories[:5] %}
+          <span class="sector-cat">{{ cat[0] }}</span>
+          {% endfor %}
+          {% if sector.categories|length > 5 %}
+          <span class="sector-cat">+{{ sector.categories|length - 5 }} more</span>
+          {% endif %}
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="footer">
+      <button type="submit" class="btn" id="submit-btn" disabled>
+        Set up my workspace →
+      </button>
+      <div class="hint">Takes less than a second. You can customise categories any time.</div>
+    </div>
+  </form>
+</div>
+
+<script>
+function select(key){
+  // Deselect all
+  document.querySelectorAll('.sector-card').forEach(c=>c.classList.remove('selected'));
+  // Select clicked
+  document.getElementById('card-'+key).classList.add('selected');
+  document.getElementById('sector-'+key).checked=true;
+  // Enable submit
+  const btn=document.getElementById('submit-btn');
+  btn.classList.add('active');
+  btn.disabled=false;
+}
+// Keyboard support
+document.querySelectorAll('.sector-card').forEach(card=>{
+  card.setAttribute('tabindex','0');
+  card.addEventListener('keydown',e=>{
+    if(e.key===' '||e.key==='Enter'){e.preventDefault();
+      const key=card.id.replace('card-','');select(key);}
+  });
+});
+</script>
+</body>
+</html>

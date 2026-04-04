@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CountDepot — Inventory Management Made Easy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0f1e;
+  --bg2:#0f1628;
+  --card:#141d35;
+  --border:#1e2d50;
+  --blue:#2563eb;
+  --blue-light:#3b82f6;
+  --accent:#38bdf8;
+  --text:#f1f5f9;
+  --muted:#64748b;
+  --muted2:#94a3b8;
+}
+html{scroll-behavior:smooth}
+body{
+  font-family:'DM Sans',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* ── NAV ── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  padding:20px 48px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(10,15,30,0.85);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(255,255,255,0.04);
+}
+.nav-logo{
+  font-family:'Syne',sans-serif;
+  font-weight:800;font-size:22px;
+  color:var(--text);
+  letter-spacing:-0.5px;
+}
+.nav-logo span{color:var(--accent)}
+.nav-links{display:flex;align-items:center;gap:32px}
+.nav-links a{
+  color:var(--muted2);font-size:14px;font-weight:500;
+  text-decoration:none;transition:color .2s;
+}
+.nav-links a:hover{color:var(--text)}
+.nav-cta{
+  background:var(--blue);color:#fff;
+  padding:10px 22px;border-radius:8px;
+  font-size:14px;font-weight:500;
+  text-decoration:none;
+  transition:background .2s,transform .15s;
+}
+.nav-cta:hover{background:var(--blue-light);transform:translateY(-1px)}
+
+/* ── HERO ── */
+.hero{
+  min-height:100vh;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  text-align:center;
+  padding:120px 24px 80px;
+  position:relative;
+  overflow:hidden;
+}
+.hero-glow{
+  position:absolute;
+  width:800px;height:800px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(37,99,235,0.15) 0%, transparent 70%);
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+.hero-glow-2{
+  position:absolute;
+  width:400px;height:400px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%);
+  top:30%;left:60%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+.badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(37,99,235,0.12);
+  border:1px solid rgba(37,99,235,0.3);
+  color:var(--accent);
+  padding:6px 16px;border-radius:100px;
+  font-size:13px;font-weight:500;
+  margin-bottom:32px;
+  animation:fadeUp .6s ease both;
+}
+.badge-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--accent);
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+h1{
+  font-family:'Syne',sans-serif;
+  font-size:clamp(42px,7vw,84px);
+  font-weight:800;
+  line-height:1.05;
+  letter-spacing:-2px;
+  margin-bottom:24px;
+  animation:fadeUp .6s .1s ease both;
+}
+h1 span{
+  background:linear-gradient(135deg, var(--blue-light), var(--accent));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.hero-sub{
+  font-size:clamp(16px,2.5vw,20px);
+  color:var(--muted2);
+  font-weight:300;
+  max-width:560px;
+  line-height:1.7;
+  margin-bottom:48px;
+  animation:fadeUp .6s .2s ease both;
+}
+.hero-actions{
+  display:flex;align-items:center;gap:16px;
+  flex-wrap:wrap;justify-content:center;
+  animation:fadeUp .6s .3s ease both;
+}
+.btn-primary{
+  background:var(--blue);color:#fff;
+  padding:14px 32px;border-radius:10px;
+  font-size:16px;font-weight:500;
+  text-decoration:none;
+  transition:all .2s;
+  border:1px solid transparent;
+}
+.btn-primary:hover{background:var(--blue-light);transform:translateY(-2px);box-shadow:0 8px 30px rgba(37,99,235,0.4)}
+.btn-secondary{
+  color:var(--muted2);
+  padding:14px 32px;border-radius:10px;
+  font-size:16px;font-weight:400;
+  text-decoration:none;
+  border:1px solid var(--border);
+  transition:all .2s;
+}
+.btn-secondary:hover{color:var(--text);border-color:var(--muted)}
+.hero-note{
+  margin-top:24px;
+  font-size:13px;color:var(--muted);
+  animation:fadeUp .6s .4s ease both;
+}
+
+/* ── STATS BAR ── */
+.stats{
+  display:flex;align-items:center;justify-content:center;
+  gap:0;
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  background:var(--bg2);
+  padding:0;
+  overflow:hidden;
+}
+.stat{
+  flex:1;
+  padding:28px 24px;
+  text-align:center;
+  border-right:1px solid var(--border);
+}
+.stat:last-child{border-right:none}
+.stat-val{
+  font-family:'Syne',sans-serif;
+  font-size:32px;font-weight:800;
+  color:var(--text);
+  letter-spacing:-1px;
+}
+.stat-val span{color:var(--accent)}
+.stat-label{font-size:13px;color:var(--muted);margin-top:4px;font-weight:400}
+
+/* ── SECTION ── */
+section{padding:100px 24px}
+.container{max-width:1100px;margin:0 auto}
+.section-label{
+  font-size:12px;font-weight:600;
+  text-transform:uppercase;letter-spacing:2px;
+  color:var(--accent);margin-bottom:16px;
+}
+.section-title{
+  font-family:'Syne',sans-serif;
+  font-size:clamp(28px,4vw,48px);
+  font-weight:800;
+  letter-spacing:-1px;
+  line-height:1.1;
+  margin-bottom:16px;
+}
+.section-sub{
+  font-size:17px;color:var(--muted2);
+  font-weight:300;line-height:1.7;
+  max-width:520px;
+}
+
+/* ── FEATURES ── */
+#features{background:var(--bg2)}
+.features-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:1px;
+  background:var(--border);
+  border:1px solid var(--border);
+  border-radius:16px;
+  overflow:hidden;
+  margin-top:64px;
+}
+.feature{
+  background:var(--card);
+  padding:40px 36px;
+  transition:background .2s;
+}
+.feature:hover{background:#18243f}
+.feature-icon{
+  font-size:28px;margin-bottom:20px;
+  width:52px;height:52px;
+  background:rgba(37,99,235,0.1);
+  border:1px solid rgba(37,99,235,0.2);
+  border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+}
+.feature h3{
+  font-family:'Syne',sans-serif;
+  font-size:18px;font-weight:700;
+  margin-bottom:10px;letter-spacing:-0.3px;
+}
+.feature p{font-size:14px;color:var(--muted2);line-height:1.7;font-weight:300}
+
+/* ── HOW IT WORKS ── */
+.steps{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:32px;
+  margin-top:64px;
+}
+.step{position:relative;padding-left:0;text-align:center}
+.step-num{
+  font-family:'Syne',sans-serif;
+  font-size:64px;font-weight:800;
+  color:rgba(37,99,235,0.12);
+  line-height:1;
+  margin-bottom:16px;
+}
+.step h3{
+  font-family:'Syne',sans-serif;
+  font-size:17px;font-weight:700;
+  margin-bottom:8px;
+}
+.step p{font-size:14px;color:var(--muted2);line-height:1.7;font-weight:300}
+
+/* ── PRICING ── */
+#pricing{background:var(--bg2)}
+.pricing-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:24px;
+  margin-top:64px;
+  align-items:start;
+}
+.plan{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:36px 32px;
+  transition:transform .2s,border-color .2s;
+  position:relative;
+}
+.plan:hover{transform:translateY(-4px);border-color:var(--blue)}
+.plan.featured{
+  border-color:var(--blue);
+  background:linear-gradient(135deg,#141d35,#0f1e3d);
+}
+.plan-badge{
+  position:absolute;top:-12px;left:50%;transform:translateX(-50%);
+  background:var(--blue);color:#fff;
+  font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:1px;
+  padding:4px 14px;border-radius:100px;
+  white-space:nowrap;
+}
+.plan-name{
+  font-family:'Syne',sans-serif;
+  font-size:18px;font-weight:700;
+  margin-bottom:8px;
+}
+.plan-price{
+  display:flex;align-items:baseline;gap:4px;
+  margin-bottom:4px;
+}
+.plan-price .amount{
+  font-family:'Syne',sans-serif;
+  font-size:48px;font-weight:800;
+  letter-spacing:-2px;
+  color:var(--text);
+}
+.plan-price .period{font-size:14px;color:var(--muted);font-weight:300}
+.plan-annual{font-size:13px;color:var(--accent);margin-bottom:24px;font-weight:400}
+.plan-divider{height:1px;background:var(--border);margin-bottom:24px}
+.plan-features{list-style:none;display:flex;flex-direction:column;gap:12px;margin-bottom:32px}
+.plan-features li{
+  font-size:14px;color:var(--muted2);
+  display:flex;align-items:center;gap:10px;font-weight:300;
+}
+.plan-features li::before{
+  content:'✓';
+  color:var(--accent);font-size:13px;
+  font-weight:700;flex-shrink:0;
+}
+.plan-cta{
+  display:block;text-align:center;
+  padding:12px;border-radius:8px;
+  font-size:14px;font-weight:500;
+  text-decoration:none;
+  transition:all .2s;
+}
+.plan-cta-outline{
+  border:1px solid var(--border);color:var(--text);
+}
+.plan-cta-outline:hover{border-color:var(--blue);background:rgba(37,99,235,0.08)}
+.plan-cta-solid{
+  background:var(--blue);color:#fff;
+}
+.plan-cta-solid:hover{background:var(--blue-light)}
+
+.pricing-toggle{
+  display:flex;align-items:center;justify-content:center;
+  gap:16px;margin-top:32px;
+  font-size:14px;color:var(--muted2);
+}
+.toggle-wrap{
+  position:relative;
+  width:44px;height:24px;
+  cursor:pointer;
+}
+.toggle-wrap input{opacity:0;width:0;height:0;position:absolute}
+.toggle-slider{
+  position:absolute;inset:0;
+  background:var(--border);border-radius:100px;
+  transition:background .2s;
+}
+.toggle-slider::before{
+  content:'';position:absolute;
+  width:18px;height:18px;border-radius:50%;
+  background:#fff;top:3px;left:3px;
+  transition:transform .2s;
+}
+.toggle-wrap input:checked + .toggle-slider{background:var(--blue)}
+.toggle-wrap input:checked + .toggle-slider::before{transform:translateX(20px)}
+.annual-label{color:var(--accent)}
+
+/* ── TRIAL CTA ── */
+.trial-section{
+  text-align:center;
+  padding:100px 24px;
+  position:relative;overflow:hidden;
+}
+.trial-glow{
+  position:absolute;
+  width:600px;height:600px;border-radius:50%;
+  background:radial-gradient(circle,rgba(37,99,235,0.12) 0%,transparent 70%);
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+.trial-section h2{
+  font-family:'Syne',sans-serif;
+  font-size:clamp(32px,5vw,56px);
+  font-weight:800;letter-spacing:-1.5px;
+  margin-bottom:16px;
+}
+.trial-section p{
+  font-size:18px;color:var(--muted2);
+  font-weight:300;margin-bottom:40px;
+}
+.trial-note{margin-top:16px;font-size:13px;color:var(--muted)}
+
+/* ── FOOTER ── */
+footer{
+  border-top:1px solid var(--border);
+  padding:40px 48px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:16px;
+}
+.footer-logo{
+  font-family:'Syne',sans-serif;
+  font-weight:800;font-size:18px;
+}
+.footer-logo span{color:var(--accent)}
+footer p{font-size:13px;color:var(--muted);font-weight:300}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  nav{padding:16px 20px}
+  .nav-links{display:none}
+  .stats{flex-direction:column}
+  .stat{border-right:none;border-bottom:1px solid var(--border)}
+  .stat:last-child{border-bottom:none}
+  footer{flex-direction:column;text-align:center;padding:32px 20px}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Count<span>Depot</span></div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how">How it works</a>
+    <a href="#pricing">Pricing</a>
+    <a href="/signup" class="nav-cta">Start free trial</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-glow-2"></div>
+
+  <div class="badge">
+    <div class="badge-dot"></div>
+    7-day free trial — no credit card required
+  </div>
+
+  <h1>Inventory Management<br><span>Made Easy</span></h1>
+
+  <p class="hero-sub">
+    Track every asset your team touches. Check gear in and out, scan barcodes,
+    generate reports, and never lose track of a laptop again.
+  </p>
+
+  <div class="hero-actions">
+    <a href="/signup" class="btn-primary">Start your free trial →</a>
+    <a href="#features" class="btn-secondary">See what's included</a>
+  </div>
+
+  <p class="hero-note">No credit card · 7 days free · Cancel anytime</p>
+</section>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat">
+    <div class="stat-val">7<span>-day</span></div>
+    <div class="stat-label">Free trial</div>
+  </div>
+  <div class="stat">
+    <div class="stat-val"><span>$</span>20</div>
+    <div class="stat-label">Starting at / month</div>
+  </div>
+  <div class="stat">
+    <div class="stat-val">∞</div>
+    <div class="stat-label">Items tracked</div>
+  </div>
+  <div class="stat">
+    <div class="stat-val">100<span>%</span></div>
+    <div class="stat-label">Your data, your server</div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Everything your team needs.<br>Nothing you don't.</h2>
+    <p class="section-sub">Built for IT teams and MSPs who are tired of spreadsheets and expensive enterprise tools.</p>
+
+    <div class="features-grid">
+      <div class="feature">
+        <div class="feature-icon">📦</div>
+        <h3>Asset Tracking</h3>
+        <p>Track every item by serial number, SKU, or barcode. Know exactly where every laptop, switch, and cable is at all times.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔄</div>
+        <h3>Check In / Check Out</h3>
+        <p>Assign gear to jobs and technicians. Log who took what, when, and for which client — with a full audit trail.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📱</div>
+        <h3>Barcode Scanning</h3>
+        <p>Plug in any USB barcode scanner and it works instantly. Scan to check items in or out without typing a thing.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📊</div>
+        <h3>Financial Reports</h3>
+        <p>Know your stock value, track what you've sold, calculate profit margins. Real numbers, not guesses.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔔</div>
+        <h3>Low Stock Alerts</h3>
+        <p>Set thresholds on consumables and get alerted before you run out. Never be caught without Cat6 again.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">👥</div>
+        <h3>Team Permissions</h3>
+        <p>Control what each team member can see and do. Techs can check gear out without touching financial data.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🏷️</div>
+        <h3>Label Printing</h3>
+        <p>Print barcoded asset labels directly from the app. Works with standard label printers and Avery sheets.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🗂️</div>
+        <h3>Custom Categories</h3>
+        <p>Choose your industry on setup and get pre-configured categories. IT, Healthcare, Retail, Construction — all covered.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📋</div>
+        <h3>Full Audit Log</h3>
+        <p>Every action is permanently recorded. See exactly who did what and when — immutable and searchable.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="container">
+    <div class="section-label">How it works</div>
+    <h2 class="section-title">Up and running in minutes.</h2>
+    <p class="section-sub">No IT department required. Sign up, pick your industry, and start adding inventory.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <h3>Sign up</h3>
+        <p>Create your workspace at your own subdomain. No credit card needed for the 7-day trial.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <h3>Choose your industry</h3>
+        <p>Pick IT, Healthcare, Retail, or another sector. Your categories and fields are pre-configured instantly.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <h3>Add your inventory</h3>
+        <p>Import from Excel or add items one by one. Scan barcodes to populate serial numbers automatically.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">04</div>
+        <h3>Invite your team</h3>
+        <p>Add technicians and set their permissions. Everyone works from the same live inventory.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing">
+  <div class="container">
+    <div class="section-label">Pricing</div>
+    <h2 class="section-title">Simple, honest pricing.</h2>
+    <p class="section-sub">Way less than the alternatives. Cancel any time — no contracts, no surprises.</p>
+
+    <div class="pricing-toggle">
+      <span>Monthly</span>
+      <label class="toggle-wrap">
+        <input type="checkbox" id="annual-toggle">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="annual-label">Annual <strong>(2 months free)</strong></span>
+    </div>
+
+    <div class="pricing-grid">
+
+      <div class="plan">
+        <div class="plan-name">Standard</div>
+        <div class="plan-price">
+          <span class="amount" data-monthly="20" data-annual="17">$20</span>
+          <span class="period">/mo</span>
+        </div>
+        <div class="plan-annual" id="standard-annual" style="visibility:hidden">$200/yr — 2 months free</div>
+        <div class="plan-divider"></div>
+        <ul class="plan-features">
+          <li>5 users</li>
+          <li>Unlimited items</li>
+          <li>All core features</li>
+          <li>Barcode scanning</li>
+          <li>Financial reports</li>
+          <li>Email support</li>
+        </ul>
+        <a href="/signup" class="plan-cta plan-cta-outline">Start free trial</a>
+      </div>
+
+      <div class="plan featured">
+        <div class="plan-badge">Most popular</div>
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">
+          <span class="amount" data-monthly="50" data-annual="42">$50</span>
+          <span class="period">/mo</span>
+        </div>
+        <div class="plan-annual" id="pro-annual" style="visibility:hidden">$500/yr — 2 months free</div>
+        <div class="plan-divider"></div>
+        <ul class="plan-features">
+          <li>15 users</li>
+          <li>Unlimited items</li>
+          <li>Everything in Standard</li>
+          <li>Priority support</li>
+          <li>Advanced reporting</li>
+          <li>Excel import / export</li>
+        </ul>
+        <a href="/signup" class="plan-cta plan-cta-solid">Start free trial</a>
+      </div>
+
+      <div class="plan">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-price">
+          <span class="amount" data-monthly="80" data-annual="67">$80</span>
+          <span class="period">/mo</span>
+        </div>
+        <div class="plan-annual" id="enterprise-annual" style="visibility:hidden">$800/yr — 2 months free</div>
+        <div class="plan-divider"></div>
+        <ul class="plan-features">
+          <li>Unlimited users</li>
+          <li>Unlimited items</li>
+          <li>Everything in Pro</li>
+          <li>Dedicated support</li>
+          <li>Custom onboarding</li>
+          <li>API access</li>
+        </ul>
+        <a href="/signup" class="plan-cta plan-cta-outline">Start free trial</a>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- TRIAL CTA -->
+<section class="trial-section">
+  <div class="trial-glow"></div>
+  <h2>Ready to get organized?</h2>
+  <p>Start your 7-day free trial today. No credit card required.</p>
+  <a href="/signup" class="btn-primary" style="font-size:17px;padding:16px 40px">Create your workspace →</a>
+  <p class="trial-note">Takes 2 minutes · Your data stays yours · Cancel anytime</p>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">Count<span>Depot</span></div>
+  <p>© 2026 CountDepot. Inventory Management Made Easy.</p>
+  <a href="/signup" class="nav-cta">Get started free</a>
+</footer>
+
+<script>
+// Annual billing toggle
+const toggle = document.getElementById('annual-toggle');
+const amounts = document.querySelectorAll('.amount');
+const annualLabels = ['standard-annual','pro-annual','enterprise-annual'];
+
+toggle.addEventListener('change', () => {
+  const isAnnual = toggle.checked;
+  amounts.forEach(el => {
+    const val = isAnnual ? el.dataset.annual : el.dataset.monthly;
+    el.textContent = '$' + val;
+  });
+  annualLabels.forEach(id => {
+    document.getElementById(id).style.visibility = isAnnual ? 'visible' : 'hidden';
+  });
+});
+</script>
+
+</body>
+</html>

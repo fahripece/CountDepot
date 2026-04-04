@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Inventory Report · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Inventory Report</span>
+  <span class="topbar-sub" id="rpt-period"></span>
+  <div class="topbar-right">
+    <select id="periodSel" class="select" style="width:auto;min-width:140px" onchange="onPeriodChange()">
+      <option value="">All Time</option>
+      <option value="today">Today</option>
+      <option value="week">This Week</option>
+      <option value="month">This Month</option>
+      <option value="quarter">This Quarter</option>
+      <option value="year">This Year</option>
+      <option value="last30">Last 30 Days</option>
+      <option value="custom">Custom Range</option>
+    </select>
+    <div id="customRange" style="display:none;gap:6px;align-items:center">
+      <input type="date" id="dateFrom" class="input" style="width:auto">
+      <span style="color:#94a3b8">to</span>
+      <input type="date" id="dateTo" class="input" style="width:auto">
+      <button class="btn btn-primary btn-sm" onclick="loadReport()">Apply</button>
+    </div>
+    <select id="viewFilter" class="select" style="width:auto;min-width:120px" onchange="renderItems()">
+      <option value="all">All Items</option>
+      <option value="out">Checked Out</option>
+      <option value="low">Low Stock</option>
+      <option value="incomplete">Incomplete</option>
+      <option value="sold">Sold</option>
+    </select>
+  </div>
+</div>
+<div style="flex:1;overflow-y:auto;padding:20px 24px">
+  <div class="rpt-grid" id="cards"></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Item</th><th>Category</th><th>SN / SKU</th><th>Status</th><th>Summary</th></tr></thead>
+      <tbody id="itemBody"><tr class="empty-row"><td colspan="5">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <div style="margin-top:10px;font-size:12px;color:#94a3b8" id="itemCount"></div>
+</div>
+<style>
+.rpt-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
+.kcard{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:14px 16px;cursor:pointer;transition:border-color .15s}
+.kcard:hover{border-color:#94a3b8}
+.kcard.active{border-color:#0f172a;background:#f8fafc}
+.kcard-l{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:#94a3b8;margin-bottom:6px}
+.kcard-v{font-size:22px;font-weight:700;font-family:'IBM Plex Mono',monospace;letter-spacing:-1px}
+.item-summary{font-size:11px;color:#94a3b8;line-height:1.5;max-width:320px}
+.tag-incomplete{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+@media(max-width:900px){.rpt-grid{grid-template-columns:repeat(3,1fr)}}
+</style>
+<script>
+let allItems=[];
+function onPeriodChange(){
+  const v=document.getElementById('periodSel').value;
+  document.getElementById('customRange').style.display=v==='custom'?'flex':'none';
+  if(v!=='custom') loadReport();
+}
+function getParams(){
+  const period=document.getElementById('periodSel').value;
+  const params=new URLSearchParams();
+  if(period) params.set('period',period);
+  if(period==='custom'){
+    params.set('from',document.getElementById('dateFrom').value);
+    params.set('to',document.getElementById('dateTo').value);
+  }
+  return params;
+}
+function cardClick(filter){document.getElementById('viewFilter').value=filter;renderItems();}
+async function loadReport(){
+  const data=await fetch('/api/report/inventory?'+getParams()).then(r=>r.json());
+  allItems=data.items;const t=data.totals;
+  const pLabel=data.period.from?(data.period.from+' \u2192 '+data.period.to):'All Time';
+  document.getElementById('rpt-period').textContent=pLabel;
+  document.getElementById('cards').innerHTML=`
+    <div class="kcard" onclick="cardClick('all')"><div class="kcard-l">Total</div><div class="kcard-v">${t.total}</div></div>
+    <div class="kcard" onclick="cardClick('out')" style="border-color:${t.checked_out?'#fecaca':''}"><div class="kcard-l">Checked Out</div><div class="kcard-v" style="color:${t.checked_out?'#b91c1c':'#94a3b8'}">${t.checked_out}</div></div>
+    <div class="kcard" onclick="cardClick('low')" style="border-color:${t.low_stock?'#fecaca':''}"><div class="kcard-l">Low Stock</div><div class="kcard-v" style="color:${t.low_stock?'#b91c1c':'#94a3b8'}">${t.low_stock}</div></div>
+    <div class="kcard" onclick="cardClick('incomplete')" style="border-color:${t.incomplete?'#fde68a':''}"><div class="kcard-l">Incomplete</div><div class="kcard-v" style="color:${t.incomplete?'#92400e':'#94a3b8'}">${t.incomplete}</div></div>
+    <div class="kcard" onclick="cardClick('sold')"><div class="kcard-l">Sold</div><div class="kcard-v" style="color:#7c3aed">${t.sold}</div></div>`;
+  renderItems();
+}
+function renderItems(){
+  const filter=document.getElementById('viewFilter').value;
+  let items=allItems;
+  if(filter==='out') items=items.filter(i=>i.checked_out);
+  else if(filter==='low') items=items.filter(i=>i.is_low);
+  else if(filter==='incomplete') items=items.filter(i=>i.is_incomplete);
+  else if(filter==='sold') items=items.filter(i=>i.sold);
+  const tb=document.getElementById('itemBody');
+  document.getElementById('itemCount').textContent=items.length+' item'+(items.length===1?'':'s');
+  if(!items.length){tb.innerHTML='<tr class="empty-row"><td colspan="5">No items match.</td></tr>';return;}
+  tb.innerHTML=items.map(i=>{
+    const catPill=i.category?`<span class="tag" style="background:${i.color}18;color:${i.color}">${i.category}</span>`:'\u2014';
+    const sn=i.serial||i.sku||i.internal_sku||'\u2014';
+    let status='';
+    if(i.sold) status='<span class="tag" style="background:#f5f3ff;color:#7c3aed">Sold</span>';
+    else if(i.qty!==null){const avail=(i.qty||0)-(i.qty_out||0);status=i.is_low?`<span style="color:#b91c1c;font-weight:600">${avail}/${i.qty} \ud83d\udd34</span>`:`${avail}/${i.qty}`;}
+    else status=i.checked_out?`<span class="tag tag-out">\ud83d\udce4 ${i.checkout_by||'?'}</span>`:'<span class="tag tag-in">\u2713 In</span>';
+    const inc=i.is_incomplete?` <span class="tag-incomplete">\u26a0 ${i.missing_fields.join(', ')}</span>`:'';
+    const parts=[];
+    parts.push('Added '+(i.created_at?.substring(0,10)||'\u2014'));
+    if(i.cost_price!=null) parts.push('Cost $'+parseFloat(i.cost_price).toFixed(2));
+    if(i.sale_price!=null) parts.push('Sale $'+parseFloat(i.sale_price).toFixed(2));
+    if(i.last_modified) parts.push('Modified '+i.last_modified.substring(0,10));
+    parts.push(i.condition||'\u2014');
+    if(i.shelf) parts.push('Shelf '+i.shelf);
+    return `<tr><td><div style="font-weight:500;font-size:13px">${i.name}${inc}</div>${i.product_name?`<div style="font-size:10.5px;color:#15803d">\ud83d\udce6 ${i.product_name}</div>`:''}</td><td>${catPill}</td><td><span class="mono" style="font-size:11.5px">${sn}</span></td><td>${status}</td><td><div class="item-summary">${parts.join(' \xb7 ')}</div></td></tr>`;
+  }).join('');
+}
+loadReport();
+</script>
+{% endblock %}

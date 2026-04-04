@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Contacts · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Contacts</span>
+  <span class="topbar-sub">Companies, Distributors &amp; People</span>
+  <div class="topbar-right">
+    <button class="btn btn-primary btn-sm" onclick="openAddPerson()">+ Add Person</button>
+  </div>
+</div>
+<div style="flex:1;overflow-y:auto;padding:22px 24px">
+
+<!-- OWNERS / COMPANIES -->
+<div class="card" style="margin-bottom:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-weight:600;font-size:15px">Owners / Companies</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:1px">Appears in the "Owner / Company" dropdown when adding items</div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="openAddCompany()">+ Add Company</button>
+  </div>
+  {% for co in companies %}
+  <div class="contact-group">
+    <div class="contact-group-hdr">
+      <input class="input" id="co-name-{{ co.id }}" value="{{ co.name }}" style="font-weight:600;font-size:14px;border:1px solid transparent;padding:4px 8px;flex:1" onfocus="this.style.borderColor='#1d4ed8'" onblur="this.style.borderColor='transparent'">
+      <input class="input" id="co-notes-{{ co.id }}" value="{{ co.notes or '' }}" placeholder="Notes" style="color:#888;font-size:12px;border:1px solid transparent;padding:4px 8px;width:180px" onfocus="this.style.borderColor='#1d4ed8'" onblur="this.style.borderColor='transparent'">
+      <button class="btn btn-secondary btn-sm" onclick="saveCompanyInline({{ co.id }})">Save</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteCompany({{ co.id }},'{{ co.name|replace("'","\\'") }}')">Delete</button>
+    </div>
+    <div class="contact-people" id="people-company-{{ co.id }}">
+      {% for p in people if p.company_type == 'company' and p.company_id == co.id %}
+      <div class="person-row" id="person-{{ p.id }}">
+        <div class="person-avatar">{{ p.name[0]|upper }}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px">{{ p.name }}{% if p.role %} <span style="color:#94a3b8;font-weight:400">— {{ p.role }}</span>{% endif %}</div>
+          <div style="font-size:11px;color:#666">{{ p.email or '' }}{{ ' · ' if p.email and p.phone else '' }}{{ p.phone or '' }}{{ ' · ' if (p.email or p.phone) and p.notes else '' }}{{ p.notes or '' }}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="editPerson({{ p.id }})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deletePerson({{ p.id }},'{{ p.name|replace("'","\\'") }}')">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button class="btn btn-secondary btn-sm" style="margin:8px 0 4px 42px;font-size:11px" onclick="openAddPerson('company',{{ co.id }},'{{ co.name|replace("'","\\'") }}')">+ Add person at {{ co.name }}</button>
+  </div>
+  {% endfor %}
+  {% if not companies %}
+  <div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">No companies yet.</div>
+  {% endif %}
+</div>
+
+<!-- DISTRIBUTORS -->
+<div class="card" style="margin-bottom:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-weight:600;font-size:15px">Distributors</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:1px">Appears in the "Purchased From" dropdown when adding items</div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="openAddDistributor()">+ Add Distributor</button>
+  </div>
+  {% for d in distributors %}
+  <div class="contact-group">
+    <div class="contact-group-hdr">
+      <input class="input" id="dist-name-{{ d.id }}" value="{{ d.name }}" style="font-weight:600;font-size:14px;border:1px solid transparent;padding:4px 8px;flex:1" onfocus="this.style.borderColor='#1d4ed8'" onblur="this.style.borderColor='transparent'">
+      <button class="btn btn-secondary btn-sm" onclick="saveDistInline({{ d.id }})">Save</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteDistributor({{ d.id }},'{{ d.name|replace("'","\\'") }}')">Delete</button>
+    </div>
+    <div class="contact-people" id="people-dist-{{ d.id }}">
+      {% for p in people if p.company_type == 'distributor' and p.company_id == d.id %}
+      <div class="person-row" id="person-{{ p.id }}">
+        <div class="person-avatar">{{ p.name[0]|upper }}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px">{{ p.name }}{% if p.role %} <span style="color:#94a3b8;font-weight:400">— {{ p.role }}</span>{% endif %}</div>
+          <div style="font-size:11px;color:#666">{{ p.email or '' }}{{ ' · ' if p.email and p.phone else '' }}{{ p.phone or '' }}{{ ' · ' if (p.email or p.phone) and p.notes else '' }}{{ p.notes or '' }}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="editPerson({{ p.id }})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deletePerson({{ p.id }},'{{ p.name|replace("'","\\'") }}')">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button class="btn btn-secondary btn-sm" style="margin:8px 0 4px 42px;font-size:11px" onclick="openAddPerson('distributor',{{ d.id }},'{{ d.name|replace("'","\\'") }}')">+ Add person at {{ d.name }}</button>
+  </div>
+  {% endfor %}
+  {% if not distributors %}
+  <div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">No distributors yet.</div>
+  {% endif %}
+</div>
+
+</div>
+
+<!-- ADD COMPANY MODAL -->
+<div class="overlay" id="companyModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Add Company / Owner</div><button class="modal-close" onclick="closeModal('companyModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label class="label">Company Name *</label><input class="input" id="new-co-name"></div>
+      <div class="field"><label class="label">Notes</label><input class="input" id="new-co-notes"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('companyModal')">Cancel</button><button class="btn btn-primary" onclick="saveCompany()">Add Company</button></div>
+  </div>
+</div>
+
+<!-- ADD DISTRIBUTOR MODAL -->
+<div class="overlay" id="distModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Add Distributor</div><button class="modal-close" onclick="closeModal('distModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label class="label">Distributor Name *</label><input class="input" id="new-dist-name"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('distModal')">Cancel</button><button class="btn btn-primary" onclick="saveDistributor()">Add Distributor</button></div>
+  </div>
+</div>
+
+<!-- ADD/EDIT PERSON MODAL -->
+<div class="overlay" id="personModal">
+  <div class="modal" style="width:480px">
+    <div class="modal-header"><div class="modal-title" id="personModalTitle">Add Contact Person</div><button class="modal-close" onclick="closeModal('personModal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="person-id">
+      <input type="hidden" id="person-company-id">
+      <input type="hidden" id="person-company-type">
+      <div id="person-company-label" style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#1e40af;display:none"></div>
+      <div class="field"><label class="label">Full Name *</label><input class="input" id="person-name" placeholder="e.g. John Smith"></div>
+      <div class="field"><label class="label">Role / Title</label><input class="input" id="person-role" placeholder="e.g. Sales Rep, Account Manager"></div>
+      <div style="display:flex;gap:10px">
+        <div class="field" style="flex:1"><label class="label">Email</label><input class="input" id="person-email" type="email" placeholder="john@example.com"></div>
+        <div class="field" style="flex:1"><label class="label">Phone</label><input class="input" id="person-phone" placeholder="(555) 123-4567"></div>
+      </div>
+      <div class="field"><label class="label">Notes</label><textarea class="input" id="person-notes" rows="2" style="resize:vertical" placeholder="e.g. Helps with sales, ask for bulk pricing"></textarea></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('personModal')">Cancel</button><button class="btn btn-primary" id="personSaveBtn" onclick="savePerson()">Add Person</button></div>
+  </div>
+</div>
+
+<style>
+.contact-group{border:1px solid #e5e3de;border-radius:10px;margin-bottom:12px;overflow:hidden;background:#fff}
+.contact-group-hdr{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fafaf9;border-bottom:1px solid #f0efec}
+.contact-people{padding:0}
+.person-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #f5f4f1}
+.person-row:last-child{border-bottom:none}
+.person-avatar{width:32px;height:32px;border-radius:50%;background:#1d4ed8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+</style>
+<script>
+const ALL_PEOPLE = {{ people|tojson }};
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+
+// ── Companies ──
+function openAddCompany(){document.getElementById('new-co-name').value='';document.getElementById('new-co-notes').value='';openModal('companyModal');}
+async function saveCompany(){
+  const name=document.getElementById('new-co-name').value.trim();
+  if(!name){toast('Name required','warn');return;}
+  const res=await api('/api/company/add',{name,notes:document.getElementById('new-co-notes').value.trim()});
+  if(res.ok){toast('Company added ✓','ok');closeModal('companyModal');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+async function saveCompanyInline(id){
+  const name=document.getElementById('co-name-'+id).value.trim();
+  const notes=document.getElementById('co-notes-'+id).value.trim();
+  if(!name){toast('Name required','warn');return;}
+  const res=await api('/api/company/edit',{id,name,notes});
+  if(res.ok) toast('Saved ✓','ok');
+  else toast(res.msg||'Error','err');
+}
+async function deleteCompany(id,name){
+  if(!confirm(`Remove "${name}"? People under it won't be deleted.`))return;
+  const res=await api('/api/company/delete',{id});
+  if(res.ok){toast('Removed','warn');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+
+// ── Distributors ──
+function openAddDistributor(){document.getElementById('new-dist-name').value='';openModal('distModal');}
+async function saveDistributor(){
+  const name=document.getElementById('new-dist-name').value.trim();
+  if(!name){toast('Name required','warn');return;}
+  const res=await api('/api/distributor/add',{name});
+  if(res.ok){toast('Distributor added ✓','ok');closeModal('distModal');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+async function saveDistInline(id){
+  const name=document.getElementById('dist-name-'+id).value.trim();
+  if(!name){toast('Name required','warn');return;}
+  const res=await api('/api/distributor/edit',{id,name});
+  if(res.ok) toast('Saved ✓','ok');
+  else toast(res.msg||'Error','err');
+}
+async function deleteDistributor(id,name){
+  if(!confirm(`Remove "${name}"?`))return;
+  const res=await api('/api/distributor/delete',{id});
+  if(res.ok){toast('Removed','warn');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+
+// ── People ──
+function openAddPerson(compType,compId,compName){
+  document.getElementById('person-id').value='';
+  document.getElementById('person-name').value='';
+  document.getElementById('person-role').value='';
+  document.getElementById('person-email').value='';
+  document.getElementById('person-phone').value='';
+  document.getElementById('person-notes').value='';
+  document.getElementById('personModalTitle').textContent='Add Contact Person';
+  document.getElementById('personSaveBtn').textContent='Add Person';
+  const label=document.getElementById('person-company-label');
+  if(compType&&compId){
+    document.getElementById('person-company-id').value=compId;
+    document.getElementById('person-company-type').value=compType;
+    label.textContent='Adding to: '+compName;label.style.display='';
+  } else {
+    document.getElementById('person-company-id').value='';
+    document.getElementById('person-company-type').value='';
+    label.style.display='none';
+  }
+  openModal('personModal');
+  setTimeout(()=>document.getElementById('person-name').focus(),100);
+}
+function editPerson(id){
+  const p=ALL_PEOPLE.find(x=>x.id===id);if(!p)return;
+  document.getElementById('person-id').value=p.id;
+  document.getElementById('person-name').value=p.name;
+  document.getElementById('person-role').value=p.role||'';
+  document.getElementById('person-email').value=p.email||'';
+  document.getElementById('person-phone').value=p.phone||'';
+  document.getElementById('person-notes').value=p.notes||'';
+  document.getElementById('person-company-id').value=p.company_id||'';
+  document.getElementById('person-company-type').value=p.company_type||'';
+  document.getElementById('personModalTitle').textContent='Edit Contact';
+  document.getElementById('personSaveBtn').textContent='Save Changes';
+  document.getElementById('person-company-label').style.display='none';
+  openModal('personModal');
+}
+async function savePerson(){
+  const id=document.getElementById('person-id').value;
+  const payload={
+    name:document.getElementById('person-name').value.trim(),
+    role:document.getElementById('person-role').value.trim(),
+    email:document.getElementById('person-email').value.trim(),
+    phone:document.getElementById('person-phone').value.trim(),
+    notes:document.getElementById('person-notes').value.trim(),
+    company_id:parseInt(document.getElementById('person-company-id').value)||null,
+    company_type:document.getElementById('person-company-type').value
+  };
+  if(!payload.name){toast('Name required','warn');return;}
+  let res;
+  if(id){payload.id=parseInt(id);res=await api('/api/contact/edit',payload);}
+  else{res=await api('/api/contact/add',payload);}
+  if(res.ok){toast(id?'Contact updated ✓':'Contact added ✓','ok');closeModal('personModal');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+async function deletePerson(id,name){
+  if(!confirm(`Remove "${name}"?`))return;
+  const res=await api('/api/contact/delete',{id});
+  if(res.ok){toast('Removed','warn');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+</script>
+{% endblock %}

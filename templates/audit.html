@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Audit Log · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Audit Log</span>
+  <span class="topbar-sub">Immutable history of all changes</span>
+  <div class="topbar-right">
+    <div style="position:relative">
+      <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:13px;height:13px;color:#aaa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="auditSearch" class="input" style="padding-left:28px;width:300px" placeholder="Search by SN, SKU, product, item, user…" oninput="debouncedSearch()">
+    </div>
+  </div>
+</div>
+<div class="content">
+  <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12.5px;color:#1e40af;display:flex;align-items:center;gap:8px">
+    <span style="font-size:15px">🔒</span>
+    <span><strong>Immutable Audit Trail</strong> — Every action is permanently recorded. Search by serial number, SKU, product name, item name, item ID, user, or action type.</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th style="width:55px">Item</th>
+        <th style="width:135px">Timestamp</th>
+        <th>User</th>
+        <th>Action</th>
+        <th>Name</th>
+        <th>SN / SKU</th>
+        <th>Product</th>
+        <th>Detail</th>
+        <th style="width:45px"></th>
+      </tr></thead>
+      <tbody id="auditBody"><tr class="empty-row"><td colspan="9">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;margin-top:14px">
+    <span style="font-size:12px;color:#94a3b8" id="auditInfo"></span>
+    <div style="margin-left:auto;display:flex;gap:6px">
+      <button class="btn btn-secondary btn-sm" id="prevBtn" onclick="loadAudit(currentPage-1)">← Prev</button>
+      <button class="btn btn-secondary btn-sm" id="nextBtn" onclick="loadAudit(currentPage+1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="auditDetail">
+  <div class="modal" style="width:600px">
+    <div class="modal-header">
+      <div class="modal-title">Audit Entry Detail</div>
+      <button class="modal-close" onclick="document.getElementById('auditDetail').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body" id="auditDetailBody"></div>
+  </div>
+</div>
+
+<style>
+.audit-id{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#94a3b8;font-weight:500}
+.audit-sn{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#0f172a}
+.audit-prod{font-size:11.5px;color:#15803d;font-weight:500}
+</style>
+{% endblock %}
+{% block scripts %}
+<script>
+let currentPage=1, debounceTimer=null;
+const ACTION_COLORS={
+  LOGIN:'#1d4ed8',LOGOUT:'#6b7280',
+  CHECKOUT:'#b91c1c',CHECKIN:'#15803d',
+  QTY_ADD:'#047857',QTY_REMOVE:'#b45309',QTY_SET:'#6d28d9',
+  ITEM_ADD:'#0891b2',ITEM_EDIT:'#d97706',ITEM_DELETE:'#dc2626',ITEM_IMPORT:'#0891b2',
+  ITEM_SOLD:'#7c3aed',ITEM_MODIFY:'#d97706',EBAY_UPDATE:'#e53238',
+  PRODUCT_ADD:'#0891b2',PRODUCT_EDIT:'#d97706',PRODUCT_DELETE:'#dc2626',
+  CAT_ADD:'#7c3aed',CAT_EDIT:'#7c3aed',CAT_DELETE:'#dc2626',
+  COMPANY_ADD:'#0062cc',DISTRIBUTOR_ADD:'#0062cc',
+  USER_ADD:'#0062cc',USER_PERMS:'#6b7280',
+};
+
+function debouncedSearch(){clearTimeout(debounceTimer);debounceTimer=setTimeout(()=>loadAudit(1),300);}
+
+function auditUser(r){
+  const login=r.username||'';
+  let tech='';
+  if(r.detail){const m=r.detail.match(/^By:\s*([^|]+)/);if(m)tech=m[1].trim();}
+  if(tech&&login&&tech.toLowerCase()!==login.toLowerCase())
+    return `<span style="font-weight:600">${tech}</span><span style="color:#94a3b8;font-size:11px"> via ${login}</span>`;
+  return tech||login||'—';
+}
+
+async function loadAudit(page=1){
+  if(page<1)return;
+  currentPage=page;
+  const q=document.getElementById('auditSearch').value;
+  const data=await fetch(`/api/audit?page=${page}&q=${encodeURIComponent(q)}`).then(r=>r.json());
+  const maxPage=Math.ceil(data.total/50);
+  document.getElementById('auditInfo').textContent=`${data.total} total · Page ${page} of ${Math.max(1,maxPage)}`;
+  document.getElementById('prevBtn').disabled=page<=1;
+  document.getElementById('nextBtn').disabled=page>=maxPage;
+  const tb=document.getElementById('auditBody');
+  if(!data.rows.length){tb.innerHTML='<tr class="empty-row"><td colspan="9">No entries found</td></tr>';return;}
+  tb.innerHTML=data.rows.map(r=>{
+    const color=ACTION_COLORS[r.action]||'#6b7280';
+    const bg=color+'15';
+    const user=auditUser(r);
+    const itemId=r.item_id?`<span class="audit-id">#${r.item_id}</span>`:'<span style="color:#ddd">—</span>';
+    const snSku=r.item_serial||r.item_sku;
+    const snCell=snSku?`<span class="audit-sn">${snSku}</span>`:'<span style="color:#ddd">—</span>';
+    const prodCell=r.product_name?`<span class="audit-prod">${r.product_name}</span>`:'<span style="color:#ddd">—</span>';
+    return `<tr onclick="showDetail(${JSON.stringify(r).replace(/"/g,'&quot;')})" style="cursor:pointer">
+      <td>${itemId}</td>
+      <td class="font-mono" style="font-size:11px;color:#666">${r.ts}</td>
+      <td style="font-weight:500;font-size:12px">${user}</td>
+      <td><span style="background:${bg};color:${color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${r.action}</span></td>
+      <td style="font-size:12px">${r.item_name||'<span style="color:#ccc">—</span>'}</td>
+      <td>${snCell}</td>
+      <td>${prodCell}</td>
+      <td style="font-size:11.5px;color:#666;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.detail||'—'}</td>
+      <td><button class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 7px">View</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function showDetail(r){
+  const color=ACTION_COLORS[r.action]||'#6b7280';
+  let html=`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <span style="background:${color}20;color:${color};padding:3px 10px;border-radius:5px;font-size:12px;font-weight:700">${r.action}</span>
+    ${r.item_id?`<span style="font-family:monospace;font-size:12px;color:#94a3b8">Item #${r.item_id}</span>`:''}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+    <div><div class="label" style="font-size:10px">Timestamp</div><div class="font-mono" style="font-size:12px">${r.ts}</div></div>
+    <div><div class="label" style="font-size:10px">User</div><div style="font-weight:500">${auditUser(r)}</div></div>
+    ${r.item_name?`<div><div class="label" style="font-size:10px">Item Name</div><div style="font-weight:500">${r.item_name}</div></div>`:''}
+    ${r.product_name?`<div><div class="label" style="font-size:10px">Product</div><div style="color:#15803d;font-weight:500">${r.product_name}</div></div>`:''}
+    ${r.item_serial?`<div><div class="label" style="font-size:10px">Serial Number</div><div class="font-mono" style="font-size:13px">${r.item_serial}</div></div>`:''}
+    ${r.item_sku?`<div><div class="label" style="font-size:10px">SKU</div><div class="font-mono" style="font-size:13px">${r.item_sku}</div></div>`:''}
+    ${r.detail?`<div style="grid-column:1/-1"><div class="label" style="font-size:10px">Detail</div><div style="font-size:13px">${r.detail}</div></div>`:''}
+  </div>`;
+  if(r.before_state){try{const b=JSON.parse(r.before_state);html+=`<div style="margin-bottom:10px"><div class="label" style="font-size:10px">Before</div><pre style="background:#fef2f2;border-radius:6px;padding:10px;font-size:11px;overflow-x:auto;color:#7f1d1d;max-height:200px">${JSON.stringify(b,null,2)}</pre></div>`;}catch(e){}}
+  if(r.after_state){try{const a=JSON.parse(r.after_state);html+=`<div><div class="label" style="font-size:10px">After</div><pre style="background:#f0fdf4;border-radius:6px;padding:10px;font-size:11px;overflow-x:auto;color:#14532d;max-height:200px">${JSON.stringify(a,null,2)}</pre></div>`;}catch(e){}}
+  document.getElementById('auditDetailBody').innerHTML=html;
+  document.getElementById('auditDetail').classList.add('open');
+}
+
+document.getElementById('auditDetail').addEventListener('click',e=>{
+  if(e.target===e.currentTarget) e.currentTarget.classList.remove('open');
+});
+
+loadAudit();
+</script>
+{% endblock %}

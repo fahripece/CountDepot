@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Get started · CountDepot</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#f8f7f4;min-height:100vh;padding:40px 24px}
+.wrap{max-width:520px;margin:0 auto}
+.logo{font-size:13px;font-weight:700;color:#94a3b8;text-transform:uppercase;
+  letter-spacing:.8px;text-align:center;margin-bottom:32px}
+h1{font-size:24px;font-weight:700;color:#0f172a;text-align:center;margin-bottom:6px}
+.sub{font-size:14px;color:#64748b;text-align:center;margin-bottom:32px;line-height:1.55}
+.card{background:#fff;border:1px solid #e5e3de;border-radius:12px;
+  padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.err{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;
+  border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:20px}
+.field{margin-bottom:18px}
+label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.5px;color:#64748b;margin-bottom:6px}
+input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:7px;
+  font-size:14px;outline:none;transition:border-color .15s;color:#0f172a;background:#fff}
+input:focus{border-color:#1d4ed8;box-shadow:0 0 0 3px rgba(29,78,216,.08)}
+.hint{font-size:11.5px;color:#94a3b8;margin-top:4px}
+.slug-preview{font-size:12px;color:#1d4ed8;font-family:'IBM Plex Mono',monospace;
+  margin-top:4px;min-height:18px;font-weight:600}
+button{width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;
+  border-radius:7px;font-size:15px;font-weight:600;cursor:pointer;margin-top:6px;
+  transition:background .15s}
+button:hover{background:#1e40af}
+.divider{text-align:center;font-size:12.5px;color:#94a3b8;margin:22px 0 0}
+a.signin{display:block;text-align:center;margin-top:10px;font-size:13px;
+  color:#1d4ed8;text-decoration:none;font-weight:500}
+a.signin:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">CountDepot</div>
+  <h1>Start your free trial</h1>
+  <div class="sub">Your inventory workspace is ready in under a minute.<br>No credit card required.</div>
+
+  <div class="card">
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+    <form method="POST">
+      <div class="field">
+        <label>Company name</label>
+        <input name="name" id="name-input" autofocus required
+               placeholder="e.g. Acme IT Services"
+               oninput="suggestSlug(this.value)">
+      </div>
+
+      <div class="field">
+        <label>Your subdomain</label>
+        <input name="slug" id="slug-input" required
+               placeholder="acme"
+               pattern="[a-z0-9\-]{2,32}"
+               style="font-family:'IBM Plex Mono',monospace"
+               oninput="updatePreview(this.value)">
+        <div class="slug-preview" id="slug-preview"></div>
+        <div class="hint">Lowercase letters, numbers, hyphens — 2 to 32 characters.</div>
+      </div>
+
+      <div class="field">
+        <label>Work email</label>
+        <input name="email" type="email" required placeholder="you@company.com">
+      </div>
+
+      <div class="field">
+        <label>Password</label>
+        <input name="password" type="password" required minlength="8"
+               placeholder="At least 8 characters">
+        <div class="hint">Min 8 characters.</div>
+      </div>
+
+      <button type="submit">Create my workspace →</button>
+    </form>
+
+    <div class="divider">Already have an account?</div>
+    <a href="/login" class="signin">Sign in →</a>
+  </div>
+</div>
+<script>
+function suggestSlug(name){
+  const slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,32);
+  const el=document.getElementById('slug-input');
+  if(!el.dataset.touched)el.value=slug;
+  updatePreview(el.value);
+}
+function updatePreview(slug){
+  const host=window.location.hostname;
+  const parts=host.split('.');
+  const domain=parts.length>=2?parts.slice(-2).join('.'):'yourdomain.com';
+  document.getElementById('slug-preview').textContent=slug?slug+'.'+domain:'';
+}
+document.getElementById('slug-input').addEventListener('input',function(){
+  this.dataset.touched='1';updatePreview(this.value);
+});
+</script>
+</body>
+</html>

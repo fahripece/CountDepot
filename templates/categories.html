@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}Categories · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Categories</span>
+  <span class="topbar-sub" style="margin-left:6px">{{ categories|length }} total</span>
+  <div class="topbar-right">
+    {% if session.get('role') == 'admin' %}
+    <button class="btn btn-primary btn-sm" onclick="openAddCat()">+ New Category</button>
+    {% endif %}
+  </div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:20px 22px">
+  {% if not categories %}
+  <div style="text-align:center;padding:60px 20px;color:#94a3b8">
+    <div style="font-size:32px;margin-bottom:12px">🗂</div>
+    <div style="font-size:15px;font-weight:500;color:#374151;margin-bottom:6px">No categories yet</div>
+    <div style="font-size:13px">Click "+ New Category" to create your first one</div>
+  </div>
+  {% else %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px">
+    {% for cat in categories %}
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:13px;height:13px;border-radius:3px;background:{{ cat.color or '#ffffff' }};border:1px solid rgba(0,0,0,0.12);flex-shrink:0"></div>
+          <div>
+            <div style="font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px">
+              {{ cat.name }}
+              {% if cat.is_expense %}<span style="background:#fef2f2;color:#b91c1c;font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600">EXPENSE</span>{% endif %}
+            </div>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:2px">{{ cat.item_count }} item{{ 's' if cat.item_count != 1 }} · {{ cat.product_count or 0 }} product{{ 's' if (cat.product_count or 0) != 1 }}</div>
+          </div>
+        </div>
+        {% if session.get('role') == 'admin' %}
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary btn-sm" onclick="openEditCat({{ cat.id }},'{{ cat.name|replace("'","\\'") }}','{{ cat.color or "#ffffff" }}',{{ cat.is_expense or 0 }})">Edit</button>
+          <button class="btn btn-secondary btn-sm" onclick="openFieldEditor({{ cat.id }},'{{ cat.name|replace("'","\\'") }}')">&#9881; Fields</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCat({{ cat.id }},'{{ cat.name|replace("'","\\'") }}',{{ cat.item_count }})">Delete</button>
+        </div>
+        {% endif %}
+      </div>
+      <div style="padding:12px 16px;min-height:46px">
+        {% set fields = cat.fields %}
+        {% if fields %}
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
+          {% for f in fields %}
+          <span style="display:inline-flex;align-items:center;gap:3px;background:#f4f4f2;border-radius:4px;padding:3px 8px;font-size:11.5px;color:#374151">
+            {{ f.field_label }}{% if f.required %}<span style="color:#b91c1c;font-weight:700;font-size:10px">*</span>{% endif %}
+            <span style="color:#bbb;font-size:10px">({{ f.field_type }})</span>
+          </span>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="font-size:12px;color:#bbb;font-style:italic">No fields defined{% if session.get('role') == 'admin' %} — click &#9881; Fields to add some{% endif %}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ADD / EDIT CATEGORY MODAL -->
+<div class="overlay" id="catModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <div class="modal-title" id="catModalTitle">New Category</div>
+      <button class="modal-close" onclick="closeModal('catModal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="cat-id">
+      <div class="field">
+        <label class="label">Category Name *</label>
+        <input class="input" id="cat-name">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="label">Color</label>
+          <input type="color" id="cat-color" value="#ffffff" style="width:100%;height:38px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:3px">
+        </div>
+        <div class="field">
+          <label class="label">Type</label>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="cat-expense" style="width:15px;height:15px"> Expense category
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('catModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCat()">Save Category</button>
+    </div>
+  </div>
+</div>
+
+<!-- FIELD EDITOR MODAL -->
+<div class="overlay" id="fieldEditorModal">
+  <div class="modal" style="width:620px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="feTitle">Category Fields</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Shown when adding an item in this category</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('fieldEditorModal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="fe-cat-id">
+      <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:7px;padding:11px 14px;margin-bottom:16px;font-size:12.5px;color:#1e40af">
+        &#128161; Fields appear automatically when adding or editing items in this category. Required fields must be filled before saving.
+      </div>
+      <div id="fe-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+      <button class="btn btn-secondary btn-sm" onclick="addFieldRow()">+ Add Field</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('fieldEditorModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFields()">Save Fields</button>
+    </div>
+  </div>
+</div>
+
+<script>
+async function deleteCat(id, name, itemCount){
+  if(itemCount > 0){toast(`Cannot delete — ${itemCount} item(s) use this category`,'err');return;}
+  if(!confirm(`Delete category "${name}"? This cannot be undone.`))return;
+  const res=await fetch('/api/category/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}).then(r=>r.json());
+  if(res.ok){toast('Category deleted','warn');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+function openAddCat(){
+  document.getElementById('cat-id').value='';
+  document.getElementById('catModalTitle').textContent='New Category';
+  document.getElementById('cat-name').value='';
+  document.getElementById('cat-color').value='#ffffff';
+  document.getElementById('cat-expense').checked=false;
+  openModal('catModal');
+  setTimeout(()=>document.getElementById('cat-name').focus(),80);
+}
+function openEditCat(id,name,color,isExpense){
+  document.getElementById('cat-id').value=id;
+  document.getElementById('catModalTitle').textContent='Edit Category';
+  document.getElementById('cat-name').value=name;
+  document.getElementById('cat-color').value=color||'#ffffff';
+  document.getElementById('cat-expense').checked=!!isExpense;
+  openModal('catModal');
+  setTimeout(()=>document.getElementById('cat-name').focus(),80);
+}
+async function saveCat(){
+  const name=document.getElementById('cat-name').value.trim();
+  if(!name){toast('Name required','warn');return;}
+  const id=document.getElementById('cat-id').value;
+  const payload={name,color:document.getElementById('cat-color').value,is_expense:document.getElementById('cat-expense').checked?1:0};
+  if(id) payload.id=parseInt(id);
+  const url=id?'/api/category/edit':'/api/category/add';
+  const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
+  if(res.ok){toast(id?'Category updated':'Category added','ok');closeModal('catModal');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+
+async function openFieldEditor(catId,catName){
+  document.getElementById('fe-cat-id').value=catId;
+  document.getElementById('feTitle').textContent=catName+' \u2014 Fields';
+  const list=document.getElementById('fe-list');
+  list.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:6px 0">Loading\u2026</div>';
+  openModal('fieldEditorModal');
+  const fields=await fetch('/api/category/fields?cat_id='+catId).then(r=>r.json());
+  list.innerHTML='';
+  if(!fields.length) addFieldRow();
+  else fields.forEach(f=>addFieldRow(f));
+}
+function addFieldRow(f){
+  const list=document.getElementById('fe-list');
+  const wrap=document.createElement('div');
+  wrap.className='fe-row';
+  wrap.style.cssText='background:#fafaf9;border:1px solid var(--border);border-radius:7px;padding:12px 14px;display:flex;flex-direction:column;gap:10px';
+  const t=f?.field_type||'text';
+  const opts=Array.isArray(f?.dropdown_options)?f.dropdown_options.join(', '):(f?.dropdown_options||'');
+  wrap.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 140px 90px 36px;gap:10px;align-items:end">
+      <div><label class="label">Label *</label><input class="input fe-label" value="${f?.field_label||''}" style="font-size:13px"></div>
+      <div><label class="label">Type</label>
+        <select class="select fe-type" style="font-size:13px" onchange="toggleOpts(this)">
+          <option value="text"     ${t==='text'    ?'selected':''}>Text</option>
+          <option value="number"   ${t==='number'  ?'selected':''}>Number</option>
+          <option value="dropdown" ${t==='dropdown'?'selected':''}>Dropdown</option>
+          <option value="checkbox" ${t==='checkbox'?'selected':''}>Checkbox</option>
+          <option value="date"     ${t==='date'    ?'selected':''}>Date</option>
+        </select>
+      </div>
+      <div><label class="label">Required</label>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:9px;cursor:pointer;font-size:13px">
+          <input type="checkbox" class="fe-req" ${f?.required?'checked':''} style="width:15px;height:15px"> Yes
+        </label>
+      </div>
+      <div style="padding-top:20px"><button onclick="this.closest('.fe-row').remove()" class="btn btn-danger btn-sm" style="padding:5px 10px">&#10005;</button></div>
+    </div>
+    <div class="fe-opts" style="display:${t==='dropdown'?'block':'none'}">
+      <label class="label">Options <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#aaa">(comma-separated)</span></label>
+      <input class="input fe-opts-input" value="${opts}"  style="font-size:13px">
+    </div>`;
+  list.appendChild(wrap);
+}
+function toggleOpts(sel){
+  const opts=sel.closest('.fe-row').querySelector('.fe-opts');
+  if(opts) opts.style.display=sel.value==='dropdown'?'block':'none';
+}
+async function saveFields(){
+  const catId=document.getElementById('fe-cat-id').value;
+  const rows=document.getElementById('fe-list').querySelectorAll('.fe-row');
+  const fields=[];
+  for(const row of rows){
+    const label=(row.querySelector('.fe-label')?.value||'').trim();
+    if(!label) continue;
+    const key=label.toLowerCase().replace(/[^a-z0-9]+/g,'_');
+    const type=row.querySelector('.fe-type')?.value||'text';
+    const req=row.querySelector('.fe-req')?.checked?1:0;
+    const optsRaw=(row.querySelector('.fe-opts-input')?.value||'').trim();
+    const dropdown_options=type==='dropdown'?optsRaw.split(',').map(s=>s.trim()).filter(Boolean):null;
+    fields.push({field_label:label,field_key:key,field_type:type,required:req,dropdown_options});
+  }
+  const res=await fetch('/api/category/fields/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category_id:parseInt(catId),fields})}).then(r=>r.json());
+  if(res.ok){toast('Fields saved','ok');closeModal('fieldEditorModal');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+function toast(msg,type){
+  const t=document.createElement('div');
+  t.style.cssText=`position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:9999;color:#fff;background:${type==='ok'?'#15803d':type==='warn'?'#b45309':'#b91c1c'}`;
+  t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);
+}
+</script>
+{% endblock %}

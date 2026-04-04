@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% block title %}Admin · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Admin</span>
+  <span class="topbar-sub">Users &amp; Permissions</span>
+</div>
+<div style="flex:1;overflow-y:auto;padding:22px 24px">
+
+<!-- USERS -->
+<div class="card" style="margin-bottom:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-weight:600;font-size:15px">Users &amp; Permissions</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:1px">Control who can access CountDepot and what they can do</div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="openAddUser()">+ Add User</button>
+  </div>
+
+  {% for u in users %}
+  <div class="user-row" id="userrow-{{ u.id }}">
+    <div class="user-summary" onclick="togglePerms({{ u.id }})">
+      <div style="display:flex;align-items:center;gap:10px;flex:1">
+        <div class="user-avatar">{{ u.username[0].upper() }}</div>
+        <div>
+          <div style="font-weight:600;font-size:14px">{{ u.username }}</div>
+          <div style="font-size:11px;margin-top:2px;display:flex;align-items:center;gap:6px">
+            <span class="tag" style="font-size:10px;padding:1px 7px;background:{% if u.role=='admin' %}#eff6ff;color:#1d4ed8{% else %}#f0fdf4;color:#15803d{% endif %}">{{ u.role }}</span>
+            {% if u.role == 'admin' %}
+              <span style="color:#94a3b8">Full access · all permissions</span>
+            {% else %}
+              {% set pcount = u.perm_set | length %}
+              <span style="color:#475569" id="permcount-{{ u.id }}">{{ pcount }} permission{{ 's' if pcount != 1 else '' }} granted</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        {% if u.role != 'admin' %}
+        <span style="font-size:11px;color:#94a3b8;margin-right:4px" id="permtoggle-{{ u.id }}">▸ Permissions</span>
+        {% endif %}
+        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openResetPw({{ u.id }},'{{ u.username }}')">Reset PW</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteUser({{ u.id }},'{{ u.username }}')">Delete</button>
+      </div>
+    </div>
+
+    {% if u.role != 'admin' %}
+    <div class="perm-panel" id="permpanel-{{ u.id }}" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.5px">Permissions for {{ u.username }}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <span style="font-size:11px;color:#94a3b8;align-self:center">Presets:</span>
+          <button class="btn btn-secondary btn-sm" onclick="setPreset({{ u.id }},'readonly')">Read Only</button>
+          <button class="btn btn-secondary btn-sm" onclick="setPreset({{ u.id }},'tech')">Field Tech</button>
+          <button class="btn btn-secondary btn-sm" onclick="setPreset({{ u.id }},'worker')">Worker</button>
+          <button class="btn btn-secondary btn-sm" onclick="setPreset({{ u.id }},'manager')">Manager</button>
+          <button class="btn btn-secondary btn-sm" onclick="setPreset({{ u.id }},'full')">Full Access</button>
+        </div>
+      </div>
+      <div class="perm-grid">
+        {% for pkey, plabel, pdesc in all_permissions %}
+        <label class="perm-item {% if pkey in u.perm_set %}perm-on{% endif %}" id="permlabel-{{ u.id }}-{{ pkey }}">
+          <input type="checkbox" class="perm-cb" data-uid="{{ u.id }}" data-perm="{{ pkey }}"
+            {% if pkey in u.perm_set %}checked{% endif %}
+            onchange="permChanged({{ u.id }})">
+          <div class="perm-check">✓</div>
+          <div style="min-width:0">
+            <div class="perm-label">{{ plabel }}</div>
+            <div class="perm-desc">{{ pdesc }}</div>
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+        <button class="btn btn-primary btn-sm" onclick="savePerms({{ u.id }})">💾 Save Permissions</button>
+        <span id="permsaved-{{ u.id }}" style="font-size:12px;color:#15803d;display:none">✓ Saved</span>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+</div><!-- end scroll area -->
+
+<!-- ADD USER MODAL -->
+<div class="overlay" id="userModal">
+  <div class="modal" style="width:540px">
+    <div class="modal-header">
+      <div class="modal-title">Add User</div>
+      <button class="modal-close" onclick="closeModal('userModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label class="label">Username</label><input class="input" id="u-username" autocomplete="off"></div>
+      <div class="field"><label class="label">Password</label><input class="input" id="u-password" type="password" autocomplete="new-password"></div>
+      <div class="field"><label class="label">Role</label>
+        <select class="select" id="u-role" onchange="onNewUserRoleChange()">
+          <option value="worker">Worker</option>
+          <option value="admin">Admin (full access — all permissions)</option>
+        </select>
+      </div>
+      <div id="new-user-perms" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+          <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.5px">Starting Permissions</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
+            <span style="font-size:11px;color:#94a3b8;align-self:center">Preset:</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="setNewUserPreset('readonly')">Read Only</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="setNewUserPreset('tech')">Field Tech</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="setNewUserPreset('worker')">Worker</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="setNewUserPreset('manager')">Manager</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="setNewUserPreset('full')">Full</button>
+          </div>
+        </div>
+        <div class="perm-grid" id="new-user-perm-grid">
+          {% for pkey, plabel, pdesc in all_permissions %}
+          <label class="perm-item" id="newpermlabel-{{ pkey }}">
+            <input type="checkbox" class="perm-cb" id="newperm-{{ pkey }}" value="{{ pkey }}" onchange="newPermChanged('{{ pkey }}')">
+            <div class="perm-check">✓</div>
+            <div style="min-width:0">
+              <div class="perm-label">{{ plabel }}</div>
+              <div class="perm-desc">{{ pdesc }}</div>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('userModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveUser()">Add User</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESET PASSWORD MODAL -->
+<div class="overlay" id="resetPwModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Reset Password</div><button class="modal-close" onclick="closeModal('resetPwModal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="resetPwUserId">
+      <div style="font-size:13px;color:#475569;margin-bottom:14px">Resetting password for <strong id="resetPwUsername"></strong></div>
+      <div class="field"><label class="label">New Password</label><input class="input" id="reset-pw" type="password" autocomplete="new-password"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('resetPwModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmResetPw()">Reset</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.user-row{border:1px solid #e5e3de;border-radius:10px;margin-bottom:10px;overflow:hidden;background:#fff}
+.user-summary{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;transition:background .15s;gap:10px}
+.user-summary:hover{background:#fafaf9}
+.user-avatar{width:36px;height:36px;border-radius:50%;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;font-family:'IBM Plex Mono',monospace}
+.perm-panel{padding:16px 20px;border-top:1px solid #e5e3de;background:#fafaf9}
+.perm-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.perm-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid #e5e3de;border-radius:8px;cursor:pointer;transition:all .15s;background:#fff;user-select:none}
+.perm-item:hover{border-color:#94a3b8;background:#f8f8f7}
+.perm-item.perm-on{border-color:#0f172a;background:#f0f9ff}
+.perm-item input[type=checkbox]{display:none}
+.perm-check{width:18px;height:18px;border-radius:4px;border:2px solid #d1d5db;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:transparent;transition:all .15s;background:#fff}
+.perm-item.perm-on .perm-check{background:#0f172a;border-color:#0f172a;color:#fff}
+.perm-label{font-size:12.5px;font-weight:600;color:#0f172a;line-height:1.3}
+.perm-desc{font-size:11px;color:#94a3b8;margin-top:2px;line-height:1.4}
+@media(max-width:700px){.perm-grid{grid-template-columns:1fr}}
+</style>
+
+<script>
+const PRESETS = {
+  readonly: ['view_inventory'],
+  tech:     ['view_inventory','view_dashboard','checkout_checkin','qty_adjust'],
+  worker:   ['view_inventory','view_dashboard','view_audit','checkout_checkin','write_items','qty_adjust','sell_items'],
+  manager:  ['view_inventory','view_dashboard','view_audit','checkout_checkin','write_items','qty_adjust','sell_items','delete_items','import_export'],
+  full:     {{ perm_keys | tojson }},
+};
+
+function togglePerms(uid){
+  const panel=document.getElementById('permpanel-'+uid);
+  if(!panel)return;
+  const open=panel.style.display==='none';
+  panel.style.display=open?'block':'none';
+  const t=document.getElementById('permtoggle-'+uid);
+  if(t) t.textContent=(open?'▾':'▸')+' Permissions';
+}
+
+function permChanged(uid){
+  document.querySelectorAll('.perm-cb[data-uid="'+uid+'"]').forEach(cb=>{
+    cb.closest('.perm-item').classList.toggle('perm-on',cb.checked);
+  });
+}
+
+function setPreset(uid,preset){
+  const perms=new Set(PRESETS[preset]||[]);
+  document.querySelectorAll('.perm-cb[data-uid="'+uid+'"]').forEach(cb=>{
+    cb.checked=perms.has(cb.dataset.perm);
+    cb.closest('.perm-item').classList.toggle('perm-on',cb.checked);
+  });
+}
+
+async function savePerms(uid){
+  const perms=[];
+  document.querySelectorAll('.perm-cb[data-uid="'+uid+'"]:checked').forEach(cb=>perms.push(cb.dataset.perm));
+  const res=await api('/api/user/permissions',{id:uid,permissions:perms});
+  if(res.ok){
+    const s=document.getElementById('permsaved-'+uid);
+    s.style.display='inline';setTimeout(()=>s.style.display='none',2500);
+    const cnt=document.getElementById('permcount-'+uid);
+    if(cnt) cnt.textContent=perms.length+' permission'+(perms.length!==1?'s':'')+' granted';
+  } else toast(res.msg||'Error','err');
+}
+
+function newPermChanged(pkey){
+  const cb=document.getElementById('newperm-'+pkey);
+  document.getElementById('newpermlabel-'+pkey).classList.toggle('perm-on',cb.checked);
+}
+
+function setNewUserPreset(preset){
+  const perms=new Set(PRESETS[preset]||[]);
+  document.querySelectorAll('#new-user-perm-grid .perm-cb').forEach(cb=>{
+    cb.checked=perms.has(cb.value);
+    cb.closest('.perm-item').classList.toggle('perm-on',cb.checked);
+  });
+}
+
+function onNewUserRoleChange(){
+  document.getElementById('new-user-perms').style.display=
+    document.getElementById('u-role').value==='admin'?'none':'block';
+}
+
+function openAddUser(){
+  document.getElementById('u-username').value='';
+  document.getElementById('u-password').value='';
+  document.getElementById('u-role').value='worker';
+  document.getElementById('new-user-perms').style.display='block';
+  setNewUserPreset('worker'); // default: worker preset
+  openModal('userModal');
+}
+
+async function saveUser(){
+  const username=document.getElementById('u-username').value.trim();
+  const password=document.getElementById('u-password').value;
+  const role=document.getElementById('u-role').value;
+  if(!username||!password){toast('Username and password required','warn');return}
+  let perms=null;
+  if(role!=='admin'){
+    perms=[];
+    document.querySelectorAll('#new-user-perm-grid .perm-cb:checked').forEach(cb=>perms.push(cb.value));
+  }
+  const res=await api('/api/user/add',{username,password,role,permissions:perms});
+  if(res.ok){toast('User added ✓','ok');closeModal('userModal');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+
+function openResetPw(id,name){
+  document.getElementById('resetPwUserId').value=id;
+  document.getElementById('resetPwUsername').textContent=name;
+  document.getElementById('reset-pw').value='';
+  openModal('resetPwModal');
+}
+async function confirmResetPw(){
+  const pw=document.getElementById('reset-pw').value;
+  if(!pw){toast('Enter new password','warn');return}
+  const res=await api('/api/user/password',{id:parseInt(document.getElementById('resetPwUserId').value),password:pw});
+  if(res.ok){toast('Password reset ✓','ok');closeModal('resetPwModal');}
+  else toast(res.msg||'Error','err');
+}
+async function deleteUser(id,name){
+  if(!confirm(`Delete user "${name}"?`))return;
+  const res=await api('/api/user/delete',{id});
+  if(res.ok){toast('User deleted','warn');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+
+
+// ── Category field profile editor ──
+
+
+
+
+async function changeOwnPw(){
+  const old=document.getElementById('pw-old').value;
+  const nw=document.getElementById('pw-new').value;
+  if(!old||!nw){toast('Fill in both fields','warn');return}
+  const res=await api('/api/change_password',{old_password:old,new_password:nw});
+  if(res.ok){toast('Password updated ✓','ok');document.getElementById('pw-old').value='';document.getElementById('pw-new').value='';}
+  else toast(res.msg||'Error','err');
+}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+// Modals only close via the ✕ button
+</script>
+{% endblock %}

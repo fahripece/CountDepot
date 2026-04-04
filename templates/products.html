@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+{% block title %}Products · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Products</span>
+  <span class="topbar-sub" id="prod-count" style="margin-left:6px"></span>
+  <div style="position:relative;flex:1;max-width:320px;margin-left:8px">
+    <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:#aaa;pointer-events:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input id="prodSearch" class="input" style="padding-left:30px" oninput="filterProds()" placeholder="Search…">
+  </div>
+  <div class="topbar-right">
+    <select id="prodCatFilter" class="select" style="width:auto;min-width:140px" onchange="filterProds()">
+      <option value="">All Categories</option>
+      {% for cat in categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
+    </select>
+    {% if session.get('role') == 'admin' or 'write_items' in (session.get('permissions') or '') %}
+    <button class="btn btn-primary btn-sm" onclick="openAddProduct()">+ New Product</button>
+    {% endif %}
+  </div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:20px 22px">
+  <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:12.5px;color:#1e40af;line-height:1.6">
+    <strong>📦 Products are templates (Level 2).</strong> Define a product once, then create inventory items from it.
+    Each item inherits the product's name, manufacturer, model, and default pricing.
+  </div>
+  <div id="prod-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px"></div>
+</div>
+
+<!-- ADD/EDIT PRODUCT MODAL -->
+<div class="overlay" id="productModal">
+  <div class="modal" style="width:560px">
+    <div class="modal-header">
+      <div class="modal-title" id="prodModalTitle">New Product</div>
+      <button class="modal-close" onclick="closeModal('productModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-prod-id">
+
+      <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:16px">
+        <label class="label" style="color:#1e40af;margin-bottom:6px">1. Pick a Category *</label>
+        <select class="select" id="prod-cat" onchange="onProdCatChange()">
+          <option value="">— Select a category first —</option>
+          {% for cat in categories %}<option value="{{ cat.id }}" data-name="{{ cat.name }}">{{ cat.name }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div id="prod-step2" style="display:none">
+        <div class="section-hdr" style="margin-top:0">Product Info</div>
+        <div class="field"><label class="label">Product Name *</label><input class="input" id="prod-name"></div>
+        <div class="field-row">
+          <div class="field"><label class="label">Manufacturer</label><input class="input" id="prod-mfr"></div>
+          <div class="field"><label class="label">Model / Part #</label><input class="input mono" id="prod-model"></div>
+        </div>
+
+        <div class="section-hdr">Tracking Behavior</div>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:16px">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="prod-serial" style="width:15px;height:15px"> Serial tracked (individual checkout)
+          </label>
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="prod-qty" style="width:15px;height:15px"> Quantity tracked (consumable)
+          </label>
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="prod-scan" style="width:15px;height:15px"> Require scan on checkout
+          </label>
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px" title="Print & scan a label after adding each item">
+            <input type="checkbox" id="prod-print-scan" style="width:15px;height:15px"> 🏷 Print &amp; scan label on add
+          </label>
+        </div>
+
+        <div class="section-hdr">Identifier Requirements <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">— choose at least one · Vendor SKU and Internal SKU are mutually exclusive</span></div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px" id="prod-ident-group">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid #e2e8f0;transition:border-color .15s" id="prod-ident-serial-wrap">
+            <input type="checkbox" id="prod-req-serial" style="width:15px;height:15px;margin-top:2px" onchange="onIdentChange()">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#0f172a">Require Serial Number</div>
+              <div style="font-size:11.5px;color:#64748b;margin-top:2px">Serial # field is shown and must be filled before saving an item</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid #e2e8f0;transition:border-color .15s" id="prod-ident-vendor-wrap">
+            <input type="checkbox" id="prod-req-vendor-sku" style="width:15px;height:15px;margin-top:2px" onchange="onIdentChange()">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#0f172a">Require Vendor SKU</div>
+              <div style="font-size:11.5px;color:#64748b;margin-top:2px">Vendor SKU field is shown and must be filled before saving an item</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid #e2e8f0;transition:border-color .15s" id="prod-ident-internal-wrap">
+            <input type="checkbox" id="prod-req-internal-sku" style="width:15px;height:15px;margin-top:2px" onchange="onIdentChange()">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#0f172a">Auto Internal SKU</div>
+              <div style="font-size:11.5px;color:#64748b;margin-top:2px">System auto-generates a unique internal SKU (e.g. LAPT-20250319-001) — no manual entry needed</div>
+            </div>
+          </label>
+          <div id="prod-ident-error" style="display:none;font-size:12px;color:#b91c1c;padding:6px 10px;background:#fef2f2;border-radius:6px;border:1px solid #fecaca"></div>
+        </div>
+
+        <div class="section-hdr">Default Pricing <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">— pre-fills on new items, override per unit</span></div>
+        <div class="field-row">
+          <div class="field"><label class="label">Default Cost ($)</label><input class="input" id="prod-cost" type="number" step="0.01" min="0" oninput="updateProdProfit()"></div>
+          <div class="field"><label class="label">Default Sale Price ($)</label><input class="input" id="prod-sale" type="number" step="0.01" min="0" oninput="updateProdProfit()"></div>
+        </div>
+        <div id="prod-profit" style="font-size:12px;min-height:18px;margin-bottom:12px"></div>
+
+        <div class="section-hdr">Low Stock Alert</div>
+        <div class="field-row">
+          <div class="field">
+            <label class="label">Min Stock Threshold <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">— alert when available items ≤ this</span></label>
+            <input class="input" id="prod-threshold" type="number" min="0" placeholder="0 = no alert">
+          </div>
+        </div>
+
+        <div class="field"><label class="label">Notes / Description</label><textarea class="input" id="prod-desc" style="min-height:52px;resize:vertical"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('productModal')">Cancel</button>
+      <button class="btn btn-danger" id="deleteProdBtn" style="display:none;margin-right:auto" onclick="deleteProd()">Delete</button>
+      <button class="btn btn-primary" id="saveProdBtn" style="display:none" onclick="saveProd()">Save Product</button>
+    </div>
+  </div>
+</div>
+
+
+<style>
+.section-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#64748b;padding:10px 0 8px;border-bottom:1px solid #f0efec;margin-bottom:14px;margin-top:4px}
+.prod-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .15s,border-color .15s}
+.prod-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.08);border-color:#bbb}
+.prod-card-top{padding:13px 15px 11px;display:flex;align-items:flex-start;gap:10px}
+.prod-icon{width:34px;height:34px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+.prod-card-body{padding:0 15px 12px;flex:1;border-top:1px solid #f5f4f1;padding-top:10px}
+.prod-card-foot{padding:9px 15px;border-top:1px solid #f5f4f1;display:flex;gap:7px;align-items:center;justify-content:space-between}
+.tracking-flag{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#f3f4f6;color:#475569}
+</style>
+
+<script>
+const CATS = {};
+{% for cat in categories %}CATS[{{ cat.id }}]={name:"{{ cat.name|replace('"','\\"') }}",color:"{{ cat.color or '#6b7280' }}"};{% endfor %}
+
+let allProds=[], filteredProds=[];
+
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+
+function filterProds(){
+  const q=document.getElementById('prodSearch').value.trim().toLowerCase();
+  const cat=document.getElementById('prodCatFilter').value;
+  filteredProds=allProds.filter(p=>{
+    const mCat=!cat||String(p.category_id)===cat;
+    const mQ=!q||[p.name,p.manufacturer,p.model,p.description].filter(Boolean).some(v=>v.toLowerCase().includes(q));
+    return mCat&&mQ;
+  });
+  renderGrid();
+}
+
+function renderGrid(){
+  const grid=document.getElementById('prod-grid');
+  document.getElementById('prod-count').textContent=filteredProds.length+' product'+(filteredProds.length===1?'':'s');
+  if(!filteredProds.length){
+    grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#94a3b8"><div style="font-size:32px;margin-bottom:12px">📦</div><div style="font-size:15px;font-weight:600;color:#374151;margin-bottom:4px">No products found</div><div style="font-size:13px">Products are templates for inventory items. Click "+ New Product" to create one.</div></div>`;
+    return;
+  }
+  grid.innerHTML=filteredProds.map(p=>{
+    const cat=CATS[p.category_id]||{};
+    const color=cat.color||'#6b7280';
+    const catName=cat.name||p.category_name||'—';
+    const flags=[];
+    if(p.serial_tracked) flags.push('Serial');
+    if(p.qty_tracked) flags.push('Qty');
+    if(p.require_scan_checkout) flags.push('Scan');
+    if(p.print_scan_label) flags.push('🏷 Print+Scan');
+    if(p.require_serial) flags.push('🔢 Req. SN');
+    if(p.require_vendor_sku) flags.push('🏪 Req. Vendor SKU');
+    if(p.require_internal_sku) flags.push('⚙ Auto SKU');
+    const flagsHtml=flags.map(f=>`<span class="tracking-flag">${f}</span>`).join(' ');
+    const itemCount=p.item_count||0;
+    return `<div class="prod-card">
+      <div class="prod-card-top">
+        <div class="prod-icon" style="background:${color}">${catName[0]?.toUpperCase()||'?'}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13.5px;color:#0f172a;line-height:1.3">${p.name}</div>
+          <div style="font-size:11.5px;color:#94a3b8;font-family:'IBM Plex Mono',monospace;margin-top:2px">${[p.manufacturer,p.model].filter(Boolean).join(' · ')||'—'}</div>
+        </div>
+      </div>
+      <div class="prod-card-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span class="tag" style="background:${color}18;color:${color}">${catName}</span>
+          <span style="font-size:11px;color:#94a3b8">${itemCount} item${itemCount!==1?'s':''}</span>
+        </div>
+        ${flagsHtml?`<div style="margin-bottom:6px">${flagsHtml}</div>`:''}
+        ${p.low_stock_threshold?`<div style="font-size:11px;color:#94a3b8;margin-top:2px">🔔 Alert when &lt; ${p.low_stock_threshold} available · <strong style="color:${(p.item_count||0)<=p.low_stock_threshold?'#b91c1c':'#15803d'}">${p.item_count||0} now</strong></div>`:''}
+        ${p.description?`<div style="font-size:11.5px;color:#94a3b8;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.description}</div>`:''}
+      </div>
+      <div class="prod-card-foot">
+        <button class="btn btn-secondary btn-sm" onclick="openEditProd(${p.id})">Edit</button>
+        <a class="btn btn-primary btn-sm" href="/add-item?product_id=${p.id}" style="text-decoration:none">➕ Add to Inventory</a>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadProds(){
+  allProds=await fetch('/api/products').then(r=>r.json());
+  filterProds();
+}
+
+function _clearProdForm(){
+  ['prod-name','prod-mfr','prod-model','prod-cost','prod-sale','prod-desc','prod-threshold'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.getElementById('prod-cat').value='';
+  document.getElementById('prod-serial').checked=false;
+  document.getElementById('prod-qty').checked=false;
+  document.getElementById('prod-scan').checked=false;
+  document.getElementById('prod-print-scan').checked=false;
+  document.getElementById('prod-req-serial').checked=false;
+  document.getElementById('prod-req-vendor-sku').checked=false;
+  document.getElementById('prod-req-internal-sku').checked=true; // default
+  document.getElementById('prod-ident-error').style.display='none';
+  onIdentChange();
+  document.getElementById('prod-step2').style.display='none';
+  document.getElementById('saveProdBtn').style.display='none';
+  document.getElementById('deleteProdBtn').style.display='none';
+  document.getElementById('prod-profit').innerHTML='';
+}
+
+function onIdentChange(){
+  const serial=document.getElementById('prod-req-serial').checked;
+  const vendor=document.getElementById('prod-req-vendor-sku').checked;
+  const internal=document.getElementById('prod-req-internal-sku').checked;
+  const errEl=document.getElementById('prod-ident-error');
+  // Mutual exclusion: vendor and internal can't both be on
+  if(vendor && internal){
+    errEl.textContent='Vendor SKU and Internal SKU are mutually exclusive — uncheck one.';
+    errEl.style.display='';
+  } else if(!serial && !vendor && !internal){
+    errEl.textContent='At least one identifier must be selected.';
+    errEl.style.display='';
+  } else {
+    errEl.style.display='none';
+  }
+  // Highlight active cards
+  ['prod-ident-serial-wrap','prod-ident-vendor-wrap','prod-ident-internal-wrap'].forEach((wid,i)=>{
+    const checked=[serial,vendor,internal][i];
+    const el=document.getElementById(wid);
+    el.style.borderColor=checked?'#1d4ed8':'#e2e8f0';
+    el.style.background=checked?'#eff6ff':'';
+  });
+}
+
+function onProdCatChange(){
+  const sel=document.getElementById('prod-cat');
+  if(!sel.value){document.getElementById('prod-step2').style.display='none';document.getElementById('saveProdBtn').style.display='none';return;}
+  document.getElementById('prod-step2').style.display='';
+  document.getElementById('saveProdBtn').style.display='';
+}
+
+function openAddProduct(){_clearProdForm();document.getElementById('edit-prod-id').value='';document.getElementById('prodModalTitle').textContent='New Product';openModal('productModal');setTimeout(()=>document.getElementById('prod-cat').focus(),80);}
+
+function openEditProd(id){
+  const p=allProds.find(x=>x.id===id);if(!p)return;
+  _clearProdForm();
+  document.getElementById('edit-prod-id').value=id;
+  document.getElementById('prodModalTitle').textContent='Edit Product';
+  document.getElementById('deleteProdBtn').style.display='';
+  document.getElementById('prod-cat').value=p.category_id||'';
+  onProdCatChange();
+  setTimeout(()=>{
+    document.getElementById('prod-name').value=p.name||'';
+    document.getElementById('prod-mfr').value=p.manufacturer||'';
+    document.getElementById('prod-model').value=p.model||'';
+    document.getElementById('prod-cost').value=p.default_cost!=null?p.default_cost:'';
+    document.getElementById('prod-sale').value=p.default_sale!=null?p.default_sale:'';
+    document.getElementById('prod-desc').value=p.description||'';
+    document.getElementById('prod-serial').checked=!!p.serial_tracked;
+    document.getElementById('prod-qty').checked=!!p.qty_tracked;
+    document.getElementById('prod-scan').checked=!!p.require_scan_checkout;
+    document.getElementById('prod-print-scan').checked=!!p.print_scan_label;
+    // If old product has no identifier flags set, default to auto internal SKU
+    const hasAnyIdent = p.require_serial || p.require_vendor_sku || p.require_internal_sku;
+    document.getElementById('prod-req-serial').checked=!!p.require_serial;
+    document.getElementById('prod-req-vendor-sku').checked=!!p.require_vendor_sku;
+    document.getElementById('prod-req-internal-sku').checked=hasAnyIdent ? !!p.require_internal_sku : true;
+    document.getElementById('prod-ident-error').style.display='none';
+    onIdentChange();
+    document.getElementById('prod-threshold').value=p.low_stock_threshold||'';
+    updateProdProfit();
+  },50);
+  openModal('productModal');
+}
+
+function updateProdProfit(){
+  const cost=parseFloat(document.getElementById('prod-cost').value)||0;
+  const sale=parseFloat(document.getElementById('prod-sale').value)||0;
+  const el=document.getElementById('prod-profit');
+  if(cost>0&&sale>0){const p=sale-cost;el.innerHTML=p>=0?`<span style="color:#15803d">Profit: $${p.toFixed(2)}</span>`:`<span style="color:#b91c1c">Loss: $${Math.abs(p).toFixed(2)}</span>`;}
+  else el.innerHTML='';
+}
+
+async function saveProd(){
+  const cat=document.getElementById('prod-cat').value;
+  const name=document.getElementById('prod-name').value.trim();
+  if(!cat){toast('Select a category first','warn');return;}
+  if(!name){toast('Product name required','warn');document.getElementById('prod-name').focus();return;}
+  const reqSerial=document.getElementById('prod-req-serial').checked?1:0;
+  const reqVendor=document.getElementById('prod-req-vendor-sku').checked?1:0;
+  const reqInternal=document.getElementById('prod-req-internal-sku').checked?1:0;
+  // Validate identifier selection
+  if(!reqSerial && !reqVendor && !reqInternal){
+    document.getElementById('prod-ident-error').textContent='At least one identifier must be selected.';
+    document.getElementById('prod-ident-error').style.display='';
+    document.getElementById('prod-ident-group').scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
+  if(reqVendor && reqInternal){
+    document.getElementById('prod-ident-error').textContent='Vendor SKU and Internal SKU are mutually exclusive — uncheck one.';
+    document.getElementById('prod-ident-error').style.display='';
+    return;
+  }
+  document.getElementById('prod-ident-error').style.display='none';
+  const id=document.getElementById('edit-prod-id').value;
+  const payload={
+    name, category_id:parseInt(cat)||null,
+    manufacturer:document.getElementById('prod-mfr').value.trim()||null,
+    model:document.getElementById('prod-model').value.trim()||null,
+    default_cost:document.getElementById('prod-cost').value||null,
+    default_sale:document.getElementById('prod-sale').value||null,
+    description:document.getElementById('prod-desc').value.trim()||null,
+    serial_tracked:document.getElementById('prod-serial').checked?1:0,
+    qty_tracked:document.getElementById('prod-qty').checked?1:0,
+    require_scan_checkout:document.getElementById('prod-scan').checked?1:0,
+    print_scan_label:document.getElementById('prod-print-scan').checked?1:0,
+    require_serial:reqSerial,
+    require_vendor_sku:reqVendor,
+    require_internal_sku:reqInternal,
+    low_stock_threshold:parseInt(document.getElementById('prod-threshold').value)||0,
+  };
+  if(id) payload.id=parseInt(id);
+  const url=id?'/api/product/edit':'/api/product/add';
+  const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
+  if(res.ok){toast(id?'Product updated ✓':'Product added ✓','ok');closeModal('productModal');loadProds();}
+  else toast(res.msg||'Error','err');
+}
+
+async function deleteProd(){
+  const id=document.getElementById('edit-prod-id').value;
+  if(!id||!confirm('Delete this product? Items using it will keep their data but lose the product link.'))return;
+  const res=await fetch('/api/product/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:parseInt(id)})}).then(r=>r.json());
+  if(res.ok){toast('Deleted','warn');closeModal('productModal');loadProds();}
+  else toast(res.msg||'Error','err');
+}
+
+loadProds();
+</script>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Activity Report · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Activity Report</span>
+  <span class="topbar-sub" id="rpt-period"></span>
+  <div class="topbar-right">
+    <select id="periodSel" class="select" style="width:auto;min-width:140px" onchange="onPeriodChange()">
+      <option value="">All Time</option>
+      <option value="today">Today</option>
+      <option value="week">This Week</option>
+      <option value="month">This Month</option>
+      <option value="quarter">This Quarter</option>
+      <option value="year">This Year</option>
+      <option value="last30">Last 30 Days</option>
+      <option value="custom">Custom Range</option>
+    </select>
+    <div id="customRange" style="display:none;gap:6px;align-items:center">
+      <input type="date" id="dateFrom" class="input" style="width:auto">
+      <span style="color:#94a3b8">to</span>
+      <input type="date" id="dateTo" class="input" style="width:auto">
+      <button class="btn btn-primary btn-sm" onclick="loadReport()">Apply</button>
+    </div>
+  </div>
+</div>
+<div style="flex:1;overflow-y:auto;padding:20px 24px" id="rptContent">
+  <div style="text-align:center;padding:60px;color:#94a3b8">Loading…</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+.rpt-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px}
+.chart-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:18px 20px}
+.chart-title{font-size:13px;font-weight:600;color:#0f172a;margin-bottom:16px}
+.act-row{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f5f4f1}
+.act-row:last-child{border-bottom:none}
+.act-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.act-summary{font-size:11px;color:#94a3b8;margin-top:2px}
+@media(max-width:900px){.rpt-grid-3{grid-template-columns:1fr}}
+</style>
+<script>
+const ACTION_COLORS={CHECKOUT:'#b91c1c',CHECKIN:'#15803d',QTY_ADD:'#047857',QTY_REMOVE:'#b45309',QTY_SET:'#6d28d9',ITEM_ADD:'#0891b2',ITEM_EDIT:'#d97706',ITEM_DELETE:'#dc2626',ITEM_SOLD:'#7c3aed',ITEM_MODIFY:'#d97706',PRODUCT_ADD:'#0891b2',CAT_ADD:'#7c3aed',USER_ADD:'#0062cc',LOGIN:'#1d4ed8',LOGOUT:'#6b7280'};
+let charts={};
+function onPeriodChange(){
+  const v=document.getElementById('periodSel').value;
+  document.getElementById('customRange').style.display=v==='custom'?'flex':'none';
+  if(v!=='custom') loadReport();
+}
+function getParams(){
+  const period=document.getElementById('periodSel').value;
+  const params=new URLSearchParams();
+  if(period) params.set('period',period);
+  if(period==='custom'){
+    params.set('from',document.getElementById('dateFrom').value);
+    params.set('to',document.getElementById('dateTo').value);
+  }
+  return params;
+}
+async function loadReport(){
+  const data=await fetch('/api/report/activity?'+getParams()).then(r=>r.json());
+  const pLabel=data.period.from?(data.period.from+' \u2192 '+data.period.to):'All Time';
+  document.getElementById('rpt-period').textContent=pLabel;
+  Object.values(charts).forEach(ch=>{try{ch.destroy()}catch(e){}});charts={};
+  const totalActions=data.actions.reduce((a,b)=>a+b.count,0);
+  document.getElementById('rptContent').innerHTML=`
+  <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    <div><span style="font-size:28px;font-weight:700;font-family:'IBM Plex Mono',monospace">${totalActions}</span><span style="font-size:12px;color:#94a3b8;margin-left:6px">total actions</span></div>
+    <div>${data.actions.slice(0,6).map(a=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:12px"><span style="width:8px;height:8px;border-radius:50%;background:${ACTION_COLORS[a.action]||'#94a3b8'}"></span>${a.action} <strong>${a.count}</strong></span>`).join('')}</div>
+  </div>
+  <div class="rpt-grid-3">
+    <div class="chart-card"><div class="chart-title">Most Checked-Out Items</div>${data.top_items.length?'<canvas id="topChart" height="220"></canvas>':'<div style="color:#94a3b8;font-size:13px;padding:20px 0">No checkouts.</div>'}</div>
+    <div class="chart-card"><div class="chart-title">Tech Activity</div>${data.tech_activity.length?'<canvas id="techChart" height="220"></canvas>':'<div style="color:#94a3b8;font-size:13px;padding:20px 0">No tech activity.</div>'}</div>
+    <div class="chart-card"><div class="chart-title">Actions Breakdown</div>${data.actions.length?'<canvas id="actChart" height="220"></canvas>':'<div style="color:#94a3b8;font-size:13px;padding:20px 0">No actions.</div>'}</div>
+  </div>
+  <div class="chart-card"><div class="chart-title">Recent Activity (${data.recent.length})</div><div id="actFeed" style="max-height:400px;overflow-y:auto"></div></div>`;
+  if(data.top_items.length){
+    charts.top=new Chart(document.getElementById('topChart'),{type:'bar',data:{labels:data.top_items.map(i=>i.name.length>20?i.name.substring(0,20)+'\u2026':i.name),datasets:[{label:'Checkouts',data:data.top_items.map(i=>i.count),backgroundColor:'#1d4ed8',borderRadius:4}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{stepSize:1}}}}});
+  }
+  if(data.tech_activity.length){
+    charts.tech=new Chart(document.getElementById('techChart'),{type:'bar',data:{labels:data.tech_activity.map(t=>t.name||'Unknown'),datasets:[{label:'Checkouts',data:data.tech_activity.map(t=>t.count),backgroundColor:['#0f172a','#1d4ed8','#047857','#b45309','#7c3aed','#0891b2','#d97706','#dc2626','#6d28d9','#374151'],borderRadius:4}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{stepSize:1}}}}});
+  }
+  if(data.actions.length){
+    charts.act=new Chart(document.getElementById('actChart'),{type:'doughnut',data:{labels:data.actions.map(a=>a.action),datasets:[{data:data.actions.map(a=>a.count),backgroundColor:data.actions.map(a=>ACTION_COLORS[a.action]||'#94a3b8'),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:6}}}}});
+  }
+  const feed=document.getElementById('actFeed');
+  if(data.recent.length){
+    feed.innerHTML=data.recent.map(r=>{
+      const color=ACTION_COLORS[r.action]||'#94a3b8';
+      const snsku=r.item_serial||r.item_sku||'';
+      return `<div class="act-row"><div class="act-dot" style="background:${color}"></div><div style="flex:1"><div style="font-size:12.5px"><span style="font-weight:600;color:${color}">${r.action}</span> ${r.item_name?'\u2014 '+r.item_name:''}</div><div class="act-summary">${r.ts} \xb7 ${r.username||'\u2014'}${snsku?' \xb7 '+snsku:''}${r.product_name?' \xb7 '+r.product_name:''}${r.detail?' \xb7 '+r.detail.substring(0,80):''}</div></div></div>`;
+    }).join('');
+  } else feed.innerHTML='<div style="color:#94a3b8;font-size:13px;padding:20px 0">No activity.</div>';
+}
+loadReport();
+</script>
+{% endblock %}

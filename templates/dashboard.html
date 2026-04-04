@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Dashboard</span>
+  <span class="topbar-sub" id="dash-updated"></span>
+  <div class="topbar-right">
+    <button class="btn btn-secondary btn-sm" onclick="loadDashboard()">↻ Refresh</button>
+  </div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:20px 24px" id="dashContent">
+  <div style="text-align:center;padding:60px;color:#94a3b8">Loading dashboard…</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+.dash-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px }
+.dash-grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-bottom:20px }
+.dash-grid-3 { display:grid; grid-template-columns:2fr 1fr; gap:14px; margin-bottom:20px }
+.kcard { background:#fff; border:1px solid #e5e3de; border-radius:10px; padding:18px 20px }
+.kcard-l { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.7px; color:#94a3b8; margin-bottom:8px }
+.kcard-v { font-size:28px; font-weight:700; font-family:'IBM Plex Mono',monospace; letter-spacing:-1px; line-height:1 }
+.kcard-sub { font-size:12px; color:#94a3b8; margin-top:5px }
+.chart-card { background:#fff; border:1px solid #e5e3de; border-radius:10px; padding:18px 20px }
+.chart-title { font-size:13px; font-weight:600; color:#0f172a; margin-bottom:16px }
+.activity-row { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid #f5f4f1 }
+.activity-row:last-child { border-bottom:none }
+.act-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:5px }
+.act-text { font-size:12.5px; line-height:1.4 }
+.act-time { font-size:11px; color:#94a3b8; font-family:'IBM Plex Mono',monospace }
+.low-row { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid #f5f4f1 }
+.low-row:last-child { border-bottom:none }
+@media(max-width:900px){.dash-grid{grid-template-columns:repeat(2,1fr)}.dash-grid-3{grid-template-columns:1fr}}
+</style>
+<script>
+const ACTION_COLORS={CHECKOUT:'#b91c1c',CHECKIN:'#15803d',QTY_ADD:'#047857',QTY_REMOVE:'#b45309',QTY_SET:'#6d28d9',ITEM_ADD:'#0891b2',ITEM_EDIT:'#d97706',ITEM_DELETE:'#dc2626',ITEM_SOLD:'#7c3aed',CAT_ADD:'#0062cc'};
+let charts={};
+
+function destroyCharts(){Object.values(charts).forEach(c=>{try{c.destroy()}catch(e){}});charts={};}
+
+async function loadDashboard(){
+  const data = await fetch('/api/dashboard').then(r=>r.json());
+  const c = data.cards;
+  destroyCharts();
+
+  document.getElementById('dashContent').innerHTML = `
+  <!-- Financial KPI row -->
+  <div class="dash-grid">
+    <div class="kcard">
+      <div class="kcard-l">Stock Value</div>
+      <div class="kcard-v" style="color:#0f172a">$${fmt(c.stock_value)}</div>
+      <div class="kcard-sub">${c.total} active items</div>
+    </div>
+    <div class="kcard">
+      <div class="kcard-l">Tax Paid (Total)</div>
+      <div class="kcard-v" style="color:#475569">$${fmt(c.total_tax)}</div>
+      <div class="kcard-sub">On taxed purchases</div>
+    </div>
+    <div class="kcard">
+      <div class="kcard-l">Realized Revenue</div>
+      <div class="kcard-v" style="color:${c.revenue>0?'#15803d':'#94a3b8'}">$${fmt(c.revenue)}</div>
+      <div class="kcard-sub">${c.sold_count} item${c.sold_count!==1?'s':''} sold</div>
+    </div>
+    <div class="kcard">
+      <div class="kcard-l">Gross Profit</div>
+      <div class="kcard-v" style="color:${c.profit>=0?'#15803d':'#b91c1c'}">${c.profit>=0?'+':''} $${fmt(Math.abs(c.profit))}</div>
+      <div class="kcard-sub">Revenue minus cost of sold items</div>
+    </div>
+  </div>
+
+  <!-- Status row -->
+  <div class="dash-grid">
+    <div class="kcard" style="border-color:${c.checked_out>0?'#fecaca':'#e5e3de'}">
+      <div class="kcard-l">Checked Out</div>
+      <div class="kcard-v" style="color:${c.checked_out>0?'#b91c1c':'#94a3b8'}">${c.checked_out}</div>
+      <div class="kcard-sub">Currently out in the field</div>
+    </div>
+    <div class="kcard" style="border-color:${c.low_stock>0?'#fecaca':'#e5e3de'}">
+      <div class="kcard-l">Low Stock Alerts</div>
+      <div class="kcard-v" style="color:${c.low_stock>0?'#b91c1c':'#94a3b8'}">${c.low_stock}</div>
+      <div class="kcard-sub">${c.low_stock>0?'<a href="/?status=low" style="color:#b91c1c">View items →</a>':'All items above threshold'}</div>
+    </div>
+    <div class="kcard">
+      <div class="kcard-l">Available</div>
+      <div class="kcard-v" style="color:#15803d">${c.total - c.checked_out}</div>
+      <div class="kcard-sub">Ready to deploy</div>
+    </div>
+    <div class="kcard">
+      <div class="kcard-l">Total Items</div>
+      <div class="kcard-v">${c.total}</div>
+      <div class="kcard-sub">Active inventory</div>
+    </div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="dash-grid-3">
+    <div class="chart-card">
+      <div class="chart-title">Monthly Spend (by Purchase Date)</div>
+      <canvas id="monthlyChart" height="140"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Stock Value by Category</div>
+      <canvas id="catChart" height="140"></canvas>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="dash-grid-2">
+    <div class="chart-card">
+      <div class="chart-title">Most Checked-Out Items</div>
+      ${data.top_items.length ? '<canvas id="topChart" height="180"></canvas>' : '<div style="color:#94a3b8;font-size:13px;padding:20px 0">No checkout data yet.</div>'}
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Tech Activity</div>
+      ${data.tech_activity.length ? '<canvas id="techChart" height="180"></canvas>' : '<div style="color:#94a3b8;font-size:13px;padding:20px 0">No activity yet.</div>'}
+    </div>
+  </div>
+
+  <!-- Bottom row: activity feed + low stock -->
+  <div class="dash-grid-2">
+    <div class="chart-card">
+      <div class="chart-title">Recent Activity</div>
+      <div id="activityFeed"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">🔴 Low Stock Items</div>
+      <div id="lowStockList"></div>
+    </div>
+  </div>`;
+
+  // Monthly spend chart
+  if(data.monthly_spend.length){
+    charts.monthly = new Chart(document.getElementById('monthlyChart'),{
+      type:'bar',
+      data:{
+        labels:data.monthly_spend.map(m=>m.month),
+        datasets:[{label:'Spend ($)',data:data.monthly_spend.map(m=>m.spend),
+          backgroundColor:'#0f172a',borderRadius:4,borderSkipped:false}]
+      },
+      options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+    });
+  } else {
+    document.getElementById('monthlyChart').parentElement.innerHTML='<div class="chart-title">Monthly Spend</div><div style="color:#94a3b8;font-size:13px;padding:20px 0">Add items with purchase dates to see spend over time.</div>';
+  }
+
+  // Category donut
+  if(data.by_category.length){
+    charts.cat = new Chart(document.getElementById('catChart'),{
+      type:'doughnut',
+      data:{
+        labels:data.by_category.map(c=>c.name),
+        datasets:[{data:data.by_category.map(c=>c.value),
+          backgroundColor:data.by_category.map(c=>c.color),borderWidth:2,borderColor:'#fff'}]
+      },
+      options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:8}}}}
+    });
+  } else {
+    document.getElementById('catChart').parentElement.innerHTML='<div class="chart-title">Stock Value by Category</div><div style="color:#94a3b8;font-size:13px;padding:20px 0">Add items with categories and costs.</div>';
+  }
+
+  // Top items
+  if(data.top_items.length){
+    charts.top = new Chart(document.getElementById('topChart'),{
+      type:'bar',
+      data:{
+        labels:data.top_items.map(i=>i.name.length>18?i.name.substring(0,18)+'…':i.name),
+        datasets:[{label:'Checkouts',data:data.top_items.map(i=>i.count),
+          backgroundColor:'#1d4ed8',borderRadius:4}]
+      },
+      options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{stepSize:1}}}}
+    });
+  }
+
+  // Tech activity
+  if(data.tech_activity.length){
+    charts.tech = new Chart(document.getElementById('techChart'),{
+      type:'bar',
+      data:{
+        labels:data.tech_activity.map(t=>t.name||'Unknown'),
+        datasets:[{label:'Checkouts',data:data.tech_activity.map(t=>t.count),
+          backgroundColor:['#0f172a','#1d4ed8','#047857','#b45309','#7c3aed','#0891b2'],borderRadius:4}]
+      },
+      options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{stepSize:1}}}}
+    });
+  }
+
+  // Activity feed
+  const feed = document.getElementById('activityFeed');
+  if(data.activity.length){
+    feed.innerHTML = data.activity.map(a=>{
+      const color = ACTION_COLORS[a.action]||'#94a3b8';
+      return `<div class="activity-row">
+        <div class="act-dot" style="background:${color}"></div>
+        <div style="flex:1">
+          <div class="act-text"><span style="font-weight:600;color:${color}">${a.action}</span> ${a.item_name?`— ${a.item_name}`:''}</div>
+          <div class="act-time">${a.ts} · ${a.username||'—'}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } else {
+    feed.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:10px 0">No activity yet.</div>';
+  }
+
+  // Low stock list — product level
+  const lsl = document.getElementById('lowStockList');
+  if(data.low_items.length){
+    lsl.innerHTML = data.low_items.map(p=>{
+      const missing = p.low_stock_threshold - p.available_count;
+      const pct = Math.round((p.available_count / p.low_stock_threshold) * 100);
+      return `<div class="low-row">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+          <div style="margin-top:5px;background:#f0efec;border-radius:4px;height:5px;overflow:hidden">
+            <div style="width:${Math.min(pct,100)}%;height:100%;background:${p.available_count===0?'#b91c1c':'#d97706'};border-radius:4px"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-shrink:0;margin-left:12px">
+          <div style="text-align:center">
+            <div style="font-size:9px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.3px">Have</div>
+            <div style="font-size:16px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:${p.available_count===0?'#b91c1c':'#d97706'}">${p.available_count}</div>
+          </div>
+          <div style="color:#d1d5db">/</div>
+          <div style="text-align:center">
+            <div style="font-size:9px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.3px">Need</div>
+            <div style="font-size:16px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:#0f172a">${p.low_stock_threshold}</div>
+          </div>
+          <div style="text-align:center;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:3px 8px">
+            <div style="font-size:9px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.3px">Short</div>
+            <div style="font-size:16px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:#b91c1c">${missing}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } else {
+    lsl.innerHTML = '<div style="color:#15803d;font-size:13px;padding:10px 0">✓ All products above minimum stock level.</div>';
+  }
+
+  document.getElementById('dash-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+function fmt(n){ return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+loadDashboard();
+</script>
+{% endblock %}

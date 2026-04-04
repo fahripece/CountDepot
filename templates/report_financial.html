@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Financial Report · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Financial Report</span>
+  <span class="topbar-sub" id="rpt-period"></span>
+  <div class="topbar-right">
+    <select id="periodSel" class="select" style="width:auto;min-width:140px" onchange="onPeriodChange()">
+      <option value="">All Time</option>
+      <option value="today">Today</option>
+      <option value="week">This Week</option>
+      <option value="month">This Month</option>
+      <option value="quarter">This Quarter</option>
+      <option value="year">This Year</option>
+      <option value="last30">Last 30 Days</option>
+      <option value="custom">Custom Range</option>
+    </select>
+    <div id="customRange" style="display:none;gap:6px;align-items:center">
+      <input type="date" id="dateFrom" class="input" style="width:auto">
+      <span style="color:#94a3b8">to</span>
+      <input type="date" id="dateTo" class="input" style="width:auto">
+      <button class="btn btn-primary btn-sm" onclick="loadReport()">Apply</button>
+    </div>
+  </div>
+</div>
+<div style="flex:1;overflow-y:auto;padding:20px 24px" id="rptContent">
+  <div style="text-align:center;padding:60px;color:#94a3b8">Loading…</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+.rpt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.rpt-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.kcard{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:18px 20px}
+.kcard-l{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:#94a3b8;margin-bottom:8px}
+.kcard-v{font-size:28px;font-weight:700;font-family:'IBM Plex Mono',monospace;letter-spacing:-1px;line-height:1}
+.kcard-sub{font-size:12px;color:#94a3b8;margin-top:5px}
+.chart-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:18px 20px}
+.chart-title{font-size:13px;font-weight:600;color:#0f172a;margin-bottom:16px}
+.item-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f5f4f1;font-size:12.5px}
+.item-row:last-child{border-bottom:none}
+.item-summary{font-size:11.5px;color:#94a3b8;margin-top:2px;line-height:1.5}
+@media(max-width:900px){.rpt-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+<script>
+let charts={};
+function fmt(n){return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function onPeriodChange(){
+  const v=document.getElementById('periodSel').value;
+  document.getElementById('customRange').style.display=v==='custom'?'flex':'none';
+  if(v!=='custom') loadReport();
+}
+function getParams(){
+  const period=document.getElementById('periodSel').value;
+  const params=new URLSearchParams();
+  if(period) params.set('period',period);
+  if(period==='custom'){
+    params.set('from',document.getElementById('dateFrom').value);
+    params.set('to',document.getElementById('dateTo').value);
+  }
+  return params;
+}
+async function loadReport(){
+  const data=await fetch('/api/report/financial?'+getParams()).then(r=>r.json());
+  const c=data.cards;
+  const pLabel=data.period.from?(data.period.from+' \u2192 '+data.period.to):'All Time';
+  document.getElementById('rpt-period').textContent=pLabel;
+  Object.values(charts).forEach(ch=>{try{ch.destroy()}catch(e){}});charts={};
+  document.getElementById('rptContent').innerHTML=`
+  <div class="rpt-grid">
+    <div class="kcard"><div class="kcard-l">Stock Value</div><div class="kcard-v">$${fmt(c.stock_value)}</div><div class="kcard-sub">${c.total_items} items</div></div>
+    <div class="kcard"><div class="kcard-l">Tax Paid</div><div class="kcard-v" style="color:#475569">$${fmt(c.tax_paid)}</div></div>
+    <div class="kcard"><div class="kcard-l">Revenue</div><div class="kcard-v" style="color:${c.revenue>0?'#15803d':'#94a3b8'}">$${fmt(c.revenue)}</div><div class="kcard-sub">${c.sold_count} sold</div></div>
+    <div class="kcard"><div class="kcard-l">Profit</div><div class="kcard-v" style="color:${c.profit>=0?'#15803d':'#b91c1c'}">${c.profit>=0?'+':''}$${fmt(Math.abs(c.profit))}</div></div>
+  </div>
+  <div class="rpt-grid-2">
+    <div class="chart-card">
+      <div class="chart-title">Value by Category</div>
+      ${data.by_category.length?'<canvas id="catChart" height="180"></canvas>':'<div style="color:#94a3b8;font-size:13px;padding:20px 0">No data</div>'}
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Sold Items (${c.sold_count})</div>
+      <div id="soldList" style="max-height:320px;overflow-y:auto"></div>
+    </div>
+  </div>`;
+  if(data.by_category.length){
+    charts.cat=new Chart(document.getElementById('catChart'),{type:'doughnut',data:{labels:data.by_category.map(c=>c.name),datasets:[{data:data.by_category.map(c=>c.value),backgroundColor:data.by_category.map(c=>c.color),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:8}}}}});
+  }
+  const sl=document.getElementById('soldList');
+  if(data.sold_items.length){
+    sl.innerHTML=data.sold_items.map(i=>{
+      const profit=i.sold_price&&i.cost_price?i.sold_price-i.cost_price:null;
+      const profitStr=profit!=null?(profit>=0?`<span style="color:#15803d">+$${profit.toFixed(2)}</span>`:`<span style="color:#b91c1c">-$${Math.abs(profit).toFixed(2)}</span>`):'';
+      return `<div class="item-row"><div style="flex:1"><div style="font-weight:600">${i.name} ${profitStr}</div><div class="item-summary">Added ${i.created_at?.substring(0,10)||'\u2014'} \xb7 Cost $${(i.cost_price||0).toFixed(2)} \xb7 Sold $${(i.sold_price||0).toFixed(2)} on ${i.sold_date||'\u2014'}${i.sold_to?' to '+i.sold_to:''} \xb7 ${i.condition||'\u2014'} \xb7 Shelf ${i.shelf||'\u2014'}</div></div></div>`;
+    }).join('');
+  } else sl.innerHTML='<div style="color:#94a3b8;font-size:13px;padding:20px 0">No sales in this period.</div>';
+}
+loadReport();
+</script>
+{% endblock %}

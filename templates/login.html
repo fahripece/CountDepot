@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CountDepot — Sign In</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:#0f172a;min-height:100vh;display:flex;align-items:center;justify-content:center;color:#111}
+.card{background:#fff;border-radius:14px;width:380px;padding:36px 36px 32px;box-shadow:0 24px 64px rgba(0,0,0,0.4)}
+.logo{text-align:center;margin-bottom:28px}
+.logo-title{font-size:22px;font-weight:700;color:#0f172a;letter-spacing:-0.5px}
+.logo-sub{font-size:12px;color:#94a3b8;font-family:'IBM Plex Mono',monospace;margin-top:2px}
+label{display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+input{width:100%;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 13px;font-size:14px;font-family:inherit;outline:none;transition:border .15s;margin-bottom:14px}
+input:focus{border-color:#1d4ed8;background:#fff}
+.btn{width:100%;background:#0f172a;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s;font-family:inherit}
+.btn:hover{background:#1d4ed8}
+.error{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-title">📦 CountDepot</div>
+    <div class="logo-sub">Inventory Storage &amp; Management</div>
+  </div>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <label>Username</label>
+    <input name="username" autocomplete="username" autofocus placeholder="Enter username">
+    <label>Password</label>
+    <input name="password" type="password" autocomplete="current-password" placeholder="Enter password">
+    <button class="btn" type="submit">Sign In →</button>
+  </form>
+  <div style="text-align:center;margin-top:16px">
+    <a href="/forgot-password" style="font-size:12.5px;color:#94a3b8;text-decoration:none">Forgot password?</a>
+  </div>
+</div>
+</body>
+</html>

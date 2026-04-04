@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}Out / Deployed · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Out / Deployed</span>
+  <span class="topbar-sub" id="coCount"></span>
+  <div class="topbar-right">
+    <div style="position:relative">
+      <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:13px;height:13px;color:#aaa;pointer-events:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="coSearch" class="input" style="padding-left:28px;width:220px" placeholder="Search name, tech, job…" oninput="applyFilters()">
+    </div>
+    <!-- Date range filter -->
+    <div style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:12px;color:#64748b;white-space:nowrap">Checked out:</label>
+      <input type="date" id="dateFrom" class="input" style="width:140px;font-size:12px" onchange="applyFilters()">
+      <span style="font-size:12px;color:#94a3b8">→</span>
+      <input type="date" id="dateTo" class="input" style="width:140px;font-size:12px" onchange="applyFilters()">
+      <button class="btn btn-secondary btn-sm" onclick="clearDates()" style="font-size:11px;white-space:nowrap">Clear</button>
+    </div>
+    <select id="catFilter" class="select" style="width:160px;font-size:12px" onchange="applyFilters()">
+      <option value="">All Categories</option>
+      {% for cat in categories %}
+      <option value="{{ cat.name|lower }}">{{ cat.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:20px 24px">
+
+<div id="emptyState" style="display:none;text-align:center;padding:80px 20px;color:#94a3b8">
+  <div style="font-size:48px;margin-bottom:14px">✓</div>
+  <div style="font-size:18px;font-weight:600;color:#15803d;margin-bottom:6px">All Clear</div>
+  <div style="font-size:13px">No items currently checked out. All items are in stock.</div>
+</div>
+
+<div class="co-grid" id="coGrid"></div>
+
+</div>
+
+<!-- CHECK IN CONFIRMATION MODAL -->
+<div class="overlay" id="checkinModal">
+  <div class="modal" style="width:440px">
+    <div class="modal-header">
+      <div class="modal-title">Check In Item</div>
+      <button class="modal-close" onclick="closeModal('checkinModal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:20px">
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:16px">
+        <div style="font-weight:700;font-size:15px" id="ci-name"></div>
+        <div style="font-size:12px;color:#64748b;margin-top:4px" id="ci-info"></div>
+      </div>
+      <div style="font-size:13px;color:#475569;line-height:1.6">
+        This will mark the item as returned and available in stock. The checkout will be logged in the audit trail.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('checkinModal')">Cancel</button>
+      <button class="btn btn-primary" id="ciBtn" onclick="confirmCheckin()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M9 11l3 3L22 4"/></svg>
+        Confirm Check In
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+.co-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.co-card{background:#fff;border:1px solid #e5e3de;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .15s,border-color .15s}
+.co-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.06);border-color:#94a3b8}
+.co-card-top{display:flex;align-items:flex-start;gap:10px;padding:16px 18px 0}
+.co-card-name{font-size:15px;font-weight:700;line-height:1.3;color:#0f172a}
+.co-card-model{font-size:11.5px;color:#94a3b8;font-family:'IBM Plex Mono',monospace;margin-top:2px}
+.co-card-details{padding:12px 18px;display:flex;flex-direction:column;gap:7px;flex:1}
+.co-detail-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#475569}
+.co-detail-row svg{color:#94a3b8;flex-shrink:0}
+.co-detail-label{color:#94a3b8;font-weight:500;min-width:45px}
+.co-detail-value{font-weight:600;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.co-checkin-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border:none;border-top:1px solid #e5e3de;background:#f0fdf4;color:#15803d;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s,color .15s}
+.co-checkin-btn:hover{background:#15803d;color:#fff}
+.co-checkin-btn:hover svg{stroke:#fff}
+@media(max-width:700px){.co-grid{grid-template-columns:1fr}}
+</style>
+
+<script>
+let allItems=[];
+let pendingCheckinId=null;
+
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+
+function clearDates(){
+  document.getElementById('dateFrom').value='';
+  document.getElementById('dateTo').value='';
+  applyFilters();
+}
+
+function parseDate(str){
+  // Handles MM/DD/YY, MM/DD/YYYY, and YYYY-MM-DD
+  if(!str) return null;
+  if(str.includes('-')){return new Date(str+'T00:00:00');}
+  const parts=str.split('/');
+  if(parts.length===3){
+    let [m,d,y]=parts;
+    if(y.length===2) y='20'+y;
+    return new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T00:00:00`);
+  }
+  return null;
+}
+
+function applyFilters(){
+  const q=document.getElementById('coSearch').value.toLowerCase().trim();
+  const cat=document.getElementById('catFilter').value.toLowerCase();
+  const fromVal=document.getElementById('dateFrom').value;
+  const toVal=document.getElementById('dateTo').value;
+  const fromDate=fromVal?new Date(fromVal+'T00:00:00'):null;
+  const toDate=toVal?new Date(toVal+'T23:59:59'):null;
+
+  let visible=0;
+  document.querySelectorAll('.co-card').forEach(card=>{
+    const searchMatch=!q||card.dataset.search.includes(q);
+    const catMatch=!cat||card.dataset.cat===cat;
+    const itemDate=parseDate(card.dataset.date);
+    const fromMatch=!fromDate||!itemDate||itemDate>=fromDate;
+    const toMatch=!toDate||!itemDate||itemDate<=toDate;
+    const show=searchMatch&&catMatch&&fromMatch&&toMatch;
+    card.style.display=show?'':'none';
+    if(show) visible++;
+  });
+  document.getElementById('coCount').textContent=visible+' item'+(visible!==1?'s':'')+' out';
+  document.getElementById('emptyState').style.display=(allItems.length===0)?'':'none';
+}
+
+async function loadItems(){
+  const rows=await fetch('/api/items?status=out&hide_out=0').then(r=>r.json());
+  allItems=rows;
+  const grid=document.getElementById('coGrid');
+
+  if(!rows.length){
+    document.getElementById('emptyState').style.display='';
+    grid.innerHTML='';
+    document.getElementById('coCount').textContent='0 items out';
+    return;
+  }
+
+  grid.innerHTML=rows.map(item=>{
+    const catColor=item.color||'#6b7280';
+    const catName=item.category||'';
+    const dateRaw=item.checkout_date||'';
+    return `<div class="co-card" data-search="${[item.name,item.checkout_by,item.job_ref,item.serial,item.category].filter(Boolean).join(' ').toLowerCase()}" data-cat="${catName.toLowerCase()}" data-date="${dateRaw}">
+      <div class="co-card-top">
+        <div style="flex:1;min-width:0">
+          <div class="co-card-name">${item.name}</div>
+          ${item.manufacturer||item.model?`<div class="co-card-model">${[item.manufacturer,item.model].filter(Boolean).join(' · ')}</div>`:''}
+        </div>
+        ${catName?`<span class="tag" style="background:${catColor}18;color:${catColor};flex-shrink:0">${catName}</span>`:''}
+      </div>
+      <div class="co-card-details">
+        <div class="co-detail-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
+          <span class="co-detail-label">Tech:</span>
+          <span class="co-detail-value">${item.checkout_by||'—'}</span>
+        </div>
+        ${item.job_ref?`<div class="co-detail-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+          <span class="co-detail-label">Job:</span>
+          <span class="co-detail-value">${item.job_ref}</span>
+        </div>`:''}
+        <div class="co-detail-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span class="co-detail-label">Since:</span>
+          <span class="co-detail-value">${dateRaw||'—'}</span>
+        </div>
+        ${item.serial||item.sku?`<div class="co-detail-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="12" width="18" height="4" rx="1"/></svg>
+          <span class="co-detail-label">SN:</span>
+          <span class="co-detail-value mono">${item.serial||item.sku}</span>
+        </div>`:''}
+        ${item.shelf?`<div class="co-detail-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          <span class="co-detail-label">Shelf:</span>
+          <span class="co-detail-value"><span class="shelf">${item.shelf}</span></span>
+        </div>`:''}
+      </div>
+      <button class="co-checkin-btn" onclick="openCheckinModal(${item.id},'${item.name.replace(/'/g,"\\'")}','${(item.checkout_by||'').replace(/'/g,"\\'")}','${item.serial||item.sku||''}')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        Check In
+      </button>
+    </div>`;
+  }).join('');
+
+  applyFilters();
+}
+
+function openCheckinModal(id,name,tech,sn){
+  pendingCheckinId=id;
+  document.getElementById('ci-name').textContent=name;
+  const parts=[];
+  if(tech) parts.push('Checked out by '+tech);
+  if(sn) parts.push(sn);
+  document.getElementById('ci-info').textContent=parts.join(' · ')||'';
+  document.getElementById('ciBtn').disabled=false;
+  document.getElementById('ciBtn').innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M9 11l3 3L22 4"/></svg> Confirm Check In';
+  openModal('checkinModal');
+}
+
+async function confirmCheckin(){
+  if(!pendingCheckinId) return;
+  const btn=document.getElementById('ciBtn');
+  btn.disabled=true;btn.textContent='Checking in…';
+  const res=await fetch('/api/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:pendingCheckinId})}).then(r=>r.json());
+  if(res.ok){
+    closeModal('checkinModal');
+    toast('Item checked in ✓','ok');
+    loadItems();
+  } else {
+    btn.disabled=false;
+    btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M9 11l3 3L22 4"/></svg> Confirm Check In';
+    toast(res.msg||'Error','err');
+  }
+}
+
+loadItems();
+</script>
+{% endblock %}
