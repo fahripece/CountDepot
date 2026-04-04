@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token }}">
 <title>{% block title %}CountDepot{% endblock %}</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -205,7 +206,8 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
 <div class="toast-wrap" id="toastWrap"></div>
 <script>
 function toast(msg,type=''){const w=document.getElementById('toastWrap');const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;w.appendChild(t);setTimeout(()=>t.remove(),3200)}
-function api(url,data){return fetch(url,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined}).then(r=>r.json())}
+const _csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+function api(url,data){return fetch(url,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-CSRF-Token':_csrfToken}:{},body:data?JSON.stringify(data):undefined}).then(r=>r.json())}
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
 // Modals ONLY close via the ✕ button — clicking the backdrop does nothing

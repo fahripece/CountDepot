@@ -53,6 +53,7 @@ h1{font-size:26px;font-weight:700;color:#0f172a;text-align:center;margin-bottom:
   <div class="sub">We'll set up the right categories and fields for your team. You can always add more later.</div>
 
   <form method="POST" action="{{ url_for('onboarding.choose') }}" id="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="grid">
       {% for key, sector in sectors.items() %}
       <label class="sector-card" id="card-{{ key }}" onclick="select('{{ key }}')">

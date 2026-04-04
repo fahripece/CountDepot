@@ -158,6 +158,7 @@ tr:hover td{background:#263548}
             <div id="edit-{{ t.slug }}" class="edit-form">
               <form method="POST" action="{{ url_for('platform.tenant_edit', slug=t.slug) }}"
                     style="display:contents">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input name="name" value="{{ t.name }}" placeholder="Company name" style="width:180px">
                 <select name="plan">
                   <option value="standard"  {% if t.plan=='standard'  %}selected{% endif %}>Standard</option>
@@ -199,11 +200,13 @@ tr:hover td{background:#263548}
               <form method="POST"
                     action="{{ url_for('platform.tenant_suspend', slug=t.slug) }}"
                     onsubmit="return confirm('Suspend {{ t.name }}? Users will be blocked immediately.')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="btn btn-danger btn-sm">Suspend</button>
               </form>
               {% else %}
               <form method="POST"
                     action="{{ url_for('platform.tenant_activate', slug=t.slug) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="btn btn-green btn-sm">Reactivate</button>
               </form>
               {% endif %}

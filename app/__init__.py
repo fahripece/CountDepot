@@ -1,4 +1,7 @@
-from flask import Flask, request, jsonify, redirect, url_for, g, session
+import hmac
+import secrets
+
+from flask import Flask, request, jsonify, redirect, url_for, g, session, abort
 from config import Config
 from app.platform import init_platform_db
 from app.tenant import resolve_tenant
@@ -18,8 +21,26 @@ def create_app():
     # Ensure platform.db (tenant registry) exists on startup
     init_platform_db()
 
+    @app.context_processor
+    def _inject_csrf():
+        """Make csrf_token available in every template."""
+        if "_csrf_token" not in session:
+            session["_csrf_token"] = secrets.token_hex(32)
+        return {"csrf_token": session["_csrf_token"]}
+
     @app.before_request
     def before():
+        # CSRF validation — all state-changing requests except the health probe
+        if (request.method in ("POST", "PUT", "PATCH", "DELETE")
+                and request.path != "/_health"):
+            token = (request.form.get("csrf_token")
+                     or request.headers.get("X-CSRF-Token"))
+            expected = session.get("_csrf_token", "")
+            if not token or not expected or not hmac.compare_digest(token, expected):
+                if request.path.startswith("/api/") or request.is_json:
+                    return jsonify({"ok": False, "msg": "CSRF validation failed"}), 403
+                abort(403)
+
         # These routes bypass tenant resolution entirely
         if (request.path.startswith("/_platform")
                 or request.path == "/_health"
@@ -49,7 +70,8 @@ def create_app():
 
         # Routes that don't need the intercept checks
         skip = ("/onboarding", "/login", "/logout", "/change-password",
-                "/forgot-password", "/reset-password", "/static", "/signup")
+                "/forgot-password", "/reset-password", "/verify-email",
+                "/static", "/signup")
         if any(request.path.startswith(s) for s in skip):
             return
 

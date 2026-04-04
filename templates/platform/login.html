@@ -42,6 +42,7 @@ button:hover{background:#2563eb}
   {% endif %}
 
   <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Password</label>
     <input type="password" name="password" autofocus placeholder="Platform admin password">
     <button type="submit">Sign In</button>

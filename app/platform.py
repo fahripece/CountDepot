@@ -28,6 +28,22 @@ def init_platform_db():
             active      INTEGER NOT NULL DEFAULT 1,
             created_at  TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS rate_limits (
+            ip       TEXT NOT NULL,
+            endpoint TEXT NOT NULL DEFAULT 'login',
+            ts       TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_rate_limits ON rate_limits(ip, endpoint, ts);
+        CREATE TABLE IF NOT EXISTS security_log (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts       TEXT NOT NULL,
+            event    TEXT NOT NULL,
+            username TEXT,
+            ip       TEXT,
+            tenant   TEXT,
+            detail   TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_security_log_ts ON security_log(ts DESC);
     """)
     # Migrate existing rows
     cols = [r[1] for r in db.execute("PRAGMA table_info(tenants)").fetchall()]

@@ -8,7 +8,8 @@ from flask import Blueprint, request, jsonify, session, send_file
 
 from app.db import query, execute
 from app.helpers import (login_required, perm_required, admin_required,
-                         log_action, get_low_stock_alerts, hash_pw,
+                         log_action, get_low_stock_alerts, hash_pw, verify_pw,
+                         api_rate_limit,
                          _item_missing_fields, sync_item_task,
                          _parse_date_range, _date_filter_sql,
                          ALL_PERMISSIONS, PERM_KEYS,
@@ -1058,6 +1059,7 @@ def api_contact_delete():
 @bp.route("/api/user/add", methods=["POST"])
 @login_required
 @admin_required
+@api_rate_limit(max_attempts=20, window=60)
 def api_user_add():
     d    = request.json
     if not d.get("username") or not d.get("password"):
@@ -1107,6 +1109,7 @@ def api_user_password():
 @bp.route("/api/user/delete", methods=["POST"])
 @login_required
 @admin_required
+@api_rate_limit(max_attempts=20, window=60)
 def api_user_delete():
     d = request.json
     if d["id"] == session.get("user_id"):
@@ -1120,7 +1123,7 @@ def api_user_delete():
 def api_change_password():
     d    = request.json
     user = query("SELECT * FROM users WHERE id=?", [session["user_id"]], one=True)
-    if not user or user["password"] != hash_pw(d.get("old_password", "")):
+    if not user or not verify_pw(d.get("old_password", ""), user["password"]):
         return jsonify({"ok": False, "msg": "Current password incorrect"})
     execute("UPDATE users SET password=? WHERE id=?", [hash_pw(d["new_password"]), session["user_id"]])
     return jsonify({"ok": True})
@@ -1160,6 +1163,7 @@ def api_audit():
 @bp.route("/export/csv")
 @login_required
 @perm_required("import_export")
+@api_rate_limit(max_attempts=10, window=60)
 def export_csv():
     rows = query("""SELECT i.name,i.manufacturer,i.model,i.serial,i.sku,
                            c.name as cat_name,p.name as prod_name,
@@ -1193,6 +1197,7 @@ def export_csv():
 @bp.route("/export/excel")
 @login_required
 @perm_required("import_export")
+@api_rate_limit(max_attempts=10, window=60)
 def export_excel():
     try:
         import openpyxl

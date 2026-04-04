@@ -58,6 +58,9 @@ MIGRATIONS = [
     ("audit_log", "item_sku",     "TEXT"),
     ("audit_log", "product_name", "TEXT"),
 
+    # users — email verification (default 1 = verified for all pre-existing accounts)
+    ("users", "email_verified", "INTEGER NOT NULL DEFAULT 1"),
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
     # Example: ("items", "condition_notes", "TEXT")
 ]
@@ -65,7 +68,13 @@ MIGRATIONS = [
 
 def init_db():
     """Create schema + run migrations. Safe to call on every request startup."""
-    db = get_db()
+    _init_db_conn(get_db())
+
+
+def _init_db_conn(db):
+    """Apply full schema, migrations, and seed data to a raw sqlite3 connection.
+    Safe to call on any fresh connection — all DDL uses CREATE IF NOT EXISTS.
+    Used by init_db() (request-scoped) and _bootstrap_tenant_db (out-of-context)."""
 
     # ── Schema DDL ─────────────────────────────────────────────────────────────
     db.executescript("""
@@ -76,6 +85,7 @@ def init_db():
             role                 TEXT NOT NULL DEFAULT 'worker',
             permissions          TEXT NOT NULL DEFAULT '',
             email                TEXT,
+            email_verified       INTEGER NOT NULL DEFAULT 1,
             must_change_password INTEGER NOT NULL DEFAULT 0,
             last_login           TEXT
         );
@@ -231,6 +241,13 @@ def init_db():
             expires_at TEXT NOT NULL,
             used       INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS email_verification_tokens (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL REFERENCES users(id),
+            token      TEXT UNIQUE NOT NULL,
+            expires_at TEXT NOT NULL,
+            used       INTEGER NOT NULL DEFAULT 0
+        );
         CREATE TABLE IF NOT EXISTS audit_log (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             ts           TEXT NOT NULL,
@@ -324,9 +341,6 @@ def seed_tenant(slug):
     db.execute(
         "INSERT INTO users (username,password,role,must_change_password) VALUES (?,?,?,1)",
         ["admin", hash_pw("admin123"), "admin"])
-    db.execute(
-        "INSERT INTO users (username,password,role,must_change_password) VALUES (?,?,?,1)",
-        ["worker", hash_pw("worker123"), "worker"])
 
     for name in ["CDW", "SHI", "Insight", "Zones", "PC Connection",
                  "Provantage", "B&H Photo", "Newegg Business",

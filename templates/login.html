@@ -27,6 +27,7 @@ input:focus{border-color:#1d4ed8;background:#fff}
   </div>
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
   <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Username</label>
     <input name="username" autocomplete="username" autofocus placeholder="Enter username">
     <label>Password</label>

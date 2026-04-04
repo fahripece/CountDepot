@@ -150,7 +150,7 @@ def tenant_new():
 def _bootstrap_tenant_db(slug, admin_password):
     """Create schema + seed default data for a brand-new tenant."""
     import sqlite3
-    from app.schema import _seed_categories
+    from app.schema import _init_db_conn
 
     db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -160,24 +160,10 @@ def _bootstrap_tenant_db(slug, admin_password):
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
 
-    # Reuse the schema SQL from schema.py without needing a Flask request context
-    from app.schema import init_db as _schema_sql
-    # We can't call init_db() here since it uses get_db() (request-scoped)
-    # Instead, run the DDL directly
-    db.executescript(_SCHEMA_DDL)
+    # schema.py owns the DDL — _init_db_conn works on any raw connection
+    _init_db_conn(db)
 
-    # Seed default companies
-    for co in ["Amazon", "B&H Photo", "CDW", "Adorama", "Newegg",
-               "Insight", "Dell Technologies", "Other"]:
-        try:
-            db.execute("INSERT INTO companies (name) VALUES (?)", [co])
-        except Exception:
-            pass
-
-    # Seed default categories
-    _seed_categories(db)
-
-    # Seed distributors
+    # Seed distributors (not part of init_db — bootstrap-only)
     for d_name in ["CDW", "SHI", "Insight", "Zones", "PC Connection",
                    "Provantage", "B&H Photo", "Newegg Business",
                    "Amazon Business", "Staples Business",
@@ -191,11 +177,6 @@ def _bootstrap_tenant_db(slug, admin_password):
     db.execute(
         "INSERT INTO users (username,password,role,permissions,must_change_password) VALUES (?,?,?,?,1)",
         ["admin", hash_pw(admin_password), "admin", ""])
-
-    # Create default worker account — must change password on first login
-    db.execute(
-        "INSERT INTO users (username,password,role,permissions,must_change_password) VALUES (?,?,?,?,1)",
-        ["worker", hash_pw("worker123"), "worker", ""])
 
     db.commit()
     db.close()
@@ -244,128 +225,3 @@ def api_tenants():
     for t in tenants:
         t["stats"] = _tenant_stats(t["slug"])
     return jsonify(tenants)
-
-
-# ── Minimal DDL (duplicated here so we don't need a request context) ──────────
-# This is the same schema as schema.py but run directly against a raw connection.
-
-_SCHEMA_DDL = """
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'worker',
-        permissions TEXT NOT NULL DEFAULT '',
-        email TEXT,
-        must_change_password INTEGER NOT NULL DEFAULT 0,
-        last_login TEXT
-    );
-    CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL,
-        color TEXT NOT NULL DEFAULT '#ffffff',
-        is_expense INTEGER DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS category_fields (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        category_id INTEGER NOT NULL REFERENCES categories(id),
-        field_label TEXT NOT NULL,
-        field_key TEXT NOT NULL,
-        field_type TEXT NOT NULL DEFAULT 'text',
-        placeholder TEXT,
-        required INTEGER DEFAULT 0,
-        sort_order INTEGER DEFAULT 0,
-        dropdown_options TEXT
-    );
-    CREATE TABLE IF NOT EXISTS products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        manufacturer TEXT, model TEXT, description TEXT,
-        category_id INTEGER REFERENCES categories(id),
-        serial_tracked INTEGER DEFAULT 0,
-        qty_tracked INTEGER DEFAULT 0,
-        require_scan_checkout INTEGER DEFAULT 0,
-        require_serial INTEGER DEFAULT 0,
-        require_vendor_sku INTEGER DEFAULT 0,
-        require_internal_sku INTEGER DEFAULT 1,
-        require_sku_label INTEGER DEFAULT 0,
-        print_scan_label INTEGER DEFAULT 0,
-        default_cost REAL, default_sale REAL,
-        low_stock_threshold INTEGER DEFAULT 0,
-        image_url TEXT, active INTEGER DEFAULT 1,
-        created_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        product_id INTEGER REFERENCES products(id),
-        name TEXT NOT NULL,
-        manufacturer TEXT, model TEXT, serial TEXT, sku TEXT, internal_sku TEXT,
-        category_id INTEGER REFERENCES categories(id),
-        condition TEXT DEFAULT 'New', shelf TEXT,
-        owner_company TEXT, company_id INTEGER REFERENCES companies(id),
-        purchased_from TEXT, purchase_date TEXT, po_number TEXT,
-        qty INTEGER, qty_out INTEGER DEFAULT 0, low_stock_threshold INTEGER DEFAULT 0,
-        checked_out INTEGER DEFAULT 0, checkout_date TEXT, checkout_by TEXT, job_ref TEXT,
-        require_scan_checkout INTEGER DEFAULT -1,
-        cost_price REAL, sale_price REAL,
-        tax_paid INTEGER DEFAULT -1, tax_rate REAL DEFAULT 0, sale_state TEXT,
-        sold INTEGER DEFAULT 0, sold_date TEXT, sold_price REAL, sold_to TEXT,
-        ebay_status TEXT DEFAULT 'not_listed', ebay_listing_id TEXT,
-        ebay_listed_price REAL, ebay_listed_date TEXT,
-        cpu TEXT, ram TEXT, storage TEXT, os_type TEXT, screen_size TEXT,
-        battery_life TEXT, imei TEXT, carrier TEXT,
-        resolution TEXT, lens_type TEXT, has_poe INTEGER DEFAULT 0,
-        wireless_standard TEXT, port_count INTEGER, poe_budget TEXT, throughput TEXT,
-        cable_type TEXT, cable_gauge TEXT, connector_type TEXT, cable_length TEXT,
-        extra_fields TEXT DEFAULT '{}', notes TEXT,
-        parent_item_id INTEGER REFERENCES items(id),
-        active INTEGER DEFAULT 1, created_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS companies (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL, notes TEXT, active INTEGER DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS distributors (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        urgency TEXT NOT NULL DEFAULT 'medium',
-        status TEXT NOT NULL DEFAULT 'todo',
-        notes TEXT, created_by TEXT,
-        created_at TEXT NOT NULL, updated_at TEXT,
-        item_id INTEGER REFERENCES items(id)
-    );
-    CREATE TABLE IF NOT EXISTS contacts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL, role TEXT, email TEXT, phone TEXT,
-        notes TEXT, company_id INTEGER, company_type TEXT,
-        active INTEGER NOT NULL DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS item_modifications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        item_id INTEGER NOT NULL REFERENCES items(id),
-        ts TEXT NOT NULL, modified_by TEXT NOT NULL,
-        field_changed TEXT NOT NULL, old_value TEXT, new_value TEXT,
-        notes TEXT, spawned_item_id INTEGER REFERENCES items(id)
-    );
-    CREATE TABLE IF NOT EXISTS password_reset_tokens (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL REFERENCES users(id),
-        token TEXT UNIQUE NOT NULL,
-        expires_at TEXT NOT NULL,
-        used INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS audit_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ts TEXT NOT NULL, action TEXT NOT NULL,
-        item_id INTEGER, item_name TEXT, item_serial TEXT,
-        item_sku TEXT, product_name TEXT,
-        detail TEXT, before_state TEXT, after_state TEXT, username TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_items_active      ON items(active);
-    CREATE INDEX IF NOT EXISTS idx_items_product     ON items(product_id);
-    CREATE INDEX IF NOT EXISTS idx_audit_ts          ON audit_log(ts DESC);
-"""

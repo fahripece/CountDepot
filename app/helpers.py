@@ -2,10 +2,10 @@ import hashlib
 import hmac
 import json
 import time
-import threading
 from datetime import datetime
 from functools import wraps
 
+import bcrypt as _bcrypt
 from flask import session, request, jsonify, redirect, url_for, g
 
 from app.db import query, execute
@@ -14,32 +14,110 @@ from app.db import query, execute
 # ── Password hashing ──────────────────────────────────────────────────────────
 
 def hash_pw(pw):
-    return hmac.new(b"storelax-salt", pw.encode(), hashlib.sha256).hexdigest()
+    """Hash a password with bcrypt."""
+    return _bcrypt.hashpw(pw.encode(), _bcrypt.gensalt()).decode()
+
+def verify_pw(pw, stored_hash):
+    """Verify a password against a stored hash.
+    Accepts bcrypt hashes (current) and legacy HMAC-SHA256 hashes (pre-migration)."""
+    if stored_hash.startswith("$2"):
+        return _bcrypt.checkpw(pw.encode(), stored_hash.encode())
+    # Legacy HMAC-SHA256 — accepted for accounts not yet migrated to bcrypt
+    legacy = hmac.new(b"storelax-salt", pw.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(legacy, stored_hash)
 
 
-# ── Login rate limiter (in-memory, per IP) ────────────────────────────────────
-# Note: this is per-worker — in a multi-worker gunicorn setup each worker has
-# its own counter. An attacker hitting different workers gets LOGIN_MAX attempts
-# per worker. Acceptable for now; replace with Redis if stricter limits needed.
+# ── Rate limiting (SQLite-backed, shared across all Gunicorn workers) ─────────
 
-_login_attempts = {}
-_login_lock     = threading.Lock()
-LOGIN_WINDOW    = 300   # seconds
-LOGIN_MAX       = 10    # attempts per window, per worker
+LOGIN_MAX    = 10   # max login attempts per IP per window
+LOGIN_WINDOW = 300  # seconds
+
+
+def check_rate_limit(ip, endpoint="login", max_attempts=LOGIN_MAX, window=LOGIN_WINDOW):
+    """Record an attempt and check whether the IP is over the limit.
+    Returns (allowed: bool, retry_in: int seconds).
+    Uses platform.db so limits are enforced across all workers."""
+    from app.platform import get_platform_db
+    now    = time.time()
+    cutoff = datetime.fromtimestamp(now - window).strftime("%Y-%m-%d %H:%M:%S")
+    now_s  = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S")
+    db = get_platform_db()
+    try:
+        db.execute("DELETE FROM rate_limits WHERE ts < ?", [cutoff])
+        count = db.execute(
+            "SELECT COUNT(*) FROM rate_limits WHERE ip=? AND endpoint=?",
+            [ip, endpoint]).fetchone()[0]
+        if count >= max_attempts:
+            oldest = db.execute(
+                "SELECT ts FROM rate_limits WHERE ip=? AND endpoint=? "
+                "ORDER BY ts ASC LIMIT 1", [ip, endpoint]).fetchone()
+            db.commit()
+            retry_in = window
+            if oldest:
+                oldest_ts = datetime.strptime(oldest[0], "%Y-%m-%d %H:%M:%S").timestamp()
+                retry_in  = max(0, int(window - (now - oldest_ts)))
+            return False, retry_in
+        db.execute("INSERT INTO rate_limits (ip, endpoint, ts) VALUES (?,?,?)",
+                   [ip, endpoint, now_s])
+        db.commit()
+        return True, 0
+    finally:
+        db.close()
+
+
+def clear_rate_limit(ip, endpoint="login"):
+    """Remove all rate-limit records for an IP+endpoint (call after successful action)."""
+    from app.platform import get_platform_db
+    db = get_platform_db()
+    try:
+        db.execute("DELETE FROM rate_limits WHERE ip=? AND endpoint=?", [ip, endpoint])
+        db.commit()
+    finally:
+        db.close()
+
 
 def check_login_rate(ip):
-    now = time.time()
-    with _login_lock:
-        attempts = [t for t in _login_attempts.get(ip, []) if now - t < LOGIN_WINDOW]
-        _login_attempts[ip] = attempts
-        if len(attempts) >= LOGIN_MAX:
-            return False, int(LOGIN_WINDOW - (now - attempts[0]))
-        _login_attempts[ip] = attempts + [now]
-        return True, 0
+    return check_rate_limit(ip, "login")
 
 def clear_login_rate(ip):
-    with _login_lock:
-        _login_attempts.pop(ip, None)
+    clear_rate_limit(ip, "login")
+
+
+# ── API rate-limit decorator ──────────────────────────────────────────────────
+
+def api_rate_limit(max_attempts=60, window=60):
+    """Rate-limit an API endpoint by remote IP.
+    Default: 60 requests per 60 seconds. Shared across all workers via platform.db."""
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            ip = request.remote_addr or "unknown"
+            allowed, retry_in = check_rate_limit(ip, f"api:{f.__name__}",
+                                                 max_attempts, window)
+            if not allowed:
+                return jsonify({"ok": False,
+                                "msg": f"Rate limit exceeded. Retry in {retry_in}s."}), 429
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
+
+# ── Auth event logging ────────────────────────────────────────────────────────
+
+def log_auth_event(event, username="", ip="", tenant="", detail=""):
+    """Write a security event to the platform-level security_log table.
+    Events: LOGIN_OK, LOGIN_FAIL, LOGOUT, PW_CHANGE, PW_RESET, RATE_LIMITED."""
+    from app.platform import get_platform_db
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db = get_platform_db()
+    try:
+        db.execute(
+            "INSERT INTO security_log (ts, event, username, ip, tenant, detail) "
+            "VALUES (?,?,?,?,?,?)",
+            [now, event, username or "", ip or "", tenant or "", detail or ""])
+        db.commit()
+    finally:
+        db.close()
 
 
 # ── Permissions ───────────────────────────────────────────────────────────────

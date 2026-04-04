@@ -2,8 +2,8 @@ from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, session, redirect, url_for
 
 from app.db import query, execute
-from app.helpers import (hash_pw, check_login_rate, clear_login_rate,
-                         get_user_perms)
+from app.helpers import (hash_pw, verify_pw, check_login_rate, clear_login_rate,
+                         get_user_perms, log_auth_event)
 
 bp = Blueprint("auth", __name__)
 
@@ -30,6 +30,9 @@ def login_page():
         ip = request.remote_addr or "unknown"
         allowed, reset_in = check_login_rate(ip)
         if not allowed:
+            log_auth_event("RATE_LIMITED", username=username, ip=ip,
+                           tenant=getattr(g, "tenant_slug", ""),
+                           detail=f"Login rate limit hit; retry in {reset_in}s")
             return render_template(
                 "login.html",
                 error=f"Too many login attempts. Try again in {reset_in} seconds."
@@ -37,7 +40,17 @@ def login_page():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         user = query("SELECT * FROM users WHERE username=?", [username], one=True)
-        if user and user["password"] == hash_pw(password):
+        if user and verify_pw(password, user["password"]):
+            # Auto-migrate legacy HMAC-SHA256 hashes to bcrypt on first successful login
+            if not user["password"].startswith("$2"):
+                execute("UPDATE users SET password=? WHERE id=?",
+                        [hash_pw(password), user["id"]])
+            # Block self-signup accounts that haven't verified their email yet
+            email_verified = user["email_verified"] if "email_verified" in user.keys() else 1
+            email = user["email"] if "email" in user.keys() else None
+            if email and not email_verified:
+                error = "Please verify your email address before logging in. Check your inbox for the verification link."
+                return render_template("login.html", error=error)
             clear_login_rate(ip)
             perms = get_user_perms(
                 user["id"], user["role"],
@@ -52,13 +65,20 @@ def login_page():
             session["expires_at"]           = (now + timedelta(hours=SESSION_LIFETIME_HOURS)).isoformat()
             execute("UPDATE users SET last_login=? WHERE id=?",
                     [now.strftime("%Y-%m-%d %H:%M:%S"), user["id"]])
+            log_auth_event("LOGIN_OK", username=user["username"], ip=ip,
+                           tenant=getattr(g, "tenant_slug", ""))
             return redirect(url_for("main.inventory"))
         error = "Invalid username or password."
+        log_auth_event("LOGIN_FAIL", username=username, ip=ip,
+                       tenant=getattr(g, "tenant_slug", ""))
     return render_template("login.html", error=error)
 
 
 @bp.route("/logout")
 def logout():
+    log_auth_event("LOGOUT", username=session.get("username", ""),
+                   ip=request.remote_addr or "",
+                   tenant=getattr(g, "tenant_slug", ""))
     session.clear()
     return redirect(url_for("auth.login_page"))
 
@@ -80,6 +100,9 @@ def change_password():
             execute("UPDATE users SET password=?, must_change_password=0 WHERE id=?",
                     [hash_pw(new_pw), session["user_id"]])
             session["must_change_password"] = False
+            log_auth_event("PW_CHANGE", username=session.get("username", ""),
+                           ip=request.remote_addr or "",
+                           tenant=getattr(g, "tenant_slug", ""))
             return redirect(url_for("main.inventory"))
     return render_template("change_password.html", error=error)
 
@@ -134,3 +157,17 @@ def reset_password(token):
             execute("UPDATE password_reset_tokens SET used=1 WHERE id=?", [row["id"]])
             return render_template("reset_password.html", success=True, token=token)
     return render_template("reset_password.html", token=token, error=error, invalid=False)
+
+
+@bp.route("/verify-email/<token>")
+def verify_email(token):
+    """Email verification — user clicks link from their welcome email."""
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    row = query(
+        "SELECT * FROM email_verification_tokens WHERE token=? AND used=0 AND expires_at > ?",
+        [token, now], one=True)
+    if not row:
+        return render_template("verify_email.html", invalid=True)
+    execute("UPDATE users SET email_verified=1 WHERE id=?", [row["user_id"]])
+    execute("UPDATE email_verification_tokens SET used=1 WHERE id=?", [row["id"]])
+    return render_template("verify_email.html", success=True)

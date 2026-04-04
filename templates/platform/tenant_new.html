@@ -41,6 +41,7 @@ input:focus,select:focus{border-color:#3b82f6}
   {% endif %}
 
   <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="field">
       <label>Company name</label>
       <input name="name" placeholder="e.g. Acme Corp" required autofocus oninput="suggestSlug(this.value)">

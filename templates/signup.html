@@ -46,6 +46,7 @@ a.signin:hover{text-decoration:underline}
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
 
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="field">
         <label>Company name</label>
         <input name="name" id="name-input" autofocus required
