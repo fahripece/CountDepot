@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token }}">
 <title>Platform Admin · CountDepot</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -16,43 +17,48 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 .topbar-right{display:flex;align-items:center;gap:14px}
 .topbar-right a{font-size:12px;color:#94a3b8;text-decoration:none}
 .topbar-right a:hover{color:#f8fafc}
-.main{max-width:1100px;margin:0 auto;padding:28px 24px}
-.page-hdr{display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:24px}
+.main{max-width:1200px;margin:0 auto;padding:28px 24px}
+.page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
 h1{font-size:20px;font-weight:600}
 .sub{font-size:13px;color:#94a3b8;margin-top:3px}
+
+/* Buttons */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;
   border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;
-  border:none;text-decoration:none;transition:background .15s}
+  border:none;text-decoration:none;transition:background .15s;white-space:nowrap}
+.btn-sm{padding:5px 10px;font-size:12px}
 .btn-primary{background:#3b82f6;color:#fff}
 .btn-primary:hover{background:#2563eb}
-.btn-sm{padding:5px 11px;font-size:12px}
 .btn-danger{background:#7f1d1d;color:#fca5a5}
 .btn-danger:hover{background:#991b1b}
 .btn-muted{background:#1e293b;color:#94a3b8;border:1px solid #334155}
 .btn-muted:hover{background:#334155;color:#f8fafc}
 .btn-green{background:#14532d;color:#86efac}
 .btn-green:hover{background:#166534}
+.btn-amber{background:#78350f;color:#fcd34d}
+.btn-amber:hover{background:#92400e}
 
 /* Summary cards */
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
   gap:14px;margin-bottom:28px}
-.card{background:#1e293b;border:1px solid #334155;border-radius:10px;
-  padding:18px 20px}
+.card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:18px 20px}
 .card-val{font-size:26px;font-weight:700;color:#f8fafc;margin-bottom:3px}
+.card-val.amber{color:#fbbf24}
+.card-val.red{color:#f87171}
+.card-val.green{color:#4ade80}
 .card-lbl{font-size:12px;color:#94a3b8;font-weight:500}
 
 /* Table */
-.tbl-wrap{background:#1e293b;border:1px solid #334155;border-radius:10px;
-  overflow:hidden}
+.tbl-wrap{background:#1e293b;border:1px solid #334155;border-radius:10px;overflow:hidden}
 table{width:100%;border-collapse:collapse}
 th{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
-  color:#64748b;padding:11px 16px;text-align:left;
+  color:#64748b;padding:11px 14px;text-align:left;
   border-bottom:1px solid #334155;background:#1e293b}
-td{padding:12px 16px;font-size:13px;border-bottom:1px solid #1e293b;
-  vertical-align:middle}
+td{padding:10px 14px;font-size:13px;border-bottom:1px solid #1e293b;vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:#263548}
+
+/* Badges */
 .badge{display:inline-block;padding:3px 8px;border-radius:5px;
   font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
 .badge-active{background:#14532d;color:#86efac}
@@ -60,41 +66,55 @@ tr:hover td{background:#263548}
 .badge-standard{background:#1e3a5f;color:#93c5fd}
 .badge-pro{background:#2e1065;color:#c4b5fd}
 .badge-healthcare{background:#4a1942;color:#f0abfc}
+.sub-trial{background:#422006;color:#fcd34d}
+.sub-active{background:#14532d;color:#86efac}
+.sub-overdue{background:#450a0a;color:#fca5a5}
+.sub-cancelled{background:#1e293b;color:#64748b;border:1px solid #334155}
 .slug{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#94a3b8}
 .stat{font-size:12px;color:#64748b}
 .stat strong{color:#94a3b8}
+.muted{color:#475569;font-size:12px}
+.overdue-row td{background:rgba(127,29,29,.08)}
 
-/* Inline edit form */
-.edit-form{display:none;background:#0f172a;border:1px solid #334155;
-  border-radius:8px;padding:14px 16px;margin-top:8px}
-.edit-form.open{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.edit-form input,.edit-form select{padding:7px 10px;background:#1e293b;
-  border:1px solid #334155;border-radius:6px;color:#f8fafc;font-size:13px;
-  outline:none}
-.edit-form input:focus,.edit-form select:focus{border-color:#3b82f6}
-
-/* New tenant modal */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);
+/* Overlays / modals */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);
   display:none;align-items:center;justify-content:center;z-index:100;
   backdrop-filter:blur(2px)}
 .overlay.open{display:flex}
 .modal{background:#1e293b;border:1px solid #334155;border-radius:12px;
-  width:100%;max-width:480px;overflow:hidden}
-.modal-hdr{padding:18px 22px 14px;border-bottom:1px solid #334155}
+  width:100%;overflow:hidden}
+.modal-sm{max-width:420px}
+.modal-md{max-width:500px}
+.modal-hdr{padding:18px 22px 14px;border-bottom:1px solid #334155;
+  display:flex;align-items:center;justify-content:space-between}
 .modal-hdr h2{font-size:16px;font-weight:600}
+.modal-hdr .close{background:none;border:none;color:#64748b;cursor:pointer;
+  font-size:18px;line-height:1;padding:0}
+.modal-hdr .close:hover{color:#f8fafc}
 .modal-body{padding:20px 22px}
 .modal-foot{padding:14px 22px;border-top:1px solid #334155;
   display:flex;justify-content:flex-end;gap:10px}
 .field{margin-bottom:16px}
 .field label{display:block;font-size:12px;font-weight:600;
   text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:6px}
-.field input,.field select{width:100%;padding:9px 12px;background:#0f172a;
+.field input,.field select,.field textarea{width:100%;padding:9px 12px;background:#0f172a;
   border:1px solid #334155;border-radius:7px;color:#f8fafc;font-size:13px;
-  outline:none;transition:border-color .15s}
-.field input:focus,.field select:focus{border-color:#3b82f6}
+  outline:none;transition:border-color .15s;font-family:inherit}
+.field textarea{resize:vertical;min-height:72px}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#3b82f6}
 .field .hint{font-size:11.5px;color:#475569;margin-top:4px}
 .err-banner{background:#450a0a;border:1px solid #7f1d1d;color:#fca5a5;
   border-radius:7px;padding:9px 12px;font-size:13px;margin-bottom:14px}
+.warn-box{background:#422006;border:1px solid #92400e;border-radius:8px;
+  padding:12px 14px;font-size:13px;color:#fcd34d;margin-bottom:16px}
+.confirm-slug{background:#0f172a;border:1px solid #7f1d1d;border-radius:7px;
+  padding:9px 12px;color:#f8fafc;font-size:13px;width:100%;outline:none;
+  font-family:'IBM Plex Mono',monospace;margin-top:4px}
+.confirm-slug:focus{border-color:#ef4444}
+.free-month-btn{background:none;border:1px solid #334155;border-radius:6px;
+  color:#94a3b8;font-size:12px;padding:5px 10px;cursor:pointer;margin-top:6px;
+  transition:all .15s}
+.free-month-btn:hover{border-color:#3b82f6;color:#3b82f6}
 </style>
 </head>
 <body>
@@ -111,9 +131,9 @@ tr:hover td{background:#263548}
   <div class="page-hdr">
     <div>
       <h1>Tenants</h1>
-      <div class="sub">{{ tenants|length }} tenant{{ 's' if tenants|length != 1 else '' }} · {{ total_items }} total items · {{ total_users }} total users</div>
+      <div class="sub">{{ tenants|length }} tenant{{ 's' if tenants|length != 1 else '' }} · {{ total_items }} items · {{ total_users }} users · {{ total_kb }} KB total</div>
     </div>
-    <button class="btn btn-primary" onclick="openNew()">+ New Tenant</button>
+    <button class="btn btn-primary" onclick="openModal('newModal')">+ New Tenant</button>
   </div>
 
   <!-- Summary cards -->
@@ -123,16 +143,24 @@ tr:hover td{background:#263548}
       <div class="card-lbl">Total tenants</div>
     </div>
     <div class="card">
-      <div class="card-val">{{ tenants|selectattr('active','equalto',1)|list|length }}</div>
-      <div class="card-lbl">Active</div>
+      <div class="card-val green">{{ count_active }}</div>
+      <div class="card-lbl">Active (paying)</div>
+    </div>
+    <div class="card">
+      <div class="card-val amber">{{ count_trial }}</div>
+      <div class="card-lbl">On trial</div>
+    </div>
+    <div class="card">
+      <div class="card-val {% if count_overdue > 0 %}red{% endif %}">{{ count_overdue }}</div>
+      <div class="card-lbl">Overdue</div>
     </div>
     <div class="card">
       <div class="card-val">{{ total_items }}</div>
-      <div class="card-lbl">Items across all tenants</div>
+      <div class="card-lbl">Items total</div>
     </div>
     <div class="card">
       <div class="card-val">{{ total_users }}</div>
-      <div class="card-lbl">Users across all tenants</div>
+      <div class="card-lbl">Users total</div>
     </div>
   </div>
 
@@ -144,42 +172,41 @@ tr:hover td{background:#263548}
           <th>Tenant</th>
           <th>Slug</th>
           <th>Plan</th>
-          <th>Status</th>
+          <th>Subscription</th>
+          <th>Trial ends</th>
           <th>Stats</th>
-          <th>Created</th>
+          <th>Last login</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for t in tenants %}
-        <tr>
+        <tr class="{% if t.subscription_status == 'overdue' %}overdue-row{% endif %}">
           <td>
             <div style="font-weight:600;font-size:13.5px">{{ t.name }}</div>
-            <div id="edit-{{ t.slug }}" class="edit-form">
-              <form method="POST" action="{{ url_for('platform.tenant_edit', slug=t.slug) }}"
-                    style="display:contents">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <input name="name" value="{{ t.name }}" placeholder="Company name" style="width:180px">
-                <select name="plan">
-                  <option value="standard"  {% if t.plan=='standard'  %}selected{% endif %}>Standard</option>
-                  <option value="pro"        {% if t.plan=='pro'        %}selected{% endif %}>Pro</option>
-                  <option value="healthcare" {% if t.plan=='healthcare' %}selected{% endif %}>Healthcare</option>
-                </select>
-                <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                <button type="button" class="btn btn-muted btn-sm"
-                        onclick="toggleEdit('{{ t.slug }}')">Cancel</button>
-              </form>
-            </div>
+            {% if t.notes %}
+            <div class="muted" style="margin-top:2px">{{ t.notes }}</div>
+            {% endif %}
+            {% if not t.active %}
+            <span class="badge badge-suspended" style="margin-top:4px">Suspended</span>
+            {% endif %}
           </td>
           <td><span class="slug">{{ t.slug }}</span></td>
+          <td><span class="badge badge-{{ t.plan }}">{{ t.plan }}</span></td>
           <td>
-            <span class="badge badge-{{ t.plan }}">{{ t.plan }}</span>
+            <span class="badge sub-{{ t.subscription_status or 'trial' }}">
+              {{ t.subscription_status or 'trial' }}
+            </span>
           </td>
           <td>
-            {% if t.active %}
-              <span class="badge badge-active">Active</span>
+            {% if t.trial_ends_at %}
+              {% if t.trial_ends_at < today %}
+                <span style="color:#f87171;font-size:12px">{{ t.trial_ends_at }} (expired)</span>
+              {% else %}
+                <span style="font-size:12px;color:#94a3b8">{{ t.trial_ends_at }}</span>
+              {% endif %}
             {% else %}
-              <span class="badge badge-suspended">Suspended</span>
+              <span class="muted">—</span>
             {% endif %}
           </td>
           <td>
@@ -190,33 +217,43 @@ tr:hover td{background:#263548}
             </span>
           </td>
           <td>
-            <span class="stat">{{ t.created_at[:10] }}</span>
+            <span class="stat">
+              {{ t.stats.last_login[:10] if t.stats.last_login else '—' }}
+            </span>
           </td>
           <td>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
               <button class="btn btn-muted btn-sm"
-                      onclick="toggleEdit('{{ t.slug }}')">Edit</button>
+                onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'trial' }}','{{ t.trial_ends_at or '' }}',{{ t.notes|tojson if t.notes else 'null' }})">
+                Billing
+              </button>
+              <button class="btn btn-muted btn-sm"
+                onclick="openEdit('{{ t.slug }}','{{ t.name }}','{{ t.plan }}')">
+                Edit
+              </button>
               {% if t.active %}
-              <form method="POST"
-                    action="{{ url_for('platform.tenant_suspend', slug=t.slug) }}"
+              <form method="POST" action="{{ url_for('platform.tenant_suspend', slug=t.slug) }}"
                     onsubmit="return confirm('Suspend {{ t.name }}? Users will be blocked immediately.')">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button type="submit" class="btn btn-danger btn-sm">Suspend</button>
+                <button type="submit" class="btn btn-amber btn-sm">Suspend</button>
               </form>
               {% else %}
-              <form method="POST"
-                    action="{{ url_for('platform.tenant_activate', slug=t.slug) }}">
+              <form method="POST" action="{{ url_for('platform.tenant_activate', slug=t.slug) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button type="submit" class="btn btn-green btn-sm">Reactivate</button>
+                <button type="submit" class="btn btn-green btn-sm">Activate</button>
               </form>
               {% endif %}
+              <button class="btn btn-danger btn-sm"
+                onclick="openDelete('{{ t.slug }}','{{ t.name }}')">
+                Delete
+              </button>
             </div>
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" style="text-align:center;padding:40px;color:#475569">
-            No tenants yet. Click "+ New Tenant" to create your first one.
+          <td colspan="8" style="text-align:center;padding:40px;color:#475569">
+            No tenants yet. Click "+ New Tenant" to create the first one.
           </td>
         </tr>
         {% endfor %}
@@ -225,21 +262,23 @@ tr:hover td{background:#263548}
   </div>
 </div>
 
-<!-- New tenant modal -->
+
+<!-- ── New Tenant modal ──────────────────────────────────────────────────── -->
 <div class="overlay" id="newModal">
-  <div class="modal">
+  <div class="modal modal-md">
     <div class="modal-hdr">
       <h2>New Tenant</h2>
+      <button class="close" onclick="closeModal('newModal')">✕</button>
     </div>
     <div class="modal-body">
-      <div id="modal-err" class="err-banner" style="display:none"></div>
+      <div id="new-err" class="err-banner" style="display:none"></div>
       <div class="field">
         <label>Company name</label>
-        <input id="t-name" placeholder="e.g. Acme Corp" oninput="suggestSlug()">
+        <input id="t-name" oninput="suggestSlug()">
       </div>
       <div class="field">
-        <label>Slug <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#475569">— becomes the subdomain</span></label>
-        <input id="t-slug" placeholder="e.g. acme" style="font-family:'IBM Plex Mono',monospace">
+        <label>Slug <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#475569">— subdomain</span></label>
+        <input id="t-slug" style="font-family:'IBM Plex Mono',monospace" oninput="updateSlugPreview()">
         <div class="hint" id="slug-preview"></div>
       </div>
       <div class="field">
@@ -251,78 +290,199 @@ tr:hover td{background:#263548}
         </select>
       </div>
       <div class="field">
-        <label>Admin password <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#475569">— for this tenant's admin account</span></label>
-        <input id="t-pw" type="password" placeholder="Min 8 characters">
-        <div class="hint">The tenant will use username <strong>admin</strong> with this password.</div>
+        <label>Admin password</label>
+        <input id="t-pw" type="password">
+        <div class="hint">Min 8 characters. Username will be <strong>admin</strong>.</div>
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-muted" onclick="closeNew()">Cancel</button>
-      <button class="btn btn-primary" onclick="createTenant()">Create Tenant</button>
+      <button class="btn btn-muted" onclick="closeModal('newModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitNew()">Create Tenant</button>
     </div>
   </div>
 </div>
 
+
+<!-- ── Edit modal ───────────────────────────────────────────────────────── -->
+<div class="overlay" id="editModal">
+  <div class="modal modal-sm">
+    <div class="modal-hdr">
+      <h2>Edit Tenant</h2>
+      <button class="close" onclick="closeModal('editModal')">✕</button>
+    </div>
+    <form id="edit-form" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <div class="field">
+          <label>Company name</label>
+          <input name="name" id="edit-name">
+        </div>
+        <div class="field">
+          <label>Plan</label>
+          <select name="plan" id="edit-plan">
+            <option value="standard">Standard</option>
+            <option value="pro">Pro</option>
+            <option value="healthcare">Healthcare</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-muted" onclick="closeModal('editModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ── Billing modal ────────────────────────────────────────────────────── -->
+<div class="overlay" id="billingModal">
+  <div class="modal modal-md">
+    <div class="modal-hdr">
+      <h2 id="billing-title">Billing</h2>
+      <button class="close" onclick="closeModal('billingModal')">✕</button>
+    </div>
+    <form id="billing-form" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <div class="field">
+          <label>Subscription status</label>
+          <select name="subscription_status" id="billing-status">
+            <option value="trial">Trial</option>
+            <option value="active">Active (paying)</option>
+            <option value="overdue">Overdue</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Trial / access ends</label>
+          <input name="trial_ends_at" id="billing-trial-ends" type="date">
+          <button type="button" class="free-month-btn" onclick="grantFreeMonth()">
+            + Grant free month from today
+          </button>
+        </div>
+        <div class="field">
+          <label>Internal notes</label>
+          <textarea name="notes" id="billing-notes"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-muted" onclick="closeModal('billingModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save billing</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ── Delete modal ─────────────────────────────────────────────────────── -->
+<div class="overlay" id="deleteModal">
+  <div class="modal modal-sm">
+    <div class="modal-hdr">
+      <h2>Delete Tenant</h2>
+      <button class="close" onclick="closeModal('deleteModal')">✕</button>
+    </div>
+    <form id="delete-form" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <div class="warn-box">
+          This permanently deletes <strong id="delete-name"></strong> and all their inventory data. This cannot be undone.
+        </div>
+        <div class="field">
+          <label>Type the slug to confirm</label>
+          <input type="text" name="confirm_slug" id="delete-confirm"
+                 class="confirm-slug" autocomplete="off">
+          <div class="hint" id="delete-slug-hint"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-muted" onclick="closeModal('deleteModal')">Cancel</button>
+        <button type="submit" id="delete-submit" class="btn btn-danger" disabled>Delete permanently</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
 <script>
-function openNew(){document.getElementById('newModal').classList.add('open');}
-function closeNew(){document.getElementById('newModal').classList.remove('open');
-  document.getElementById('modal-err').style.display='none';}
+const _csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-function suggestSlug(){
-  const name=document.getElementById('t-name').value;
-  const slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,32);
-  document.getElementById('t-slug').value=slug;
-  updateSlugPreview(slug);
-}
-
-document.getElementById('t-slug').addEventListener('input',function(){
-  updateSlugPreview(this.value);
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.overlay').forEach(o=>{
+  o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')});
 });
 
-function updateSlugPreview(slug){
-  const el=document.getElementById('slug-preview');
-  if(slug) el.textContent='URL: '+slug+'.yourdomain.com';
-  else el.textContent='';
+// ── New tenant ──────────────────────────────────────────────────────────────
+function suggestSlug(){
+  const v=document.getElementById('t-name').value;
+  const s=v.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,32);
+  document.getElementById('t-slug').value=s;
+  updateSlugPreview();
 }
-
-async function createTenant(){
+function updateSlugPreview(){
+  const s=document.getElementById('t-slug').value;
+  document.getElementById('slug-preview').textContent=s?s+'.yourdomain.com':'';
+}
+function submitNew(){
   const name=document.getElementById('t-name').value.trim();
   const slug=document.getElementById('t-slug').value.trim().toLowerCase();
   const plan=document.getElementById('t-plan').value;
-  const pw=document.getElementById('t-pw').value;
-  const errEl=document.getElementById('modal-err');
-  errEl.style.display='none';
-
-  if(!name){showErr('Company name is required.');return;}
-  if(!slug){showErr('Slug is required.');return;}
-  if(!/^[a-z0-9][a-z0-9\-]{1,31}$/.test(slug)){
-    showErr('Slug must be lowercase letters, numbers and hyphens (2–32 chars).');return;}
-  if(pw.length<8){showErr('Admin password must be at least 8 characters.');return;}
-
-  // Submit as a form POST
+  const pw  =document.getElementById('t-pw').value;
+  const err =document.getElementById('new-err');
+  err.style.display='none';
+  if(!name)return showNewErr('Company name is required.');
+  if(!slug)return showNewErr('Slug is required.');
+  if(!/^[a-z0-9][a-z0-9\-]{1,31}$/.test(slug))return showNewErr('Invalid slug format.');
+  if(pw.length<8)return showNewErr('Password must be at least 8 characters.');
   const form=document.createElement('form');
   form.method='POST';
   form.action='{{ url_for("platform.tenant_new") }}';
-  [['name',name],['slug',slug],['plan',plan],['admin_password',pw]].forEach(([k,v])=>{
+  [['name',name],['slug',slug],['plan',plan],['admin_password',pw],['csrf_token',_csrf]].forEach(([k,v])=>{
     const i=document.createElement('input');i.name=k;i.value=v;form.appendChild(i);
   });
-  document.body.appendChild(form);
-  form.submit();
+  document.body.appendChild(form);form.submit();
+}
+function showNewErr(msg){
+  const el=document.getElementById('new-err');el.textContent=msg;el.style.display='';
 }
 
-function showErr(msg){
-  const el=document.getElementById('modal-err');
-  el.textContent=msg;el.style.display='';
+// ── Edit ────────────────────────────────────────────────────────────────────
+function openEdit(slug,name,plan){
+  document.getElementById('edit-form').action='/_platform/tenant/'+slug+'/edit';
+  document.getElementById('edit-name').value=name;
+  document.getElementById('edit-plan').value=plan;
+  openModal('editModal');
 }
 
-function toggleEdit(slug){
-  const el=document.getElementById('edit-'+slug);
-  el.classList.toggle('open');
+// ── Billing ─────────────────────────────────────────────────────────────────
+function openBilling(slug,name,status,trialEnds,notes){
+  document.getElementById('billing-title').textContent='Billing — '+name;
+  document.getElementById('billing-form').action='/_platform/tenant/'+slug+'/billing';
+  document.getElementById('billing-status').value=status||'trial';
+  document.getElementById('billing-trial-ends').value=trialEnds||'';
+  document.getElementById('billing-notes').value=notes||'';
+  openModal('billingModal');
+}
+function grantFreeMonth(){
+  const d=new Date();
+  d.setMonth(d.getMonth()+1);
+  document.getElementById('billing-trial-ends').value=d.toISOString().slice(0,10);
 }
 
-// Close modal on backdrop click
-document.getElementById('newModal').addEventListener('click',function(e){
-  if(e.target===this)closeNew();
+// ── Delete ──────────────────────────────────────────────────────────────────
+let _deleteSlug='';
+function openDelete(slug,name){
+  _deleteSlug=slug;
+  document.getElementById('delete-form').action='/_platform/tenant/'+slug+'/delete';
+  document.getElementById('delete-name').textContent=name;
+  document.getElementById('delete-slug-hint').textContent='Slug: '+slug;
+  document.getElementById('delete-confirm').value='';
+  document.getElementById('delete-submit').disabled=true;
+  openModal('deleteModal');
+}
+document.getElementById('delete-confirm').addEventListener('input',function(){
+  document.getElementById('delete-submit').disabled=(this.value!==_deleteSlug);
 });
 </script>
 

@@ -55,18 +55,22 @@ def _tenant_stats(slug):
     import sqlite3
     db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
     if not os.path.exists(db_path):
-        return {"items": 0, "users": 0, "db_size_kb": 0}
+        return {"items": 0, "users": 0, "db_size_kb": 0, "last_login": None}
     db = sqlite3.connect(db_path)
     db.row_factory = sqlite3.Row
     try:
-        items = db.execute("SELECT COUNT(*) FROM items WHERE active=1").fetchone()[0]
-        users = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        items      = db.execute("SELECT COUNT(*) FROM items WHERE active=1").fetchone()[0]
+        users      = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        last_login = db.execute(
+            "SELECT MAX(last_login) FROM users WHERE last_login IS NOT NULL"
+        ).fetchone()[0]
     except Exception:
         items = users = 0
+        last_login = None
     finally:
         db.close()
     size_kb = round(os.path.getsize(db_path) / 1024, 1)
-    return {"items": items, "users": users, "db_size_kb": size_kb}
+    return {"items": items, "users": users, "db_size_kb": size_kb, "last_login": last_login}
 
 
 def _valid_slug(slug):
@@ -101,15 +105,26 @@ def logout():
 @bp.route("/")
 @platform_login_required
 def dashboard():
+    from datetime import date
     tenants = _all_tenants()
     for t in tenants:
         t["stats"] = _tenant_stats(t["slug"])
-    total_items = sum(t["stats"]["items"] for t in tenants)
-    total_users = sum(t["stats"]["users"] for t in tenants)
+    today = date.today().isoformat()
+    total_items   = sum(t["stats"]["items"] for t in tenants)
+    total_users   = sum(t["stats"]["users"] for t in tenants)
+    total_kb      = sum(t["stats"]["db_size_kb"] for t in tenants)
+    count_active  = sum(1 for t in tenants if t["active"] and t.get("subscription_status") == "active")
+    count_trial   = sum(1 for t in tenants if t["active"] and t.get("subscription_status") == "trial")
+    count_overdue = sum(1 for t in tenants if t.get("subscription_status") == "overdue")
     return render_template("platform/dashboard.html",
                            tenants=tenants,
                            total_items=total_items,
-                           total_users=total_users)
+                           total_users=total_users,
+                           total_kb=total_kb,
+                           count_active=count_active,
+                           count_trial=count_trial,
+                           count_overdue=count_overdue,
+                           today=today)
 
 
 # ── Create tenant ─────────────────────────────────────────────────────────────
@@ -213,6 +228,40 @@ def tenant_edit(slug):
         db = get_platform_db()
         db.execute("UPDATE tenants SET name=?, plan=? WHERE slug=?", [name, plan, slug])
         db.commit(); db.close()
+    return redirect(url_for("platform.dashboard"))
+
+
+# ── Billing / subscription ────────────────────────────────────────────────────
+
+@bp.route("/tenant/<slug>/billing", methods=["POST"])
+@platform_login_required
+def tenant_billing(slug):
+    status     = request.form.get("subscription_status", "trial").strip()
+    trial_ends = request.form.get("trial_ends_at", "").strip() or None
+    notes      = request.form.get("notes", "").strip() or None
+    db = get_platform_db()
+    db.execute(
+        "UPDATE tenants SET subscription_status=?, trial_ends_at=?, notes=? WHERE slug=?",
+        [status, trial_ends, notes, slug])
+    db.commit(); db.close()
+    return redirect(url_for("platform.dashboard"))
+
+
+# ── Delete tenant ─────────────────────────────────────────────────────────────
+
+@bp.route("/tenant/<slug>/delete", methods=["POST"])
+@platform_login_required
+def tenant_delete(slug):
+    import shutil
+    confirm = request.form.get("confirm_slug", "").strip()
+    if confirm != slug:
+        return redirect(url_for("platform.dashboard"))
+    db = get_platform_db()
+    db.execute("DELETE FROM tenants WHERE slug=?", [slug])
+    db.commit(); db.close()
+    tenant_dir = os.path.join(Config.TENANTS_DIR, slug)
+    if os.path.exists(tenant_dir):
+        shutil.rmtree(tenant_dir)
     return redirect(url_for("platform.dashboard"))
 
 

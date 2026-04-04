@@ -51,6 +51,12 @@ def init_platform_db():
         db.execute("ALTER TABLE tenants ADD COLUMN sector TEXT NOT NULL DEFAULT ''")
     if "onboarded" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN onboarded INTEGER NOT NULL DEFAULT 0")
+    if "subscription_status" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN subscription_status TEXT NOT NULL DEFAULT 'trial'")
+    if "trial_ends_at" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN trial_ends_at TEXT")
+    if "notes" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN notes TEXT")
     db.commit()
     db.close()
 
