@@ -6,16 +6,17 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /home/countdepot/countdepot
-            git pull origin main
-            ./venv/bin/pip install -r requirements.txt --quiet
-            sudo systemctl reload countdepot
+      - name: Pull latest code
+        run: |
+          cd /home/countdepot/countdepot
+          git pull origin main
+
+      - name: Install dependencies
+        run: |
+          cd /home/countdepot/countdepot
+          ./venv/bin/pip install -r requirements.txt --quiet
+
+      - name: Reload app
+        run: sudo systemctl reload countdepot
