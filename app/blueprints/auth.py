@@ -42,7 +42,9 @@ def login_page():
                 "login.html",
                 error=f"Too many login attempts. Try again in {reset_in} seconds."
             ), 429
-        user = query("SELECT * FROM users WHERE username=?", [username], one=True)
+        # Accept username OR email
+        user = query("SELECT * FROM users WHERE username=? OR LOWER(COALESCE(email,''))=?",
+                     [username, username.lower()], one=True)
         if user and verify_pw(password, user["password"]):
             # Auto-migrate legacy HMAC-SHA256 hashes to bcrypt on first successful login
             if not user["password"].startswith("$2"):

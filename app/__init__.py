@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify, redirect, url_for, g, session, abort
 from config import Config
 from app.platform import init_platform_db
 from app.tenant import resolve_tenant
-from app.db import close_db
+from app.db import close_db, query
 from app.schema import init_db
 
 

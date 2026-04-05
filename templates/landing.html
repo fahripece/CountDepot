@@ -59,6 +59,11 @@ nav{
   transition:background .2s,transform .15s;
 }
 .nav-cta:hover{background:var(--blue-light);transform:translateY(-1px)}
+.nav-link-signin{
+  color:var(--muted2);font-size:14px;font-weight:500;
+  text-decoration:none;transition:color .2s;cursor:pointer;
+}
+.nav-link-signin:hover{color:var(--text)}
 
 /* ── HERO ── */
 .hero{
@@ -420,9 +425,32 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
     <a href="#features">Features</a>
     <a href="#how">How it works</a>
     <a href="#pricing">Pricing</a>
+    <a href="#signin" class="nav-link-signin">Sign in</a>
     <a href="/signup" class="nav-cta">Start free trial</a>
   </div>
 </nav>
+
+<!-- SIGN IN MODAL OVERLAY -->
+<div id="signin-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center">
+  <div style="background:#0f1628;border:1px solid #1e2d50;border-radius:16px;padding:40px;width:100%;max-width:440px;margin:0 20px;position:relative">
+    <button onclick="closeSignin()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1">×</button>
+    <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:6px">Sign in</div>
+    <div style="font-size:14px;color:#64748b;margin-bottom:28px">Enter your workspace name to continue</div>
+    <div style="display:flex;align-items:stretch;gap:0;border:1px solid #1e2d50;border-radius:10px;overflow:hidden;background:#141d35">
+      <input id="workspace-input" type="text" placeholder="yourcompany"
+        style="flex:1;background:transparent;border:none;outline:none;padding:14px 16px;color:#f1f5f9;font-size:15px;font-family:'DM Sans',sans-serif"
+        onkeydown="if(event.key==='Enter')goToWorkspace()">
+      <div style="display:flex;align-items:center;padding:0 14px;color:#64748b;font-size:14px;border-left:1px solid #1e2d50;white-space:nowrap">.countdepot.com</div>
+    </div>
+    <button onclick="goToWorkspace()" style="width:100%;margin-top:14px;background:#2563eb;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .2s"
+      onmouseover="this.style.background='#3b82f6'" onmouseout="this.style.background='#2563eb'">
+      Go to my workspace →
+    </button>
+    <div style="margin-top:16px;text-align:center;font-size:13px;color:#64748b">
+      Don't have a workspace? <a href="/signup" style="color:#38bdf8;text-decoration:none">Start free trial</a>
+    </div>
+  </div>
+</div>
 
 <!-- HERO -->
 <section class="hero">
@@ -655,6 +683,30 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 </footer>
 
 <script>
+// Sign in modal
+function openSignin() {
+  const overlay = document.getElementById('signin-overlay');
+  overlay.style.display = 'flex';
+  setTimeout(() => document.getElementById('workspace-input').focus(), 50);
+}
+function closeSignin() {
+  document.getElementById('signin-overlay').style.display = 'none';
+}
+function goToWorkspace() {
+  const slug = document.getElementById('workspace-input').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!slug) { document.getElementById('workspace-input').focus(); return; }
+  const host = window.location.hostname;
+  const parts = host.split('.');
+  const baseDomain = parts.length >= 2 ? parts.slice(-2).join('.') : host;
+  window.location.href = 'https://' + slug + '.' + baseDomain + '/login';
+}
+document.getElementById('signin-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeSignin();
+});
+document.querySelector('.nav-link-signin').addEventListener('click', function(e) {
+  e.preventDefault(); openSignin();
+});
+
 // Annual billing toggle
 const toggle = document.getElementById('annual-toggle');
 const amounts = document.querySelectorAll('.amount');
