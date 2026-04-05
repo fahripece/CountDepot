@@ -10,24 +10,25 @@ a compromised tenant admin account cannot reach these routes.
 
 import os
 import re
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta
 
 from flask import (Blueprint, render_template, request, session,
                    redirect, url_for, jsonify, abort)
 
 from app.platform import (get_platform_db, create_tenant,
                            get_tenant_by_slug, init_platform_db)
-from app.helpers  import hash_pw
+from app.helpers  import hash_pw, check_rate_limit
 from config       import Config
 
 bp = Blueprint("platform", __name__, url_prefix="/_platform")
 
 # ── Platform-admin auth ───────────────────────────────────────────────────────
-# Completely separate from tenant user accounts.
-# Set PLATFORM_ADMIN_PASSWORD env var (defaults to a local-dev value).
 
 PLATFORM_ADMIN_PASSWORD = os.environ.get("PLATFORM_ADMIN_PASSWORD", "platform-change-me")
-SESSION_KEY = "_platform_authed"
+SESSION_KEY     = "_platform_authed"
+MFA_PENDING_KEY = "_platform_mfa_pending"   # set after password, cleared after OTP
+MFA_ENABLED     = bool(Config.PLATFORM_ADMIN_EMAIL)
 
 
 def platform_login_required(f):
@@ -38,6 +39,54 @@ def platform_login_required(f):
             return redirect(url_for("platform.login"))
         return f(*args, **kwargs)
     return decorated
+
+
+def _send_mfa_code():
+    """Generate a 6-digit OTP, store it in platform.db, email it.
+    Returns the token string so callers can log it if needed."""
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    expires_at = (datetime.utcnow() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    db = get_platform_db()
+    try:
+        # Invalidate any previous unused tokens
+        db.execute("UPDATE platform_mfa_tokens SET used=1 WHERE used=0")
+        db.execute("INSERT INTO platform_mfa_tokens (token, expires_at, used, created_at) VALUES (?,?,0,?)",
+                   [code, expires_at, now])
+        db.commit()
+    finally:
+        db.close()
+
+    from app.mailer import send_email
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <h2 style="font-size:18px;font-weight:700;margin-bottom:8px">CountDepot Platform — sign-in code</h2>
+  <p style="color:#64748b;margin-bottom:24px;font-size:13px">Someone just entered the correct platform admin password. Use this code to complete sign-in. It expires in <strong>10 minutes</strong>.</p>
+  <div style="background:#0f172a;color:#fff;font-size:36px;font-weight:700;letter-spacing:10px;text-align:center;padding:24px;border-radius:10px;font-family:monospace">{code}</div>
+  <p style="margin-top:20px;font-size:12px;color:#94a3b8">If you did not attempt to log in, someone has your platform admin password — change it immediately.</p>
+</div>"""
+    send_email(Config.PLATFORM_ADMIN_EMAIL,
+               "CountDepot platform sign-in code",
+               html,
+               f"Your CountDepot platform sign-in code: {code}\n\nExpires in 10 minutes.\n\nIf you did not attempt to log in, change your PLATFORM_ADMIN_PASSWORD immediately.")
+    return code
+
+
+def _verify_mfa_code(code: str) -> bool:
+    """Check the OTP against platform.db. Marks it used on success."""
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    db = get_platform_db()
+    try:
+        row = db.execute(
+            "SELECT id FROM platform_mfa_tokens WHERE token=? AND used=0 AND expires_at > ?",
+            [code.strip(), now]).fetchone()
+        if not row:
+            return False
+        db.execute("UPDATE platform_mfa_tokens SET used=1 WHERE id=?", [row[0]])
+        db.commit()
+        return True
+    finally:
+        db.close()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -86,17 +135,51 @@ def login():
         return redirect(url_for("platform.dashboard"))
     error = None
     if request.method == "POST":
+        ip = request.remote_addr or "unknown"
+        allowed, retry_in = check_rate_limit(ip, "platform-login", max_attempts=5, window=300)
+        if not allowed:
+            error = f"Too many attempts. Try again in {retry_in // 60 + 1} minutes."
+            return render_template("platform/login.html", error=error)
         pw = request.form.get("password", "")
         if pw == PLATFORM_ADMIN_PASSWORD:
+            if MFA_ENABLED:
+                _send_mfa_code()
+                session[MFA_PENDING_KEY] = True
+                return redirect(url_for("platform.verify_mfa"))
             session[SESSION_KEY] = True
             return redirect(url_for("platform.dashboard"))
         error = "Incorrect password."
-    return render_template("platform/login.html", error=error)
+    return render_template("platform/login.html", error=error, mfa_enabled=MFA_ENABLED)
+
+
+@bp.route("/verify-mfa", methods=["GET", "POST"])
+def verify_mfa():
+    if session.get(SESSION_KEY):
+        return redirect(url_for("platform.dashboard"))
+    if not session.get(MFA_PENDING_KEY):
+        return redirect(url_for("platform.login"))
+    error = None
+    if request.method == "POST":
+        ip = request.remote_addr or "unknown"
+        allowed, retry_in = check_rate_limit(ip, "platform-mfa", max_attempts=5, window=300)
+        if not allowed:
+            error = f"Too many attempts. Try again in {retry_in // 60 + 1} minutes."
+            return render_template("platform/verify_mfa.html", error=error,
+                                   email=Config.PLATFORM_ADMIN_EMAIL)
+        code = request.form.get("code", "").strip()
+        if _verify_mfa_code(code):
+            session.pop(MFA_PENDING_KEY, None)
+            session[SESSION_KEY] = True
+            return redirect(url_for("platform.dashboard"))
+        error = "Invalid or expired code. Check your email and try again."
+    return render_template("platform/verify_mfa.html", error=error,
+                           email=Config.PLATFORM_ADMIN_EMAIL)
 
 
 @bp.route("/logout")
 def logout():
     session.pop(SESSION_KEY, None)
+    session.pop(MFA_PENDING_KEY, None)
     return redirect(url_for("platform.login"))
 
 

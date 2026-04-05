@@ -21,3 +21,5 @@ class Config:
     SMTP_USE_TLS      = os.environ.get("SMTP_USE_TLS", "true").lower() == "true"
     # Set to "false" to disable self-serve signup (require platform admin to create tenants)
     SIGNUP_ENABLED    = os.environ.get("SIGNUP_ENABLED", "true").lower() == "true"
+    # Platform admin MFA — set this to enable email OTP after password login
+    PLATFORM_ADMIN_EMAIL = os.environ.get("PLATFORM_ADMIN_EMAIL", "")

@@ -119,6 +119,10 @@ SECRET_KEY=REPLACE_WITH_LONG_RANDOM_STRING
 # REQUIRED — password for /_platform/ super-admin panel
 PLATFORM_ADMIN_PASSWORD=REPLACE_WITH_SECURE_PASSWORD
 
+# STRONGLY RECOMMENDED — enables email OTP (MFA) for the platform admin panel
+# After correct password, a 6-digit code is emailed here before access is granted
+PLATFORM_ADMIN_EMAIL=you@yourdomain.com
+
 # Your domain (no https://, no trailing slash)
 APP_DOMAIN=countdepot.com
 
