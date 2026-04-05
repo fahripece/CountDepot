@@ -1091,6 +1091,17 @@ def api_contact_delete():
 @admin_required
 @api_rate_limit(max_attempts=20, window=60)
 def api_user_add():
+    from flask import g
+    from app.stripe_billing import PLANS
+    plan_key  = g.tenant.get("plan", "starter") if hasattr(g, "tenant") and g.tenant else "starter"
+    plan_cfg  = PLANS.get(plan_key, PLANS["starter"])
+    max_users = plan_cfg.get("max_users")
+    if max_users is not None:
+        current = query("SELECT COUNT(*) FROM users", one=True)[0]
+        if current >= max_users:
+            return jsonify({"ok": False,
+                            "msg": f"User limit reached ({max_users} on {plan_cfg['name']} plan). "
+                                   f"Upgrade your plan to add more users."})
     d    = request.json
     if not d.get("username") or not d.get("password"):
         return jsonify({"ok": False, "msg": "Username and password required"})
@@ -1256,6 +1267,11 @@ def export_csv():
 @perm_required("import_export")
 @api_rate_limit(max_attempts=10, window=60)
 def export_excel():
+    from flask import g
+    from app.stripe_billing import PLANS
+    plan_key = g.tenant.get("plan", "starter") if hasattr(g, "tenant") and g.tenant else "starter"
+    if not PLANS.get(plan_key, {}).get("excel", False):
+        return jsonify({"ok": False, "msg": "Excel export requires Pro or Enterprise plan."}), 403
     try:
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Alignment
@@ -1313,6 +1329,11 @@ def export_excel():
 @login_required
 @admin_required
 def import_excel():
+    from flask import g
+    from app.stripe_billing import PLANS
+    plan_key = g.tenant.get("plan", "starter") if hasattr(g, "tenant") and g.tenant else "starter"
+    if not PLANS.get(plan_key, {}).get("excel", False):
+        return jsonify({"ok": False, "msg": "Excel import requires Pro or Enterprise plan."}), 403
     try:
         import openpyxl
     except ImportError:

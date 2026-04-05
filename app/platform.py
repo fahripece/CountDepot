@@ -64,6 +64,10 @@ def init_platform_db():
         db.execute("ALTER TABLE tenants ADD COLUMN trial_ends_at TEXT")
     if "notes" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN notes TEXT")
+    if "stripe_customer_id" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN stripe_customer_id TEXT")
+    if "stripe_subscription_id" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN stripe_subscription_id TEXT")
     db.commit()
     db.close()
 

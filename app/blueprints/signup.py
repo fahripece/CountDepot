@@ -58,7 +58,7 @@ def signup():
             error = "Password must be at least 8 characters."
         else:
             # 1. Register tenant in platform.db + create data directory
-            create_tenant(slug, name, "standard")
+            create_tenant(slug, name, "starter")
 
             # 2. Bootstrap inventory DB (schema + seed + admin account)
             _bootstrap_tenant_db(slug, password)
@@ -84,7 +84,27 @@ def signup():
             db.commit()
             db.close()
 
-            # 4. Send welcome email (no-op if SMTP not configured)
+            # 4. Set 7-day trial + create Stripe customer
+            from app.platform import get_platform_db
+            trial_ends = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+            pdb = get_platform_db()
+            pdb.execute("UPDATE tenants SET subscription_status='trial', trial_ends_at=? WHERE slug=?",
+                        [trial_ends, slug])
+            pdb.commit()
+            pdb.close()
+            try:
+                from app.stripe_billing import create_customer as _create_stripe_customer
+                stripe_cid = _create_stripe_customer(email, name, slug)
+                if stripe_cid:
+                    pdb2 = get_platform_db()
+                    pdb2.execute("UPDATE tenants SET stripe_customer_id=? WHERE slug=?",
+                                 [stripe_cid, slug])
+                    pdb2.commit()
+                    pdb2.close()
+            except Exception:
+                pass
+
+            # 5. Send welcome email (no-op if SMTP not configured)
             send_welcome_email(email, name, slug, password, verify_token=verify_token)
 
             return render_template("signup_success.html",

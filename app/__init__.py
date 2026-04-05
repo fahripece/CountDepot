@@ -30,9 +30,9 @@ def create_app():
 
     @app.before_request
     def before():
-        # CSRF validation — all state-changing requests except the health probe
-        if (request.method in ("POST", "PUT", "PATCH", "DELETE")
-                and request.path != "/_health"):
+        # CSRF validation — all state-changing requests except health + Stripe webhook
+        csrf_exempt = (request.path == "/_health" or request.path == "/_stripe/webhook")
+        if (request.method in ("POST", "PUT", "PATCH", "DELETE") and not csrf_exempt):
             token = (request.form.get("csrf_token")
                      or request.headers.get("X-CSRF-Token"))
             expected = session.get("_csrf_token", "")
@@ -44,6 +44,7 @@ def create_app():
         # These routes bypass tenant resolution entirely
         if (request.path.startswith("/_platform")
                 or request.path == "/_health"
+                or request.path == "/_stripe/webhook"
                 or request.path.startswith("/signup")):
             return
 
@@ -71,7 +72,7 @@ def create_app():
         # Routes that don't need the intercept checks
         skip = ("/onboarding", "/login", "/logout", "/change-password",
                 "/forgot-password", "/reset-password", "/verify-email",
-                "/resend-verification", "/static", "/signup")
+                "/resend-verification", "/billing", "/static", "/signup")
         if any(request.path.startswith(s) for s in skip):
             return
 
@@ -103,6 +104,26 @@ def create_app():
         if not g.tenant.get("onboarded"):
             return redirect(url_for("onboarding.index"))
 
+        # Subscription enforcement — block expired/overdue tenants
+        sub_status  = g.tenant.get("subscription_status", "trial")
+        trial_ends  = g.tenant.get("trial_ends_at") or ""
+        from datetime import datetime as _dt
+        now_iso = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        if sub_status == "trial" and trial_ends and now_iso > trial_ends:
+            # Trial expired — update DB
+            from app.platform import get_platform_db as _get_pdb
+            _pdb = _get_pdb()
+            _pdb.execute("UPDATE tenants SET subscription_status='expired' WHERE slug=?",
+                         [g.tenant_slug])
+            _pdb.commit()
+            _pdb.close()
+            sub_status = "expired"
+        if sub_status in ("expired", "overdue", "canceled"):
+            if request.path.startswith("/api/"):
+                return jsonify({"ok": False,
+                                "msg": "Subscription required. Visit /billing to subscribe."}), 402
+            return redirect(url_for("billing.billing_page"))
+
     app.teardown_appcontext(close_db)
 
     @app.after_request
@@ -132,11 +153,13 @@ def create_app():
     from app.blueprints.platform   import bp as platform_bp
     from app.blueprints.onboarding import bp as onboarding_bp
     from app.blueprints.signup     import bp as signup_bp
+    from app.blueprints.billing    import bp as billing_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(platform_bp)
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(signup_bp)
+    app.register_blueprint(billing_bp)
 
     return app

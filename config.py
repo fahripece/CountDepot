@@ -23,3 +23,13 @@ class Config:
     SIGNUP_ENABLED    = os.environ.get("SIGNUP_ENABLED", "true").lower() == "true"
     # Platform admin MFA — set this to enable email OTP after password login
     PLATFORM_ADMIN_EMAIL = os.environ.get("PLATFORM_ADMIN_EMAIL", "")
+    # Stripe billing
+    STRIPE_SECRET_KEY          = os.environ.get("STRIPE_SECRET_KEY", "")
+    STRIPE_PUBLISHABLE_KEY     = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+    STRIPE_WEBHOOK_SECRET      = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+    STRIPE_PRICE_STARTER_MONTHLY    = os.environ.get("STRIPE_PRICE_STARTER_MONTHLY", "")
+    STRIPE_PRICE_STARTER_YEARLY     = os.environ.get("STRIPE_PRICE_STARTER_YEARLY", "")
+    STRIPE_PRICE_PRO_MONTHLY        = os.environ.get("STRIPE_PRICE_PRO_MONTHLY", "")
+    STRIPE_PRICE_PRO_YEARLY         = os.environ.get("STRIPE_PRICE_PRO_YEARLY", "")
+    STRIPE_PRICE_ENTERPRISE_MONTHLY = os.environ.get("STRIPE_PRICE_ENTERPRISE_MONTHLY", "")
+    STRIPE_PRICE_ENTERPRISE_YEARLY  = os.environ.get("STRIPE_PRICE_ENTERPRISE_YEARLY", "")
