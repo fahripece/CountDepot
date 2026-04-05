@@ -42,21 +42,21 @@ def login_page():
                 "login.html",
                 error=f"Too many login attempts. Try again in {reset_in} seconds."
             ), 429
-        # Accept username OR email
-        user = query("SELECT * FROM users WHERE username=? OR LOWER(COALESCE(email,''))=?",
-                     [username, username.lower()], one=True)
+        # Email-only login
+        user = query("SELECT * FROM users WHERE LOWER(COALESCE(email,''))=?",
+                     [username.lower()], one=True)
         if user and verify_pw(password, user["password"]):
             # Auto-migrate legacy HMAC-SHA256 hashes to bcrypt on first successful login
             if not user["password"].startswith("$2"):
                 execute("UPDATE users SET password=? WHERE id=?",
                         [hash_pw(password), user["id"]])
-            # Block self-signup accounts that haven't verified their email yet
+            # Block accounts that haven't verified their email yet
             email_verified = user["email_verified"] if "email_verified" in user.keys() else 1
             email = user["email"] if "email" in user.keys() else None
-            if email and not email_verified:
+            if not email_verified:
                 error = "Please verify your email address before logging in. Check your inbox for the verification link."
                 return render_template("login.html", error=error,
-                                       unverified=True, unverified_username=username)
+                                       unverified=True, unverified_email=email)
             clear_login_rate(ip)
             perms = get_user_perms(
                 user["id"], user["role"],
@@ -200,12 +200,12 @@ def resend_verification():
                                error=f"Too many requests. Try again in {reset_in // 60 + 1} minutes.",
                                unverified=False)
 
-    username = request.form.get("username", "").strip()
-    if username:
-        user = query("SELECT * FROM users WHERE username=?", [username], one=True)
+    email_addr = (request.form.get("email") or request.form.get("username") or "").strip().lower()
+    if email_addr:
+        user = query("SELECT * FROM users WHERE LOWER(COALESCE(email,''))=?", [email_addr], one=True)
         email_verified = user["email_verified"] if user and "email_verified" in user.keys() else 1
         email = user["email"] if user and "email" in user.keys() else None
-        if user and email and not email_verified:
+        if user and not email_verified:
             from app.mailer import send_verification_email
             token      = _secrets.token_urlsafe(32)
             expires_at = (datetime.utcnow() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")

@@ -41,7 +41,7 @@ def send_email(to: str, subject: str, html: str, text: str = "") -> bool:
         return False
 
 
-def send_welcome_email(to: str, name: str, slug: str, temp_password: str,
+def send_welcome_email(to: str, name: str, slug: str, temp_password: str = None,
                        verify_token: str = None) -> bool:
     domain  = Config.APP_DOMAIN
     url     = f"https://{slug}.{domain}"

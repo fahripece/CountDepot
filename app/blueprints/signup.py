@@ -13,7 +13,6 @@ Flow:
 
 import re
 import os
-import secrets
 import sqlite3
 from datetime import datetime, timedelta
 
@@ -60,29 +59,16 @@ def signup():
             # 1. Register tenant in platform.db + create data directory
             create_tenant(slug, name, "starter")
 
-            # 2. Bootstrap inventory DB (schema + seed + admin account)
-            _bootstrap_tenant_db(slug, password)
+            # 2. Bootstrap inventory DB — email is the login identifier
+            _bootstrap_tenant_db(slug, password, admin_email=email)
 
-            # 3. Stamp the admin's email; only require verification if SMTP is configured
-            smtp_enabled = bool(Config.SMTP_HOST)
+            # must_change_password=0 for self-signup (they chose their own password)
             db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
             db = sqlite3.connect(db_path)
-            db.execute(
-                "UPDATE users SET email=?, must_change_password=0, email_verified=? "
-                "WHERE username='admin'",
-                [email, 0 if smtp_enabled else 1])
-            verify_token = None
-            if smtp_enabled:
-                user_id = db.execute(
-                    "SELECT id FROM users WHERE username='admin'").fetchone()[0]
-                verify_token  = secrets.token_urlsafe(32)
-                token_expires = (datetime.utcnow() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
-                db.execute(
-                    "INSERT INTO email_verification_tokens (user_id, token, expires_at) "
-                    "VALUES (?,?,?)",
-                    [user_id, verify_token, token_expires])
+            db.execute("UPDATE users SET must_change_password=0 WHERE email=?", [email])
             db.commit()
             db.close()
+            verify_token = None  # already sent by _bootstrap_tenant_db if SMTP configured
 
             # 4. Set 7-day trial + create Stripe customer
             from app.platform import get_platform_db
@@ -104,8 +90,8 @@ def signup():
             except Exception:
                 pass
 
-            # 5. Send welcome email (no-op if SMTP not configured)
-            send_welcome_email(email, name, slug, password, verify_token=verify_token)
+            # 5. Send welcome email (verification already sent by _bootstrap_tenant_db)
+            send_welcome_email(email, name, slug, temp_password=None, verify_token=None)
 
             return render_template("signup_success.html",
                                    name=name,

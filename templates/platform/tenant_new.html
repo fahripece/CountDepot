@@ -61,9 +61,13 @@ input:focus,select:focus{border-color:#3b82f6}
       </select>
     </div>
     <div class="field">
+      <label>Admin email</label>
+      <input name="admin_email" type="email" placeholder="admin@company.com" required>
+      <div class="hint">This will be the admin's login email. A verification link will be sent if SMTP is configured.</div>
+    </div>
+    <div class="field">
       <label>Admin password</label>
       <input name="admin_password" type="password" placeholder="Min 8 characters" required minlength="8">
-      <div class="hint">Tenant's admin account will use username <strong>admin</strong> with this password.</div>
     </div>
     <div class="actions">
       <a href="{{ url_for('platform.dashboard') }}" class="btn btn-muted">Cancel</a>

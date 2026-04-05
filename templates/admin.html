@@ -94,7 +94,7 @@
       <button class="modal-close" onclick="closeModal('userModal')">✕</button>
     </div>
     <div class="modal-body">
-      <div class="field"><label class="label">Username</label><input class="input" id="u-username" autocomplete="off"></div>
+      <div class="field"><label class="label">Email address</label><input class="input" id="u-username" type="email" autocomplete="email" placeholder="user@company.com"></div>
       <div class="field"><label class="label">Password</label><input class="input" id="u-password" type="password" autocomplete="new-password"></div>
       <div class="field"><label class="label">Role</label>
         <select class="select" id="u-role" onchange="onNewUserRoleChange()">
@@ -244,7 +244,8 @@ async function saveUser(){
   const username=document.getElementById('u-username').value.trim();
   const password=document.getElementById('u-password').value;
   const role=document.getElementById('u-role').value;
-  if(!username||!password){toast('Username and password required','warn');return}
+  if(!username||!username.includes('@')){toast('Valid email address required','warn');return}
+  if(!password){toast('Password required','warn');return}
   let perms=null;
   if(role!=='admin'){
     perms=[];

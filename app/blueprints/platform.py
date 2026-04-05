@@ -222,6 +222,7 @@ def tenant_new():
         plan  = request.form.get("plan",  "standard")
         admin_pw = request.form.get("admin_password", "").strip()
 
+        admin_email = request.form.get("admin_email", "").strip().lower()
         if not name:
             error = "Company name is required."
         elif not slug:
@@ -230,6 +231,8 @@ def tenant_new():
             error = "Slug must be lowercase letters, numbers and hyphens (2–32 chars)."
         elif get_tenant_by_slug(slug):
             error = f"Slug '{slug}' is already taken."
+        elif not admin_email or "@" not in admin_email:
+            error = "A valid admin email is required."
         elif len(admin_pw) < 8:
             error = "Admin password must be at least 8 characters."
         else:
@@ -237,7 +240,7 @@ def tenant_new():
             create_tenant(slug, name, plan)
 
             # 2. Bootstrap the tenant's inventory DB
-            _bootstrap_tenant_db(slug, admin_pw)
+            _bootstrap_tenant_db(slug, admin_pw, admin_email=admin_email)
 
             return redirect(url_for("platform.dashboard"))
 
@@ -245,7 +248,7 @@ def tenant_new():
     return render_template("platform/tenant_new.html", error=error)
 
 
-def _bootstrap_tenant_db(slug, admin_password):
+def _bootstrap_tenant_db(slug, admin_password, admin_email=None):
     """Create schema + seed default data for a brand-new tenant."""
     import sqlite3
     from app.schema import _init_db_conn
@@ -271,13 +274,30 @@ def _bootstrap_tenant_db(slug, admin_password):
         except Exception:
             pass
 
-    # Create admin user — must change password on first login
+    # Create admin user — email is the login identifier
+    smtp_on = bool(Config.SMTP_HOST)
+    email_verified = 0 if (admin_email and smtp_on) else 1
     db.execute(
-        "INSERT INTO users (username,password,role,permissions,must_change_password) VALUES (?,?,?,?,1)",
-        ["admin", hash_pw(admin_password), "admin", ""])
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password)"
+        " VALUES (?,?,?,?,?,?,1)",
+        [admin_email or "admin", hash_pw(admin_password), "admin", "",
+         admin_email, email_verified])
 
-    db.commit()
-    db.close()
+    # Send verification email if SMTP is configured
+    if admin_email and smtp_on:
+        user_id = db.execute("SELECT id FROM users WHERE email=?", [admin_email]).fetchone()[0]
+        verify_token = secrets.token_urlsafe(32)
+        token_expires = (datetime.utcnow() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
+        db.execute(
+            "INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?,?,?)",
+            [user_id, verify_token, token_expires])
+        db.commit()
+        db.close()
+        from app.mailer import send_verification_email
+        send_verification_email(admin_email, slug, verify_token)
+    else:
+        db.commit()
+        db.close()
 
 
 # ── Suspend / reactivate tenant ───────────────────────────────────────────────

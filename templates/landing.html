@@ -60,10 +60,16 @@ nav{
 }
 .nav-cta:hover{background:var(--blue-light);transform:translateY(-1px)}
 .nav-link-signin{
-  color:var(--muted2);font-size:14px;font-weight:500;
-  text-decoration:none;transition:color .2s;cursor:pointer;
+  color:var(--text);
+  font-size:14px;font-weight:500;
+  text-decoration:none;
+  padding:9px 20px;
+  border:1px solid rgba(255,255,255,0.18);
+  border-radius:8px;
+  transition:border-color .2s,background .2s;
+  cursor:pointer;
 }
-.nav-link-signin:hover{color:var(--text)}
+.nav-link-signin:hover{border-color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.05)}
 
 /* ── HERO ── */
 .hero{

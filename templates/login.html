@@ -29,15 +29,15 @@ input:focus{border-color:#1d4ed8;background:#fff}
   {% if unverified %}
   <form method="POST" action="/resend-verification" style="margin-bottom:18px">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="username" value="{{ unverified_username }}">
+    <input type="hidden" name="email" value="{{ unverified_email }}">
     <button class="btn" type="submit" style="background:#d97706">Resend verification email →</button>
   </form>
   <div style="text-align:center;margin-bottom:14px;font-size:12px;color:#94a3b8">— or sign in with a different account —</div>
   {% endif %}
   <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Username</label>
-    <input name="username" autocomplete="username" autofocus placeholder="Enter username">
+    <label>Email address</label>
+    <input name="username" type="email" autocomplete="email" autofocus placeholder="you@company.com">
     <label>Password</label>
     <input name="password" type="password" autocomplete="current-password" placeholder="Enter password">
     <button class="btn" type="submit">Sign In →</button>

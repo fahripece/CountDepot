@@ -1103,8 +1103,11 @@ def api_user_add():
                             "msg": f"User limit reached ({max_users} on {plan_cfg['name']} plan). "
                                    f"Upgrade your plan to add more users."})
     d    = request.json
-    if not d.get("username") or not d.get("password"):
-        return jsonify({"ok": False, "msg": "Username and password required"})
+    email = (d.get("username") or d.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return jsonify({"ok": False, "msg": "Valid email address required"})
+    if not d.get("password"):
+        return jsonify({"ok": False, "msg": "Password required"})
     pw_err = validate_password(d["password"])
     if pw_err:
         return jsonify({"ok": False, "msg": pw_err})
@@ -1115,15 +1118,28 @@ def api_user_add():
         custom = d.get("permissions")
         perm_str = (",".join(set(custom) & set(PERM_KEYS)) if custom is not None
                     else ",".join(WORKER_DEFAULT_PERMS))
-    email = (d.get("email") or "").strip() or None
+    from config import Config as _Cfg
+    smtp_on = bool(_Cfg.SMTP_HOST)
+    email_verified = 0 if smtp_on else 1
     try:
         uid = execute(
-            "INSERT INTO users (username,password,role,permissions,email,must_change_password) VALUES (?,?,?,?,?,1)",
-            [d["username"], hash_pw(d["password"]), role, perm_str, email])
-        log_action("USER_ADD", detail=f"Added user: {d['username']} | role: {role}")
+            "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password)"
+            " VALUES (?,?,?,?,?,?,1)",
+            [email, hash_pw(d["password"]), role, perm_str, email, email_verified])
+        log_action("USER_ADD", detail=f"Added user: {email} | role: {role}")
+        # Send verification email if SMTP configured
+        if smtp_on:
+            import secrets as _sec
+            from datetime import datetime as _dt, timedelta as _td
+            from app.mailer import send_verification_email
+            tok = _sec.token_urlsafe(32)
+            exp = (_dt.utcnow() + _td(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
+            execute("INSERT INTO email_verification_tokens (user_id,token,expires_at) VALUES (?,?,?)",
+                    [uid, tok, exp])
+            send_verification_email(email, g.tenant_slug, tok)
         return jsonify({"ok": True, "id": uid})
     except Exception:
-        return jsonify({"ok": False, "msg": "Username already exists"})
+        return jsonify({"ok": False, "msg": "Email already in use"})
 
 
 @bp.route("/api/user/permissions", methods=["POST"])
