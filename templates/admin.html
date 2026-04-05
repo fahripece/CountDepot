@@ -94,8 +94,10 @@
       <button class="modal-close" onclick="closeModal('userModal')">✕</button>
     </div>
     <div class="modal-body">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#1e40af">
+        An invite email will be sent. The user clicks the link to set their own password and verify their account.
+      </div>
       <div class="field"><label class="label">Email address</label><input class="input" id="u-username" type="email" autocomplete="email" placeholder="user@company.com"></div>
-      <div class="field"><label class="label">Password</label><input class="input" id="u-password" type="password" autocomplete="new-password"></div>
       <div class="field"><label class="label">Role</label>
         <select class="select" id="u-role" onchange="onNewUserRoleChange()">
           <option value="worker">Worker</option>
@@ -130,7 +132,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('userModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveUser()">Add User</button>
+      <button class="btn btn-primary" onclick="saveUser()">Send Invite →</button>
     </div>
   </div>
 </div>
@@ -233,7 +235,6 @@ function onNewUserRoleChange(){
 
 function openAddUser(){
   document.getElementById('u-username').value='';
-  document.getElementById('u-password').value='';
   document.getElementById('u-role').value='worker';
   document.getElementById('new-user-perms').style.display='block';
   setNewUserPreset('worker'); // default: worker preset
@@ -242,17 +243,15 @@ function openAddUser(){
 
 async function saveUser(){
   const username=document.getElementById('u-username').value.trim();
-  const password=document.getElementById('u-password').value;
   const role=document.getElementById('u-role').value;
   if(!username||!username.includes('@')){toast('Valid email address required','warn');return}
-  if(!password){toast('Password required','warn');return}
   let perms=null;
   if(role!=='admin'){
     perms=[];
     document.querySelectorAll('#new-user-perm-grid .perm-cb:checked').forEach(cb=>perms.push(cb.value));
   }
-  const res=await api('/api/user/add',{username,password,role,permissions:perms});
-  if(res.ok){toast('User added ✓','ok');closeModal('userModal');location.reload();}
+  const res=await api('/api/user/add',{username,role,permissions:perms});
+  if(res.ok){toast(res.msg||'Invite sent ✓','ok');closeModal('userModal');location.reload();}
   else toast(res.msg||'Error','err');
 }
 

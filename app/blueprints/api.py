@@ -1106,11 +1106,6 @@ def api_user_add():
     email = (d.get("username") or d.get("email") or "").strip().lower()
     if not email or "@" not in email:
         return jsonify({"ok": False, "msg": "Valid email address required"})
-    if not d.get("password"):
-        return jsonify({"ok": False, "msg": "Password required"})
-    pw_err = validate_password(d["password"])
-    if pw_err:
-        return jsonify({"ok": False, "msg": pw_err})
     role = d.get("role", "worker")
     if role == "admin":
         perm_str = ",".join(ADMIN_DEFAULT_PERMS)
@@ -1118,26 +1113,26 @@ def api_user_add():
         custom = d.get("permissions")
         perm_str = (",".join(set(custom) & set(PERM_KEYS)) if custom is not None
                     else ",".join(WORKER_DEFAULT_PERMS))
+    import secrets as _sec
+    from datetime import datetime as _dt, timedelta as _td
     from config import Config as _Cfg
-    smtp_on = bool(_Cfg.SMTP_HOST)
-    email_verified = 0 if smtp_on else 1
+    # Create user with unusable random password — invite link sets the real one
+    placeholder_pw = hash_pw(_sec.token_hex(32))
     try:
         uid = execute(
             "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password)"
-            " VALUES (?,?,?,?,?,?,1)",
-            [email, hash_pw(d["password"]), role, perm_str, email, email_verified])
-        log_action("USER_ADD", detail=f"Added user: {email} | role: {role}")
-        # Send verification email if SMTP configured
-        if smtp_on:
-            import secrets as _sec
-            from datetime import datetime as _dt, timedelta as _td
-            from app.mailer import send_verification_email
-            tok = _sec.token_urlsafe(32)
-            exp = (_dt.utcnow() + _td(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
-            execute("INSERT INTO email_verification_tokens (user_id,token,expires_at) VALUES (?,?,?)",
-                    [uid, tok, exp])
-            send_verification_email(email, g.tenant_slug, tok)
-        return jsonify({"ok": True, "id": uid})
+            " VALUES (?,?,?,?,?,0,1)",
+            [email, placeholder_pw, role, perm_str, email])
+        log_action("USER_ADD", detail=f"Invited user: {email} | role: {role}")
+        # Create invite token (reuses password_reset_tokens table)
+        tok = _sec.token_urlsafe(32)
+        exp = (_dt.utcnow() + _td(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
+        execute("INSERT INTO password_reset_tokens (user_id,token,expires_at) VALUES (?,?,?)",
+                [uid, tok, exp])
+        from app.mailer import send_invite_email
+        send_invite_email(email, g.tenant_slug, tok, inviter=session.get("username", "Your admin"))
+        return jsonify({"ok": True, "id": uid,
+                        "msg": f"Invite sent to {email}. They'll receive a link to set their password."})
     except Exception:
         return jsonify({"ok": False, "msg": "Email already in use"})
 

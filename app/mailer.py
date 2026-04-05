@@ -100,6 +100,24 @@ def send_verification_email(to: str, slug: str, token: str) -> bool:
     return send_email(to, subject, html, text)
 
 
+def send_invite_email(to: str, slug: str, token: str, inviter: str = "Your admin") -> bool:
+    """Invitation email for new users added by an admin."""
+    domain  = Config.APP_DOMAIN
+    url     = f"https://{slug}.{domain}/reset-password/{token}"
+    subject = f"You've been invited to {slug} on CountDepot"
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <h1 style="font-size:22px;font-weight:700;margin-bottom:6px">You're invited to CountDepot</h1>
+  <p style="color:#64748b;margin-bottom:24px"><strong>{inviter}</strong> has added you to the <strong>{slug}</strong> workspace. Click below to set your password and get started.</p>
+  <a href="{url}" style="display:inline-block;padding:12px 24px;background:#1d4ed8;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;font-size:14px">Accept invite &amp; set password →</a>
+  <p style="margin-top:16px;font-size:12px;color:#64748b">This link expires in 72 hours. Or paste into your browser:<br><span style="font-family:monospace;color:#1d4ed8">{url}</span></p>
+  <p style="margin-top:28px;font-size:11px;color:#94a3b8">If you weren't expecting this invitation, you can ignore this email.</p>
+</div>"""
+    text = (f"You've been invited to CountDepot by {inviter}.\n\n"
+            f"Set your password here: {url}\n\nLink expires in 72 hours.\n")
+    return send_email(to, subject, html, text)
+
+
 def send_password_reset_email(to: str, slug: str, token: str) -> bool:
     domain  = Config.APP_DOMAIN
     url     = f"https://{slug}.{domain}/reset-password/{token}"

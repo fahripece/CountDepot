@@ -169,7 +169,7 @@ def reset_password(token):
         if not error and new_pw != confirm:
             error = "Passwords do not match."
         if not error:
-            execute("UPDATE users SET password=?, must_change_password=0 WHERE id=?",
+            execute("UPDATE users SET password=?, must_change_password=0, email_verified=1 WHERE id=?",
                     [hash_pw(new_pw), row["user_id"]])
             execute("UPDATE password_reset_tokens SET used=1 WHERE id=?", [row["id"]])
             return render_template("reset_password.html", success=True, token=token)
