@@ -112,6 +112,7 @@ def _save_item(d, iid=None):
         extra_fields          = json.dumps(d.get("extra_fields") or {}),
         purchased_from        = d.get("purchased_from") or None,
         sale_state            = d.get("sale_state") or None,
+        depreciation_rate     = float(d["depreciation_rate"]) if d.get("depreciation_rate") not in (None, "") else None,
     )
     if iid:
         cols = ", ".join(f"{k}=?" for k in fields)
@@ -287,6 +288,9 @@ def api_dashboard():
     revenue     = round(query("SELECT SUM(COALESCE(sold_price,sale_price,0)) FROM items WHERE active=1 AND sold=1", one=True)[0] or 0, 2)
     cost_sold   = round(query("SELECT SUM(COALESCE(cost_price,0)) FROM items WHERE active=1 AND sold=1", one=True)[0] or 0, 2)
     profit      = round(revenue - cost_sold, 2)
+    today_iso   = datetime.now().strftime("%Y-%m-%d")
+    overdue     = query("SELECT COUNT(*) FROM items WHERE active=1 AND checked_out=1 AND expected_return_date IS NOT NULL AND expected_return_date < ?", [today_iso], one=True)[0]
+    maint_due   = query("SELECT COUNT(*) FROM items WHERE active=1 AND sold=0 AND next_maintenance_date IS NOT NULL AND next_maintenance_date <= ?", [today_iso], one=True)[0]
     by_category = [{"name": r["name"], "color": r["color"],
                     "value": round(r["val"] or 0, 2), "count": r["cnt"]}
                    for r in query("""SELECT c.name, c.color,
@@ -314,7 +318,8 @@ def api_dashboard():
     return jsonify({
         "cards": {"total": total, "checked_out": checked_out, "low_stock": low_stock,
                   "stock_value": stock_value, "total_tax": total_tax,
-                  "revenue": revenue, "profit": profit, "sold_count": sold_count},
+                  "revenue": revenue, "profit": profit, "sold_count": sold_count,
+                  "overdue": overdue, "maintenance_due": maint_due},
         "by_category":  by_category,
         "top_items":    top_items,
         "tech_activity": tech_activity,
@@ -339,10 +344,12 @@ def api_items():
     # hide_out=0 is used by the auto-open ?item=ID flow — skip pagination for it
     no_paginate = request.args.get("hide_out", "1") == "0"
 
+    loc_id   = request.args.get("loc", "")
     base_where = """FROM items i
              LEFT JOIN categories c  ON c.id=i.category_id
              LEFT JOIN products p    ON p.id=i.product_id
              LEFT JOIN companies co  ON co.id=i.company_id
+             LEFT JOIN locations l   ON l.id=i.location_id
              WHERE i.active=1"""
     sql  = """SELECT i.*, c.name as category, c.color,
                     p.name as product_name, p.serial_tracked, p.qty_tracked,
@@ -351,7 +358,8 @@ def api_items():
                     p.require_vendor_sku as product_req_vendor_sku,
                     p.require_internal_sku as product_req_internal_sku,
                     p.print_scan_label as product_print_scan,
-                    co.name as company_name
+                    co.name as company_name,
+                    l.name as location_name
              """ + base_where
     args = []
     if search:
@@ -366,6 +374,7 @@ def api_items():
         sql += cond
     if cat_id:  sql += " AND i.category_id=?"; args.append(cat_id)
     if prod_id: sql += " AND i.product_id=?";  args.append(prod_id)
+    if loc_id:  sql += " AND i.location_id=?"; args.append(loc_id)
     if status == "out":
         sql += " AND i.checked_out=1"
     elif status == "in":
@@ -382,6 +391,14 @@ def api_items():
             (p.require_vendor_sku=1 AND (i.sku IS NULL OR i.sku='')) OR
             i.cost_price IS NULL OR
             (i.shelf IS NULL OR i.shelf=''))"""
+    elif status == "overdue":
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        sql += " AND i.checked_out=1 AND i.expected_return_date IS NOT NULL AND i.expected_return_date < ?"
+        args.append(today_str)
+    elif status == "maintenance":
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        sql += " AND i.sold=0 AND i.next_maintenance_date IS NOT NULL AND i.next_maintenance_date <= ?"
+        args.append(today_str)
     else:
         if not no_paginate:
             sql += " AND i.checked_out=0 AND i.sold=0"
@@ -407,6 +424,9 @@ def api_items():
         d["available"]   = ((d["qty"] or 0) - (d["qty_out"] or 0) if d["qty"] is not None else None)
         d["is_low"]      = False
         d["profit"]      = (round(d["sale_price"] - d["cost_price"], 2) if d["sale_price"] and d["cost_price"] else None)
+        today_s = datetime.now().strftime("%Y-%m-%d")
+        d["overdue"]     = bool(d.get("checked_out") and d.get("expected_return_date") and d["expected_return_date"] < today_s)
+        d["maintenance_overdue"] = bool(d.get("next_maintenance_date") and d["next_maintenance_date"] < today_s)
         d["tax_amount"]  = (round(d["cost_price"] * (d["tax_rate"] or 0) / 100, 2) if d["cost_price"] and d["tax_paid"] == 1 else 0)
         missing = []
         if d.get("product_req_serial")     and not d.get("serial"): missing.append("serial #")
@@ -465,12 +485,18 @@ def api_checkout():
             return jsonify({"ok": False, "msg": "scan_mismatch",
                             "detail": f"Scanned '{scanned}' does not match item serial/SKU/model"})
     now  = datetime.now().strftime("%m/%d/%y")
+    now_iso = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     who  = d.get("who", "").strip() or session.get("username", "?")
     new_sale = d.get("update_sale_price")
+    expected_return = d.get("expected_return_date") or None
     if new_sale is not None:
         execute("UPDATE items SET sale_price=? WHERE id=?", [new_sale, item["id"]])
-    execute("UPDATE items SET checked_out=1,checkout_date=?,checkout_by=?,job_ref=? WHERE id=?",
-            [now, who, d.get("job_ref", ""), item["id"]])
+    execute("UPDATE items SET checked_out=1,checkout_date=?,checkout_by=?,job_ref=?,expected_return_date=? WHERE id=?",
+            [now, who, d.get("job_ref", ""), expected_return, item["id"]])
+    execute("""INSERT INTO checkout_log
+               (item_id,item_name,checked_out_by,job_ref,checkout_date,expected_return_date,created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            [item["id"], item["name"], who, d.get("job_ref",""), now, expected_return, now_iso])
     log_action("CHECKOUT", item["id"], item["name"],
                f"By: {who} | Job: {d.get('job_ref','')}" +
                (f" | Sale price → ${new_sale:.2f}" if new_sale is not None else ""),
@@ -486,12 +512,254 @@ def api_checkin():
     item = query("SELECT * FROM items WHERE id=? AND active=1", [d["id"]], one=True)
     if not item:            return jsonify({"ok": False, "msg": "Not found"})
     if not item["checked_out"]: return jsonify({"ok": False, "msg": "Already checked in"})
-    execute("UPDATE items SET checked_out=0,checkout_date=NULL,checkout_by=NULL,job_ref=NULL WHERE id=?",
+    now_iso    = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    checkin_note = (d.get("checkin_note") or "").strip() or None
+    checkin_by   = session.get("username", "?")
+    # Compute duration if we have a checkout timestamp in checkout_log
+    log_row = query(
+        "SELECT * FROM checkout_log WHERE item_id=? AND checkin_date IS NULL ORDER BY id DESC LIMIT 1",
+        [item["id"]], one=True)
+    duration_h = None
+    if log_row and log_row["checkout_date"]:
+        try:
+            from datetime import datetime as _dt
+            fmt_map = ["%m/%d/%y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"]
+            co_dt = None
+            for fmt in fmt_map:
+                try: co_dt = _dt.strptime(log_row["checkout_date"], fmt); break
+                except ValueError: pass
+            if co_dt:
+                duration_h = round((datetime.now() - co_dt).total_seconds() / 3600, 2)
+        except Exception:
+            pass
+    if log_row:
+        execute("""UPDATE checkout_log SET checkin_date=?,checkin_note=?,checkin_by=?,duration_hours=?
+                   WHERE id=?""",
+                [now_iso, checkin_note, checkin_by, duration_h, log_row["id"]])
+    execute("UPDATE items SET checked_out=0,checkout_date=NULL,checkout_by=NULL,job_ref=NULL,expected_return_date=NULL WHERE id=?",
             [item["id"]])
     log_action("CHECKIN", item["id"], item["name"],
-               f"Returned. Was on: {item['job_ref'] or '-'}",
+               f"Returned. Was on: {item['job_ref'] or '-'}" + (f" | Note: {checkin_note}" if checkin_note else ""),
                {"checked_out": 1}, {"checked_out": 0})
     return jsonify({"ok": True})
+
+
+@bp.route("/api/locations")
+@login_required
+def api_get_locations():
+    return jsonify([dict(r) for r in query("SELECT * FROM locations ORDER BY name")])
+
+@bp.route("/api/locations", methods=["POST"])
+@login_required
+@admin_required
+def api_add_location():
+    d    = request.json or {}
+    name = (d.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "msg": "Name required"})
+    try:
+        lid = execute("INSERT INTO locations (name,description,created_at) VALUES (?,?,?)",
+                      [name, d.get("description",""), datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+        return jsonify({"ok": True, "id": lid, "name": name})
+    except Exception:
+        return jsonify({"ok": False, "msg": "Location name already exists"})
+
+@bp.route("/api/location/<int:loc_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def api_delete_location(loc_id):
+    execute("UPDATE items SET location_id=NULL WHERE location_id=?", [loc_id])
+    execute("DELETE FROM locations WHERE id=?", [loc_id])
+    return jsonify({"ok": True})
+
+@bp.route("/api/item/<int:item_id>/notes")
+@login_required
+def api_item_notes(item_id):
+    rows = query("SELECT * FROM item_notes WHERE item_id=? ORDER BY id DESC", [item_id])
+    return jsonify([dict(r) for r in rows])
+
+@bp.route("/api/item/<int:item_id>/note", methods=["POST"])
+@login_required
+def api_add_note(item_id):
+    note = (request.json or {}).get("note", "").strip()
+    if not note:
+        return jsonify({"ok": False, "msg": "Note is required"})
+    execute("INSERT INTO item_notes (item_id,note,username,created_at) VALUES (?,?,?,?)",
+            [item_id, note, session.get("username","?"), datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+    log_action("NOTE_ADD", item_id, None, note[:120])
+    return jsonify({"ok": True})
+
+
+# ── Item Reservations ─────────────────────────────────────────────────────────
+
+@bp.route("/api/item/<int:item_id>/reservations")
+@login_required
+def api_item_reservations(item_id):
+    rows = query("""SELECT * FROM item_reservations
+                    WHERE item_id=? AND cancelled=0 ORDER BY reserved_from""", [item_id])
+    return jsonify([dict(r) for r in rows])
+
+
+@bp.route("/api/item/<int:item_id>/reservation", methods=["POST"])
+@login_required
+def api_add_reservation(item_id):
+    d    = request.json or {}
+    by   = (d.get("reserved_by") or "").strip()
+    frm  = (d.get("reserved_from") or "").strip()
+    to   = (d.get("reserved_to") or "").strip()
+    if not by or not frm or not to:
+        return jsonify({"ok": False, "msg": "reserved_by, reserved_from, reserved_to are required"})
+    if frm > to:
+        return jsonify({"ok": False, "msg": "Start date must be before end date"})
+    # Conflict check — overlapping active reservations for same item
+    conflict = query("""SELECT id FROM item_reservations
+                        WHERE item_id=? AND cancelled=0
+                          AND NOT (reserved_to < ? OR reserved_from > ?)""",
+                     [item_id, frm, to], one=True)
+    if conflict:
+        return jsonify({"ok": False, "msg": "Conflicts with an existing reservation for this item"})
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rid = execute("""INSERT INTO item_reservations
+                     (item_id,reserved_by,reserved_from,reserved_to,purpose,created_by,created_at)
+                     VALUES (?,?,?,?,?,?,?)""",
+                  [item_id, by, frm, to, d.get("purpose",""), session.get("username","?"), now])
+    log_action("RESERVATION_ADD", item_id, None,
+               f"Reserved for {by} {frm}→{to}")
+    return jsonify({"ok": True, "id": rid})
+
+
+@bp.route("/api/reservation/<int:res_id>", methods=["DELETE"])
+@login_required
+def api_cancel_reservation(res_id):
+    row = query("SELECT * FROM item_reservations WHERE id=?", [res_id], one=True)
+    if not row:
+        return jsonify({"ok": False, "msg": "Not found"})
+    execute("UPDATE item_reservations SET cancelled=1 WHERE id=?", [res_id])
+    log_action("RESERVATION_CANCEL", row["item_id"], None,
+               f"Reservation #{res_id} cancelled")
+    return jsonify({"ok": True})
+
+
+# ── Item Photos ───────────────────────────────────────────────────────────────
+
+@bp.route("/api/item/<int:item_id>/photos")
+@login_required
+def api_item_photos(item_id):
+    rows = query("SELECT id,caption,uploaded_by,created_at FROM item_photos WHERE item_id=? ORDER BY id",
+                 [item_id])
+    return jsonify([dict(r) for r in rows])
+
+
+@bp.route("/api/item/<int:item_id>/photo", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_upload_photo(item_id):
+    import base64
+    f = request.files.get("photo")
+    if not f:
+        return jsonify({"ok": False, "msg": "No file uploaded"})
+    if not f.content_type.startswith("image/"):
+        return jsonify({"ok": False, "msg": "File must be an image"})
+    data = f.read(3 * 1024 * 1024 + 1)  # read up to 3MB+1
+    if len(data) > 3 * 1024 * 1024:
+        return jsonify({"ok": False, "msg": "Image too large (max 3 MB)"})
+    data_url = f"data:{f.content_type};base64,{base64.b64encode(data).decode()}"
+    caption   = (request.form.get("caption") or "").strip() or None
+    now       = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    pid = execute("INSERT INTO item_photos (item_id,data_url,caption,uploaded_by,created_at) VALUES (?,?,?,?,?)",
+                  [item_id, data_url, caption, session.get("username","?"), now])
+    log_action("PHOTO_ADD", item_id, None, f"Photo #{pid} uploaded")
+    return jsonify({"ok": True, "id": pid})
+
+
+@bp.route("/api/photo/<int:photo_id>/data")
+@login_required
+def api_photo_data(photo_id):
+    row = query("SELECT data_url FROM item_photos WHERE id=?", [photo_id], one=True)
+    if not row:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    return jsonify({"ok": True, "data_url": row["data_url"]})
+
+
+@bp.route("/api/photo/<int:photo_id>", methods=["DELETE"])
+@login_required
+@perm_required("write_items")
+def api_delete_photo(photo_id):
+    row = query("SELECT item_id FROM item_photos WHERE id=?", [photo_id], one=True)
+    if not row:
+        return jsonify({"ok": False, "msg": "Not found"})
+    execute("DELETE FROM item_photos WHERE id=?", [photo_id])
+    log_action("PHOTO_DELETE", row["item_id"], None, f"Photo #{photo_id} deleted")
+    return jsonify({"ok": True})
+
+
+# ── Reports ───────────────────────────────────────────────────────────────────
+
+@bp.route("/api/report/checkout-history")
+@login_required
+@perm_required("view_audit")
+def api_report_checkout_history():
+    tech    = request.args.get("tech", "").strip()
+    item_q  = request.args.get("item", "").strip()
+    from_d  = request.args.get("from", "")
+    to_d    = request.args.get("to", "")
+    page    = max(1, int(request.args.get("page", 1) or 1))
+    per     = 50
+    sql  = "FROM checkout_log WHERE 1=1"
+    args = []
+    if tech:
+        sql += " AND LOWER(checked_out_by) LIKE ?"; args.append(f"%{tech.lower()}%")
+    if item_q:
+        sql += " AND LOWER(item_name) LIKE ?"; args.append(f"%{item_q.lower()}%")
+    if from_d:
+        sql += " AND checkout_date >= ?"; args.append(from_d)
+    if to_d:
+        sql += " AND checkout_date <= ?"; args.append(to_d)
+    total = query(f"SELECT COUNT(*) {sql}", args, one=True)[0]
+    rows  = query(f"SELECT * {sql} ORDER BY id DESC LIMIT {per} OFFSET {(page-1)*per}", args)
+    return jsonify({
+        "ok": True, "total": total, "page": page, "pages": max(1, -(-total // per)),
+        "rows": [dict(r) for r in rows]
+    })
+
+
+@bp.route("/api/report/locations")
+@login_required
+def api_report_locations():
+    locs = query("SELECT * FROM locations ORDER BY name")
+    result = []
+    for loc in locs:
+        items = query("""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
+                                i.condition, i.checked_out, i.checkout_by, i.cost_price,
+                                i.expected_return_date, i.next_maintenance_date,
+                                c.name as category, c.color
+                         FROM items i
+                         LEFT JOIN categories c ON c.id=i.category_id
+                         WHERE i.location_id=? AND i.active=1 AND i.sold=0
+                         ORDER BY i.name""", [loc["id"]])
+        today = datetime.now().strftime("%Y-%m-%d")
+        item_list = []
+        for it in items:
+            d = dict(it)
+            d["overdue"] = bool(d.get("checked_out") and d.get("expected_return_date") and
+                                d["expected_return_date"] < today)
+            item_list.append(d)
+        result.append({**dict(loc), "items": item_list,
+                        "total": len(item_list),
+                        "checked_out": sum(1 for i in item_list if i["checked_out"])})
+    # Items with no location
+    unassigned_rows = [dict(r) for r in query("""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
+                                 i.condition, i.checked_out, i.checkout_by, i.cost_price,
+                                 c.name as category, c.color
+                          FROM items i
+                          LEFT JOIN categories c ON c.id=i.category_id
+                          WHERE (i.location_id IS NULL) AND i.active=1 AND i.sold=0
+                          ORDER BY i.name""")]
+    result.append({"id": None, "name": "Unassigned", "description": "",
+                   "items": unassigned_rows,
+                   "total": len(unassigned_rows),
+                   "checked_out": sum(1 for r in unassigned_rows if r["checked_out"])})
+    return jsonify({"ok": True, "locations": result})
 
 
 @bp.route("/api/qty_adjust", methods=["POST"])
@@ -545,6 +813,9 @@ def api_item_sell():
 @login_required
 @perm_required("write_items")
 def api_item_add():
+    allowed, limit_msg = _check_item_limit()
+    if not allowed:
+        return jsonify({"ok": False, "msg": limit_msg})
     d = request.json
     if not d.get("name", "").strip():
         return jsonify({"ok": False, "msg": "Name required"})
@@ -1194,6 +1465,18 @@ def api_user_force_logout():
     return jsonify({"ok": True})
 
 
+@bp.route("/api/user/me")
+@login_required
+def api_user_me():
+    from app.helpers import _auth_user_id
+    uid = _auth_user_id()
+    row = query("SELECT id, username, email, role, two_fa_enabled FROM users WHERE id=?",
+                [uid], one=True)
+    if not row:
+        return jsonify({"ok": False, "msg": "Not found"})
+    return jsonify({**dict(row), "ok": True})
+
+
 @bp.route("/api/change_password", methods=["POST"])
 @login_required
 def api_change_password():
@@ -1220,21 +1503,158 @@ def api_alerts():
 @login_required
 @perm_required("view_audit")
 def api_audit():
-    page   = int(request.args.get("page", 1))
-    limit  = 50
-    offset = (page - 1) * limit
-    search = request.args.get("q", "").strip()
-    sql    = "SELECT * FROM audit_log"
-    args   = []
+    page     = max(1, int(request.args.get("page", 1)))
+    limit    = min(200, max(1, int(request.args.get("per_page", 50))))
+    offset   = (page - 1) * limit
+    search   = request.args.get("q", "").strip()
+    f_user   = request.args.get("user", "").strip()
+    f_action = request.args.get("action", "").strip()
+    f_from   = request.args.get("from", "").strip()
+    f_to     = request.args.get("to", "").strip()
+
+    conditions, args = [], []
+
     if search:
-        sql += (" WHERE action LIKE ? OR item_name LIKE ? OR detail LIKE ? "
-                "OR username LIKE ? OR item_serial LIKE ? OR item_sku LIKE ? "
-                "OR product_name LIKE ? OR CAST(item_id AS TEXT) LIKE ?")
-        s    = f"%{search}%"
-        args = [s]*8
+        conditions.append("(action LIKE ? OR item_name LIKE ? OR detail LIKE ? "
+                          "OR username LIKE ? OR item_serial LIKE ? OR item_sku LIKE ? "
+                          "OR product_name LIKE ? OR CAST(item_id AS TEXT) LIKE ?)")
+        s = f"%{search}%"
+        args += [s] * 8
+    if f_user:
+        conditions.append("username = ?")
+        args.append(f_user)
+    if f_action:
+        conditions.append("action = ?")
+        args.append(f_action)
+    if f_from:
+        conditions.append("ts >= ?")
+        args.append(f_from)
+    if f_to:
+        conditions.append("ts < date(?, '+1 day')")
+        args.append(f_to)
+
+    sql = "SELECT * FROM audit_log"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+
     total = query(f"SELECT COUNT(*) FROM ({sql})", args, one=True)[0]
+    pages = max(1, (total + limit - 1) // limit)
     sql  += f" ORDER BY id DESC LIMIT {limit} OFFSET {offset}"
-    return jsonify({"rows": [dict(r) for r in query(sql, args)], "total": total, "page": page})
+    return jsonify({"rows": [dict(r) for r in query(sql, args)],
+                    "total": total, "page": page, "pages": pages})
+
+
+# ── Settings (tenant branding) ────────────────────────────────────────────────
+
+@bp.route("/api/settings")
+@login_required
+def api_get_settings():
+    rows = query("SELECT key, value FROM settings")
+    return jsonify({r["key"]: r["value"] for r in rows})
+
+@bp.route("/api/settings", methods=["POST"])
+@login_required
+@admin_required
+def api_save_settings():
+    d = request.json or {}
+    for key, value in d.items():
+        if key not in ("brand_name", "brand_color"):
+            continue
+        existing = query("SELECT key FROM settings WHERE key=?", [key], one=True)
+        if existing:
+            execute("UPDATE settings SET value=? WHERE key=?", [value, key])
+        else:
+            execute("INSERT INTO settings (key,value) VALUES (?,?)", [key, value])
+    log_action("SETTINGS_UPDATE", detail=str(d))
+    return jsonify({"ok": True})
+
+
+# ── API Keys ──────────────────────────────────────────────────────────────────
+
+@bp.route("/api/keys")
+@login_required
+@admin_required
+def api_list_keys():
+    from flask import g
+    from app.stripe_billing import PLANS
+    plan_key = g.tenant.get("plan", "starter") if hasattr(g, "tenant") and g.tenant else "starter"
+    if not PLANS.get(plan_key, {}).get("api_access", False):
+        return jsonify({"ok": False, "msg": "API key access requires Enterprise plan."})
+    rows = query("""SELECT ak.id, ak.name, ak.key_prefix, ak.created_at, ak.last_used,
+                           ak.active, u.email as user_email
+                    FROM api_keys ak JOIN users u ON u.id=ak.user_id
+                    ORDER BY ak.id DESC""")
+    return jsonify({"ok": True, "keys": [dict(r) for r in rows]})
+
+@bp.route("/api/keys", methods=["POST"])
+@login_required
+@admin_required
+def api_create_key():
+    import hashlib as _hl
+    import secrets as _sec
+    from flask import g
+    from app.stripe_billing import PLANS
+    plan_key = g.tenant.get("plan", "starter") if hasattr(g, "tenant") and g.tenant else "starter"
+    if not PLANS.get(plan_key, {}).get("api_access", False):
+        return jsonify({"ok": False, "msg": "API key access requires Enterprise plan."})
+    d    = request.json or {}
+    name = (d.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "msg": "Key name required"})
+    raw_key  = "sk_live_" + _sec.token_hex(32)
+    key_hash = _hl.sha256(raw_key.encode()).hexdigest()
+    prefix   = raw_key[:16] + "…"
+    now      = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    kid = execute("INSERT INTO api_keys (user_id,name,key_hash,key_prefix,created_at) VALUES (?,?,?,?,?)",
+                  [session["user_id"], name, key_hash, prefix, now])
+    log_action("API_KEY_CREATE", detail=f"Key '{name}' created (#{kid})")
+    return jsonify({"ok": True, "id": kid, "key": raw_key,
+                    "msg": "Save this key — it won't be shown again."})
+
+@bp.route("/api/key/<int:key_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def api_delete_key(key_id):
+    execute("UPDATE api_keys SET active=0 WHERE id=?", [key_id])
+    log_action("API_KEY_REVOKE", detail=f"Key #{key_id} revoked")
+    return jsonify({"ok": True})
+
+
+# ── 2FA management ────────────────────────────────────────────────────────────
+
+@bp.route("/api/user/2fa", methods=["POST"])
+@login_required
+def api_toggle_2fa():
+    d       = request.json or {}
+    enabled = bool(d.get("enabled"))
+    uid     = session.get("user_id")
+    user    = query("SELECT email FROM users WHERE id=?", [uid], one=True)
+    if not user or not user["email"]:
+        return jsonify({"ok": False, "msg": "Account has no email address"})
+    from config import Config as _Cfg
+    if enabled and not _Cfg.SMTP_HOST:
+        return jsonify({"ok": False, "msg": "2FA requires email. Ask your admin to configure SMTP."})
+    execute("UPDATE users SET two_fa_enabled=? WHERE id=?", [1 if enabled else 0, uid])
+    log_action("2FA_TOGGLE", detail=f"2FA {'enabled' if enabled else 'disabled'} for user #{uid}")
+    return jsonify({"ok": True, "enabled": enabled})
+
+
+# ── Item limit enforcement ────────────────────────────────────────────────────
+
+def _check_item_limit():
+    """Returns (allowed, msg). Call before inserting a new item."""
+    from flask import g
+    from app.stripe_billing import PLANS
+    plan_key  = g.tenant.get("plan", "starter") if hasattr(g, "tenant") and g.tenant else "starter"
+    max_items = PLANS.get(plan_key, PLANS["starter"]).get("max_items")
+    if max_items is None:
+        return True, None
+    current = query("SELECT COUNT(*) FROM items WHERE active=1", one=True)[0]
+    if current >= max_items:
+        plan_name = PLANS.get(plan_key, {}).get("name", plan_key)
+        return False, (f"Item limit reached ({max_items} on {plan_name} plan). "
+                       f"Upgrade your plan to add more items.")
+    return True, None
 
 
 # ── Export / Import ───────────────────────────────────────────────────────────
@@ -1334,6 +1754,68 @@ def export_excel():
     return send_file(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                      as_attachment=True,
                      download_name=f"countdepot_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx")
+
+
+@bp.route("/import/template")
+@login_required
+@perm_required("import_export")
+def import_template():
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        return "openpyxl not installed", 500
+    wb  = openpyxl.Workbook()
+    ws  = wb.active
+    ws.title = "Import Template"
+    headers = ["Name *", "Category", "Product Template", "Serial Number",
+               "Vendor SKU", "Manufacturer", "Model", "Condition",
+               "Shelf / Location", "Owner / Company", "Purchase Date (YYYY-MM-DD)",
+               "Distributor", "PO Number", "Cost Price ($)", "Sale Price ($)",
+               "Qty (leave blank for serial-tracked)", "Notes"]
+    example = ["Dell Latitude 5520", "Laptops", "Dell Latitude", "ABC123456",
+               "", "Dell", "Latitude 5520", "New", "A-12", "Acme Corp",
+               "2024-01-15", "CDW", "PO-2024-001", "850.00", "1200.00", "", "Arrived in good condition"]
+    hfill = PatternFill("solid", fgColor="0F172A")
+    hfont = Font(color="FFFFFF", bold=True, size=10)
+    rfill = PatternFill("solid", fgColor="F0F9FF")
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(row=1, column=col, value=h)
+        c.fill = hfill; c.font = hfont
+        c.alignment = Alignment(horizontal="center", wrap_text=True)
+        ws.column_dimensions[c.column_letter].width = max(16, len(h) + 2)
+    for col, v in enumerate(example, 1):
+        c = ws.cell(row=2, column=col, value=v)
+        c.fill = rfill; c.font = Font(size=10, italic=True, color="475569")
+    ws2 = wb.create_sheet("Instructions")
+    instructions = [
+        ("CountDepot Import Template — Instructions", True),
+        ("", False),
+        ("Required columns:", True),
+        ("  Name *  — Item name (required)", False),
+        ("", False),
+        ("Optional but recommended:", True),
+        ("  Category       — Must match an existing category name exactly", False),
+        ("  Serial Number  — Required if product has serial tracking enabled", False),
+        ("  Purchase Date  — Format: YYYY-MM-DD (e.g. 2024-06-15)", False),
+        ("  Cost Price     — Numbers only, no $ sign (e.g. 850.00)", False),
+        ("  Condition      — One of: New, Used-VG, Used-Good, Used, For Parts", False),
+        ("", False),
+        ("Tips:", True),
+        ("  - Leave Qty blank for serial-tracked items (one row = one physical item)", False),
+        ("  - Fill in Qty for bulk/consumable items (one row = many units)", False),
+        ("  - Delete the example row (row 2) before importing", False),
+        ("  - Use the Preview button to check for errors before committing", False),
+    ]
+    ws2.column_dimensions["A"].width = 60
+    for row, (text, bold) in enumerate(instructions, 1):
+        c = ws2.cell(row=row, column=1, value=text)
+        c.font = Font(bold=bold, size=11 if bold else 10)
+    output = io.BytesIO()
+    wb.save(output); output.seek(0)
+    return send_file(output,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name="countdepot_import_template.xlsx")
 
 
 @bp.route("/import/excel", methods=["POST"])

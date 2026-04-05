@@ -377,3 +377,18 @@ def api_tenants():
     for t in tenants:
         t["stats"] = _tenant_stats(t["slug"])
     return jsonify(tenants)
+
+
+
+# ── Manual backup ─────────────────────────────────────────────────────────────
+
+@bp.route("/_platform/backup", methods=["POST"])
+@platform_login_required
+def platform_backup():
+    from app.platform import backup_all_dbs
+    try:
+        backup_dir, files = backup_all_dbs()
+        return jsonify({"ok": True, "dir": backup_dir, "files": files,
+                        "count": len(files)})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})

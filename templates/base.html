@@ -41,7 +41,7 @@ body.dark .label{color:#94a3b8}
 body.dark .sb-section{color:#475569}
 .mono{font-family:'IBM Plex Mono',monospace}
 .layout{display:flex;height:100vh;overflow:hidden}
-.sidebar{width:210px;background:#0f172a;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
+.sidebar{width:210px;background:var(--sidebar-bg,#0f172a);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
 .sb-logo{padding:12px 8px 14px;border-bottom:1px solid rgba(255,255,255,0.08)}
 .sb-brand{color:#fff;font-size:15px;font-weight:600;letter-spacing:-0.3px}
 .sb-sub{color:#475569;font-size:11px;margin-top:1px;font-family:'IBM Plex Mono',monospace}
@@ -147,11 +147,14 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
 <script>if(localStorage.getItem('darkMode')==='1')document.documentElement.classList.add('dark-init');</script>
 <style>.dark-init{background:#0f172a!important}</style>
 </head>
+{% if brand_color and brand_color != '#0f172a' %}
+<style>:root{--sidebar-bg:{{ brand_color }}}</style>
+{% endif %}
 <body>
 <div class="layout">
   <aside class="sidebar">
     <div class="sb-logo">
-      <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:16px;color:#f1f5f9;padding:0 10px">CountDepot</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:16px;color:#f1f5f9;padding:0 10px">{{ brand_name or 'CountDepot' }}</div>
       {% if g.get('tenant') %}<div class="sb-sub" style="color:#64748b;font-size:11px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 10px">{{ g.tenant.get('name','') }}</div>{% endif %}
     </div>
     <div class="sb-section">Inventory</div>
@@ -191,6 +194,18 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
       <a href="/report/activity" class="navlink {% if request.path == '/report/activity' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         <span>Activity</span>
+      </a>
+      <a href="/report/user-activity" class="navlink {% if request.path == '/report/user-activity' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/><path d="M16 11l2 2 4-4" stroke-width="2.5"/></svg>
+        <span>User Activity</span>
+      </a>
+      <a href="/report/checkout-history" class="navlink {% if request.path == '/report/checkout-history' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="M9 12h6M9 16h4"/></svg>
+        <span>Checkout History</span>
+      </a>
+      <a href="/report/locations" class="navlink {% if request.path == '/report/locations' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span>Locations</span>
       </a>
       <a href="/audit" class="navlink {% if request.path == '/audit' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>

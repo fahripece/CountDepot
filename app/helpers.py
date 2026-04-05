@@ -162,17 +162,32 @@ def get_user_perms(user_id=None, role=None, perm_str=None):
     return stored & set(PERM_KEYS)
 
 def has_perm(perm):
-    if session.get("role") == "admin":
+    role = session.get("role") or getattr(g, "api_user_role", None)
+    if role == "admin":
         return True
-    return perm in set(session.get("permissions", "").split(","))
+    perms = session.get("permissions") or getattr(g, "api_user_permissions", "")
+    return perm in set(perms.split(","))
 
 
 # ── Auth decorators ───────────────────────────────────────────────────────────
 
+def _auth_user_id():
+    """Return current user ID from session or API key auth."""
+    return session.get("user_id") or getattr(g, "api_user_id", None)
+
+def _auth_role():
+    """Return current user role from session or API key auth."""
+    return session.get("role") or getattr(g, "api_user_role", None)
+
+def _auth_perms():
+    """Return current user permissions string from session or API key auth."""
+    return session.get("permissions") or getattr(g, "api_user_permissions", "")
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not session.get("user_id"):
+        if not _auth_user_id():
             if request.path.startswith(("/api/", "/export", "/import")):
                 return jsonify({"ok": False, "msg": "Not logged in"}), 401
             return redirect(url_for("auth.login_page"))
@@ -183,7 +198,7 @@ def perm_required(perm):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            if not session.get("user_id"):
+            if not _auth_user_id():
                 if request.path.startswith(("/api/", "/export", "/import")):
                     return jsonify({"ok": False, "msg": "Not logged in"}), 401
                 return redirect(url_for("auth.login_page"))
@@ -198,7 +213,7 @@ def perm_required(perm):
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if session.get("role") != "admin":
+        if _auth_role() != "admin":
             if request.path.startswith(("/api/", "/export", "/import")):
                 return jsonify({"ok": False, "msg": "Admin only"}), 403
             return redirect(url_for("main.inventory"))

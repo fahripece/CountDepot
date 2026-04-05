@@ -63,8 +63,16 @@ MIGRATIONS = [
     # users — session token for server-side invalidation
     ("users", "session_token",   "TEXT"),
 
+    # users — 2FA
+    ("users", "two_fa_enabled", "INTEGER NOT NULL DEFAULT 0"),
+
+    # items — inventory features
+    ("items", "expected_return_date",  "TEXT"),
+    ("items", "next_maintenance_date", "TEXT"),
+    ("items", "location_id",           "INTEGER"),
+    ("items", "depreciation_rate",     "REAL"),
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
-    # Example: ("items", "condition_notes", "TEXT")
 ]
 
 
@@ -250,6 +258,73 @@ def _init_db_conn(db):
             token      TEXT UNIQUE NOT NULL,
             expires_at TEXT NOT NULL,
             used       INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS locations (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT UNIQUE NOT NULL,
+            description TEXT,
+            created_at  TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS item_notes (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id    INTEGER NOT NULL REFERENCES items(id),
+            note       TEXT NOT NULL,
+            username   TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        );
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL REFERENCES users(id),
+            name        TEXT NOT NULL,
+            key_hash    TEXT NOT NULL UNIQUE,
+            key_prefix  TEXT NOT NULL,
+            created_at  TEXT NOT NULL,
+            last_used   TEXT,
+            active      INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS login_otp (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL REFERENCES users(id),
+            otp        TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used       INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS checkout_log (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id              INTEGER REFERENCES items(id),
+            item_name            TEXT,
+            checked_out_by       TEXT,
+            job_ref              TEXT,
+            checkout_date        TEXT,
+            expected_return_date TEXT,
+            checkin_date         TEXT,
+            checkin_note         TEXT,
+            checkin_by           TEXT,
+            duration_hours       REAL,
+            created_at           TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS item_reservations (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id       INTEGER NOT NULL REFERENCES items(id),
+            reserved_by   TEXT NOT NULL,
+            reserved_from TEXT NOT NULL,
+            reserved_to   TEXT NOT NULL,
+            purpose       TEXT,
+            created_by    TEXT,
+            created_at    TEXT NOT NULL,
+            cancelled     INTEGER DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS item_photos (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id     INTEGER NOT NULL REFERENCES items(id),
+            data_url    TEXT NOT NULL,
+            caption     TEXT,
+            uploaded_by TEXT,
+            created_at  TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS audit_log (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,

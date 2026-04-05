@@ -84,6 +84,67 @@
   {% endfor %}
 </div>
 
+<!-- BRANDING -->
+<div class="card" style="margin-bottom:20px">
+  <div style="margin-bottom:16px">
+    <div style="font-weight:600;font-size:15px">Workspace Branding</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:1px">Customise the sidebar name and accent color</div>
+  </div>
+  <div class="field-row">
+    <div class="field">
+      <label class="label">Workspace Display Name</label>
+      <input class="input" id="brand-name" placeholder="e.g. Acme IT Depot">
+    </div>
+    <div class="field">
+      <label class="label">Sidebar Color</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="color" id="brand-color" value="#0f172a" style="width:44px;height:36px;padding:2px;border:1px solid #e5e3de;border-radius:6px;cursor:pointer">
+        <input class="input" id="brand-color-hex" placeholder="#0f172a" style="flex:1;font-family:monospace" oninput="document.getElementById('brand-color').value=this.value">
+        <div style="width:32px;height:32px;border-radius:6px;border:1px solid #e5e3de" id="brand-preview"></div>
+      </div>
+    </div>
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="saveBranding()">Save Branding</button>
+  <span id="brand-saved" style="font-size:12px;color:#15803d;margin-left:10px;display:none">✓ Saved — refresh to see changes</span>
+</div>
+
+<!-- 2FA -->
+<div class="card" style="margin-bottom:20px">
+  <div style="margin-bottom:12px">
+    <div style="font-weight:600;font-size:15px">Two-Factor Authentication</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:1px">Add a one-time code sent to your email on each login</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <div id="tfa-status" style="font-size:13px;color:#64748b">Loading…</div>
+    <button class="btn btn-secondary btn-sm" id="tfa-btn" onclick="toggle2FA()" style="display:none"></button>
+  </div>
+  <div style="margin-top:10px;font-size:12px;color:#94a3b8">Requires email (SMTP) to be configured on the server.</div>
+</div>
+
+<!-- API KEYS -->
+<div class="card" style="margin-bottom:20px" id="apiKeysSection">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-weight:600;font-size:15px">API Keys</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:1px">Enterprise plan — REST API access with Bearer token auth</div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="openModal('newKeyModal')">+ Generate Key</button>
+  </div>
+  <div id="apiKeyList"><div style="font-size:13px;color:#94a3b8">Loading…</div></div>
+</div>
+
+<!-- LOCATIONS -->
+<div class="card" style="margin-bottom:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-weight:600;font-size:15px">Locations</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:1px">Track where items are stored or deployed</div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="openAddLocation()">+ Add Location</button>
+  </div>
+  <div id="locationList"><div style="color:#94a3b8;font-size:13px;padding:8px 0">Loading…</div></div>
+</div>
+
 </div><!-- end scroll area -->
 
 <!-- ADD USER MODAL -->
@@ -298,5 +359,169 @@ async function changeOwnPw(){
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
 // Modals only close via the ✕ button
+
+// ── Locations ──
+async function loadLocationList(){
+  const res=await fetch('/api/locations').then(r=>r.json());
+  const el=document.getElementById('locationList');
+  if(!res.length){el.innerHTML='<div style="color:#94a3b8;font-size:13px;padding:8px 0">No locations yet. Add one to start tracking where items are stored.</div>';return;}
+  el.innerHTML=res.map(l=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f0efec">
+    <div style="flex:1">
+      <div style="font-weight:600;font-size:13px">${escHtml(l.name)}</div>
+      ${l.description?`<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">${escHtml(l.description)}</div>`:''}
+    </div>
+    <button class="btn btn-danger btn-sm" onclick="deleteLocation(${l.id},'${escHtml(l.name)}')">Delete</button>
+  </div>`).join('');
+}
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function openAddLocation(){
+  document.getElementById('loc-name').value='';
+  document.getElementById('loc-desc').value='';
+  openModal('locationModal');
+}
+async function saveLocation(){
+  const name=document.getElementById('loc-name').value.trim();
+  if(!name){toast('Name is required','warn');return;}
+  const res=await api('/api/locations',{name,description:document.getElementById('loc-desc').value.trim()});
+  if(res.ok){toast('Location added ✓','ok');closeModal('locationModal');loadLocationList();}
+  else toast(res.msg||'Error','err');
+}
+async function deleteLocation(id,name){
+  if(!confirm(`Delete location "${name}"? Items assigned to it will not be deleted.`))return;
+  const res=await fetch('/api/location/'+id,{method:'DELETE',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name="csrf-token"]')?.content||''}}).then(r=>r.json());
+  if(res.ok){toast('Location deleted','warn');loadLocationList();}
+  else toast(res.msg||'Error','err');
+}
+loadLocationList();
+
+// ── Branding ──
+async function loadBranding(){
+  const s=await api('/api/settings');
+  if(s.brand_name)document.getElementById('brand-name').value=s.brand_name;
+  const col=s.brand_color||'#0f172a';
+  document.getElementById('brand-color').value=col;
+  document.getElementById('brand-color-hex').value=col;
+  document.getElementById('brand-preview').style.background=col;
+}
+document.getElementById('brand-color').addEventListener('input',function(){
+  document.getElementById('brand-color-hex').value=this.value;
+  document.getElementById('brand-preview').style.background=this.value;
+});
+async function saveBranding(){
+  const name=document.getElementById('brand-name').value.trim();
+  const color=document.getElementById('brand-color').value;
+  const res=await api('/api/settings',{brand_name:name,brand_color:color});
+  if(res.ok){const s=document.getElementById('brand-saved');s.style.display='inline';setTimeout(()=>s.style.display='none',4000);}
+  else toast(res.msg||'Error','err');
+}
+loadBranding();
+
+// ── 2FA ──
+let _2faEnabled=false;
+async function load2FA(){
+  try{
+    const r=await fetch('/api/user/me').then(r=>r.json());
+    _2faEnabled=!!(r.two_fa_enabled);
+  }catch(e){_2faEnabled=false;}
+  const statusEl=document.getElementById('tfa-status');
+  const btn=document.getElementById('tfa-btn');
+  statusEl.innerHTML=_2faEnabled
+    ?'<span style="color:#15803d;font-weight:600">✓ Enabled</span> — a code is required on each login'
+    :'<span style="color:#94a3b8">Disabled</span> — no extra verification at login';
+  btn.textContent=_2faEnabled?'Disable 2FA':'Enable 2FA';
+  btn.style.display='';
+  btn.className='btn btn-sm '+(_2faEnabled?'btn-danger':'btn-secondary');
+}
+async function toggle2FA(){
+  const res=await api('/api/user/2fa',{enabled:!_2faEnabled});
+  if(res.ok){toast(res.enabled?'2FA enabled ✓':'2FA disabled','ok');load2FA();}
+  else toast(res.msg||'Error','err');
+}
+load2FA();
+
+// ── API Keys ──
+async function loadApiKeys(){
+  const res=await fetch('/api/keys').then(r=>r.json());
+  const el=document.getElementById('apiKeyList');
+  if(!res.ok){el.innerHTML=`<div style="font-size:13px;color:#94a3b8">${escHtml(res.msg||'Not available on this plan')}</div>`;return;}
+  const keys=res.keys;
+  if(!keys.length){el.innerHTML='<div style="font-size:13px;color:#94a3b8">No API keys yet. Generate one to start.</div>';return;}
+  el.innerHTML=keys.map(k=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0efec">
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px">${escHtml(k.name)}</div>
+        <div style="font-size:11px;color:#94a3b8;font-family:monospace;margin-top:2px">${escHtml(k.key_prefix)} · created ${k.created_at?.substring(0,10)||'?'} · last used ${k.last_used?.substring(0,10)||'never'}</div>
+      </div>
+      <span style="font-size:11px;padding:1px 7px;border-radius:4px;${k.active?'background:#f0fdf4;color:#15803d':'background:#f5f5f4;color:#94a3b8'}">${k.active?'Active':'Revoked'}</span>
+      ${k.active?`<button class="btn btn-danger btn-sm" onclick="revokeKey(${k.id},'${escHtml(k.name)}')">Revoke</button>`:''}
+    </div>`).join('');
+}
+async function generateKey(){
+  const name=document.getElementById('new-key-name').value.trim();
+  if(!name){toast('Key name required','warn');return;}
+  const res=await api('/api/keys',{name});
+  if(res.ok){
+    document.getElementById('new-key-value').textContent=res.key;
+    document.getElementById('new-key-result').style.display='';
+    document.getElementById('new-key-footer').style.display='none';
+    toast('Key generated — save it now!','ok');
+    loadApiKeys();
+  } else toast(res.msg||'Error','err');
+}
+function copyKey(){
+  const k=document.getElementById('new-key-value').textContent;
+  navigator.clipboard.writeText(k).then(()=>toast('Copied ✓','ok')).catch(()=>toast('Copy failed','err'));
+}
+async function revokeKey(id,name){
+  if(!confirm(`Revoke key "${name}"? Any integrations using it will stop working immediately.`))return;
+  const res=await fetch('/api/key/'+id,{method:'DELETE',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken}}).then(r=>r.json());
+  if(res.ok){toast('Key revoked','warn');loadApiKeys();}
+  else toast(res.msg||'Error','err');
+}
+document.getElementById('newKeyModal')?.addEventListener('click',function(e){
+  if(e.target===this){
+    document.getElementById('new-key-result').style.display='none';
+    document.getElementById('new-key-footer').style.display='';
+    document.getElementById('new-key-name').value='';
+  }
+});
+loadApiKeys();
 </script>
+
+<!-- NEW API KEY MODAL -->
+<div class="overlay" id="newKeyModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Generate API Key</div><button class="modal-close" onclick="closeModal('newKeyModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:#92400e">
+        ⚠ The full key is only shown once — save it immediately.
+      </div>
+      <div class="field"><label class="label">Key Name *</label><input class="input" id="new-key-name" placeholder="e.g. Zapier integration, Mobile app"></div>
+      <div id="new-key-result" style="display:none">
+        <div style="font-size:11px;font-weight:600;color:#15803d;margin-bottom:6px">✓ Key created — copy it now:</div>
+        <div style="font-family:monospace;font-size:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:10px;word-break:break-all" id="new-key-value"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="copyKey()">Copy Key</button>
+      </div>
+    </div>
+    <div class="modal-footer" id="new-key-footer">
+      <button class="btn btn-secondary" onclick="closeModal('newKeyModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="generateKey()">Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD LOCATION MODAL -->
+<div class="overlay" id="locationModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Add Location</div><button class="modal-close" onclick="closeModal('locationModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label class="label">Name *</label><input class="input" id="loc-name" placeholder="e.g. Warehouse A, Server Room, Van #3"></div>
+      <div class="field"><label class="label">Description <span style="font-weight:400;font-size:10px;color:#94a3b8">(optional)</span></label><input class="input" id="loc-desc" placeholder="Short description"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('locationModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLocation()">Add Location</button>
+    </div>
+  </div>
+</div>
 {% endblock %}

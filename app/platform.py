@@ -51,6 +51,15 @@ def init_platform_db():
             used       INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS cross_login_tokens (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_slug TEXT NOT NULL,
+            user_id     INTEGER NOT NULL,
+            token       TEXT NOT NULL UNIQUE,
+            expires_at  TEXT NOT NULL,
+            used        INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL
+        );
     """)
     # Migrate existing rows
     cols = [r[1] for r in db.execute("PRAGMA table_info(tenants)").fetchall()]
@@ -96,6 +105,31 @@ def create_tenant(slug, name, plan="standard"):
     # Create the tenant's data directory
     tenant_dir = os.path.join(Config.TENANTS_DIR, slug)
     os.makedirs(tenant_dir, exist_ok=True)
+
+
+def backup_all_dbs():
+    """Copy all tenant DBs + platform.db to data/backups/YYYY-MM-DD_HH-MM/.
+    Returns (backup_dir, list_of_files_backed_up)."""
+    import shutil
+    from datetime import datetime as _dt
+    stamp      = _dt.now().strftime("%Y-%m-%d_%H-%M")
+    backup_dir = os.path.join(Config.DATA_DIR, "backups", stamp)
+    os.makedirs(backup_dir, exist_ok=True)
+    backed_up  = []
+    # Platform DB
+    if os.path.exists(Config.PLATFORM_DB_PATH):
+        dst = os.path.join(backup_dir, "platform.db")
+        shutil.copy2(Config.PLATFORM_DB_PATH, dst)
+        backed_up.append("platform.db")
+    # Tenant DBs
+    if os.path.isdir(Config.TENANTS_DIR):
+        for slug in os.listdir(Config.TENANTS_DIR):
+            db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
+            if os.path.exists(db_path):
+                dst = os.path.join(backup_dir, f"{slug}_inventory.db")
+                shutil.copy2(db_path, dst)
+                backed_up.append(f"{slug}/inventory.db")
+    return backup_dir, backed_up
 
 
 def set_tenant_sector(slug, sector):

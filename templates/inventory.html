@@ -76,8 +76,13 @@
     <option value="">All Status</option>
     <option value="in">Available</option>
     <option value="out">Checked Out</option>
+    <option value="overdue">🔴 Overdue</option>
     <option value="low">🔴 Low Stock</option>
     <option value="incomplete">⚠ Incomplete</option>
+    <option value="maintenance">🔧 Maintenance Due</option>
+  </select>
+  <select id="locFilter" class="select" style="width:auto;min-width:130px" onchange="loadItems()">
+    <option value="">All Locations</option>
   </select>
   <select id="sortFilter" class="select" style="width:auto;min-width:110px" onchange="loadItems()">
     <option value="name">Sort: Name</option>
@@ -128,6 +133,44 @@
     <div id="dp-children-section" style="display:none;margin-top:12px">
       <div class="section-hdr" style="margin-top:0">🔗 Removed Components (Linked Items)</div>
       <div id="dp-children-list"></div>
+    </div>
+    <div id="dp-notes-section" style="margin-top:12px">
+      <div class="section-hdr" style="margin-top:0">📝 Notes</div>
+      <div id="dp-notes-list" style="margin-bottom:10px"></div>
+      <div style="display:flex;gap:6px">
+        <input class="input" id="dp-note-input" placeholder="Add a note…" style="flex:1;font-size:12px" onkeydown="if(event.key==='Enter')addNote()">
+        <button class="btn btn-secondary btn-sm" onclick="addNote()">Add</button>
+      </div>
+    </div>
+    <div id="dp-reservations-section" style="margin-top:12px">
+      <div class="section-hdr" style="margin-top:0">📅 Reservations</div>
+      <div id="dp-reservations-list" style="margin-bottom:10px"></div>
+      <div id="dp-reservation-form" style="border:1px solid #e5e3de;border-radius:8px;padding:12px">
+        <div style="font-size:11px;font-weight:600;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Add Reservation</div>
+        <div class="field-row">
+          <div class="field"><label class="label">Reserved For *</label><input class="input" id="res-by" placeholder="Name or team"></div>
+          <div class="field"><label class="label">Purpose</label><input class="input" id="res-purpose" placeholder="Optional"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label class="label">From *</label><input class="input" id="res-from" type="date"></div>
+          <div class="field"><label class="label">To *</label><input class="input" id="res-to" type="date"></div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="addReservation()">+ Add Reservation</button>
+      </div>
+    </div>
+    <div id="dp-photos-section" style="margin-top:12px">
+      <div class="section-hdr" style="margin-top:0">📷 Photos</div>
+      <div id="dp-photos-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="file" id="dp-photo-file" accept="image/*" style="font-size:12px;flex:1" onchange="photoFileChanged()">
+        <button class="btn btn-secondary btn-sm" id="dp-photo-upload-btn" style="display:none" onclick="uploadPhoto()">Upload</button>
+      </div>
+      <div id="dp-photo-preview" style="margin-top:8px;display:none">
+        <img id="dp-photo-preview-img" style="max-width:100%;max-height:160px;border-radius:6px;border:1px solid #e5e3de;object-fit:cover">
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <input class="input" id="dp-photo-caption" placeholder="Caption (optional)" style="flex:1;font-size:12px">
+        </div>
+      </div>
     </div>
   </div>
   <div class="detail-foot" id="dp-actions"></div>
@@ -295,6 +338,10 @@
               </select>
             </div>
             <div class="field">
+              <label class="label">Depreciation Rate (% per year) <span style="font-weight:400;font-size:10px;color:#94a3b8">for current value tracking</span></label>
+              <input class="input" id="fi-depreciation" type="number" step="0.1" min="0" max="100" placeholder="e.g. 20 for 20%/yr">
+            </div>
+            <div class="field">
               <label class="label">eBay Status</label>
               <select class="select" id="fi-ebay-status" onchange="document.getElementById('fi-ebay-fields').style.display=this.value!=='not_listed'?'':'none'">
                 <option value="not_listed">Not Listed</option>
@@ -338,10 +385,32 @@
       </div>
       <div class="field"><label class="label">Tech Name / Initials *</label><input class="input" id="co-who"></div>
       <div class="field"><label class="label">Job Reference / Customer</label><input class="input" id="co-jobref"></div>
+      <div class="field"><label class="label">Expected Return Date <span style="font-weight:400;font-size:10px;color:#94a3b8">(optional)</span></label><input class="input" id="co-return-date" type="date"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('checkoutModal')">Cancel</button>
       <button class="btn btn-danger" id="coBtn" onclick="confirmCheckout()">📤 Check Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CHECK IN MODAL ══ -->
+<div class="overlay" id="checkinModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">📥 Check In Item</div><button class="modal-close" onclick="closeModal('checkinModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#f8f8f7;border-radius:7px;padding:12px;margin-bottom:16px">
+        <div style="font-weight:600" id="ci-item-name"></div>
+        <div style="font-size:12px;color:#888;margin-top:2px" id="ci-item-sub"></div>
+      </div>
+      <div class="field">
+        <label class="label">Check-in Note <span style="font-weight:400;font-size:10px;color:#94a3b8">(optional — condition, issues, etc.)</span></label>
+        <textarea class="input" id="ci-note" rows="3" placeholder="e.g. Returned in good condition. Cable missing."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('checkinModal')">Cancel</button>
+      <button class="btn btn-success" id="ciBtn" onclick="confirmCheckin()">📥 Check In</button>
     </div>
   </div>
 </div>
@@ -555,13 +624,25 @@ const PER_PAGE=50;
 function loadItemsDebounced(){clearTimeout(debTimer);debTimer=setTimeout(()=>loadItemsPage(1),300)}
 async function loadItems(){await loadItemsPage(currentPage);}
 
+async function loadLocations(){
+  try{
+    const locs=await fetch('/api/locations').then(r=>r.json());
+    const sel=document.getElementById('locFilter');
+    const cur=sel.value;
+    sel.innerHTML='<option value="">All Locations</option>';
+    locs.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;if(String(l.id)===String(cur))o.selected=true;sel.appendChild(o);});
+  }catch(e){}
+}
+loadLocations();
+
 async function loadItemsPage(page){
   currentPage=page;
   const q=document.getElementById('searchInput').value;
   const cat=document.getElementById('catFilter').value;
   const status=document.getElementById('statusFilter').value;
   const sort=document.getElementById('sortFilter').value;
-  const params=new URLSearchParams({q,cat,status,sort,page,per_page:PER_PAGE});
+  const loc=document.getElementById('locFilter').value;
+  const params=new URLSearchParams({q,cat,status,sort,loc,page,per_page:PER_PAGE});
   const data=await fetch('/api/items?'+params).then(r=>r.json());
   const items=data.items||data;
   totalItems=data.total!=null?data.total:items.length;
@@ -617,7 +698,12 @@ function renderTable(items){
       const warn=item.is_low?' style="color:#b91c1c;font-weight:600"':'';
       status=`<span${warn}>${item.available} / ${item.qty}</span>${item.is_low?'<span style="font-size:10px;margin-left:4px;color:#b91c1c">🔴</span>':''}`;
     } else {
-      status=item.checked_out?`<span class="tag tag-out">📤 ${item.checkout_by||'?'}</span>`:`<span class="tag tag-in">✓ In</span>`;
+      if(item.checked_out){
+        const overdueTag=item.overdue?`<span style="display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;background:#b91c1c;color:#fff;border-radius:3px;margin-left:4px">OVERDUE</span>`:'';
+        status=`<span class="tag tag-out">📤 ${item.checkout_by||'?'}</span>${overdueTag}`;
+      } else {
+        status=`<span class="tag tag-in">✓ In</span>`;
+      }
     }
     const cost=item.cost_price!=null?`<span style="font-size:12px;color:#475569">$${parseFloat(item.cost_price).toFixed(2)}</span>`:'<span style="color:#ddd">—</span>';
     let saleProfit='<span style="color:#ddd">—</span>';
@@ -649,7 +735,12 @@ function showDetail(item){
   document.getElementById('dp-model').textContent=[item.manufacturer,item.model].filter(Boolean).join(' · ');
   let statusHtml='';
   if(item.qty!==null) statusHtml=`<span class="tag ${item.is_low?'tag-out':'tag-in'}">${item.is_low?'🔴 Low':'✓'} ${item.available} available of ${item.qty}</span>`;
-  else statusHtml=item.checked_out?`<span class="tag tag-out">📤 Out — ${item.checkout_by||'?'}</span>`:`<span class="tag tag-in">✓ Available</span>`;
+  else if(item.checked_out){
+    const overdueTag=item.overdue?`<span style="display:inline-block;font-size:9px;font-weight:700;padding:1px 7px;background:#b91c1c;color:#fff;border-radius:3px;margin-left:6px">OVERDUE</span>`:'';
+    statusHtml=`<span class="tag tag-out">📤 Out — ${item.checkout_by||'?'}</span>${overdueTag}`;
+  } else {
+    statusHtml=`<span class="tag tag-in">✓ Available</span>`;
+  }
   document.getElementById('dp-status').innerHTML=statusHtml;
   const rows=[];
   if(item.product_name) rows.push(['Product',`<span class="product-badge">📦 ${item.product_name}</span>`]);
@@ -676,11 +767,28 @@ function showDetail(item){
   if(item.sale_price!=null){
     const p=item.profit; rows.push(['Sale Price',`$${parseFloat(item.sale_price).toFixed(2)}${p!=null?(p>=0?` <span style="color:#15803d">+$${p.toFixed(2)}</span>`:`<span style="color:#b91c1c">-$${Math.abs(p).toFixed(2)}</span>`):''}` ]);
   }
-  if(item.checked_out){rows.push(['Out Since',item.checkout_date||'—']);rows.push(['Job Ref',item.job_ref||'—']);}
+  if(item.location_name) rows.push(['Location',`<span style="font-size:12px;background:#f0fdf4;color:#15803d;padding:1px 8px;border-radius:4px;border:1px solid #bbf7d0">${item.location_name}</span>`]);
+  if(item.next_maintenance_date){
+    const maintOver=item.maintenance_overdue;
+    rows.push(['Next Maintenance',`<span style="${maintOver?'color:#b91c1c;font-weight:600':'color:#0f172a'}">${item.next_maintenance_date}${maintOver?' 🔧 OVERDUE':''}</span>`]);
+  }
+  if(item.checked_out){
+    rows.push(['Out Since',item.checkout_date||'—']);
+    rows.push(['Job Ref',item.job_ref||'—']);
+    if(item.expected_return_date){
+      const overdue=item.overdue;
+      rows.push(['Expected Return',`<span style="${overdue?'color:#b91c1c;font-weight:600':'color:#0f172a'}">${item.expected_return_date}${overdue?' — OVERDUE':''}</span>`]);
+    }
+  }
   const ebayStatus=item.ebay_status||'not_listed';
   const ebayBadge=ebayStatus==='listed'?`<span class="ebay-badge ebay-listed">eBay: Listed${item.ebay_listing_id?' #'+item.ebay_listing_id:''}</span>`:ebayStatus==='sold'?`<span class="ebay-badge ebay-sold">eBay: Sold</span>`:`<span class="ebay-badge ebay-not-listed">eBay: Not Listed</span>`;
   rows.push(['eBay',ebayBadge+` <button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 8px;margin-left:4px" onclick="openEbay(${item.id})">Update</button>`]);
   if(item.parent_item_id) rows.push(['Origin','<span class="lineage-link" onclick="jumpToItem('+item.parent_item_id+')">⬆ View parent item</span>']);
+  if(item.depreciation_rate){
+    const yrs=item.purchase_date?((new Date()-new Date(item.purchase_date))/(1000*60*60*24*365.25)):0;
+    const curVal=item.cost_price!=null?Math.max(0,item.cost_price*(1-(item.depreciation_rate/100)*yrs)):null;
+    rows.push(['Depreciation',`${item.depreciation_rate}% /yr${curVal!=null?' · <strong>Current value: $'+curVal.toFixed(2)+'</strong>':''}`]);
+  }
   if(item.notes) rows.push(['Notes',item.notes]);
   if(item.is_incomplete) rows.push(['⚠ Incomplete',`<span style="color:#92400e;font-size:12px">Missing: ${item.missing_fields.join(', ')}</span>`]);
   document.getElementById('dp-fields').innerHTML=rows.map(([l,v])=>`<div class="dl-row"><div class="dl-l">${l}</div><div class="dl-v">${v}</div></div>`).join('');
@@ -690,7 +798,7 @@ function showDetail(item){
   } else if(item.qty!==null){
     acts=`<button class="btn btn-primary" onclick="openQtyAdjust(${item.id})">Adjust Quantity</button>`;
   } else if(item.checked_out){
-    acts=`<button class="btn btn-success" onclick="doCheckin(${item.id})">📥 Check In</button>`;
+    acts=`<button class="btn btn-success" onclick="openCheckin(${item.id})">📥 Check In</button>`;
   } else {
     acts=`<button class="btn btn-danger" onclick="closeDetail();openCheckout(${item.id})">📤 Check Out</button>`;
   }
@@ -703,6 +811,9 @@ function showDetail(item){
   document.getElementById('dp-actions').innerHTML=acts;
   loadModHistory(item.id);
   loadChildItems(item.id);
+  loadNotes(item.id);
+  loadReservations(item.id);
+  loadPhotos(item.id);
   document.getElementById('detailPanel').classList.add('open');
 }
 function closeDetail(){document.getElementById('detailPanel').classList.remove('open');currentDetailId=null;}
@@ -871,6 +982,7 @@ function _clearItemForm(){
   document.getElementById('fi-taxrate').value='';
   document.getElementById('fi-taxrate-row').style.display='none';
   document.getElementById('fi-scan-checkout').value='-1';
+  document.getElementById('fi-depreciation').value='';
   document.getElementById('fi-ebay-status').value='not_listed';
   document.getElementById('fi-ebay-id').value='';
   document.getElementById('fi-ebay-price').value='';
@@ -919,6 +1031,7 @@ function editItem(item){
     else if(item.tax_paid===0){document.getElementById('fi-tax-no').checked=true;}
     document.getElementById('fi-taxrate').value=item.tax_rate||'';
     document.getElementById('fi-scan-checkout').value=item.require_scan_checkout!=null?item.require_scan_checkout:'-1';
+    document.getElementById('fi-depreciation').value=item.depreciation_rate||'';
     const es=item.ebay_status||'not_listed';
     document.getElementById('fi-ebay-status').value=es;
     document.getElementById('fi-ebay-id').value=item.ebay_listing_id||'';
@@ -972,6 +1085,7 @@ async function saveItem(){
     tax_paid:taxYes?1:(taxNo?0:-1),
     tax_rate:parseFloat(document.getElementById('fi-taxrate').value)||0,
     require_scan_checkout:parseInt(document.getElementById('fi-scan-checkout').value),
+    depreciation_rate:parseFloat(document.getElementById('fi-depreciation').value)||null,
     ebay_status:document.getElementById('fi-ebay-status').value,
     ebay_listing_id:document.getElementById('fi-ebay-id').value.trim()||null,
     ebay_listed_price:document.getElementById('fi-ebay-price').value||null,
@@ -1028,7 +1142,7 @@ function openCheckout(id){
   pendingCheckoutId=id;_scanVerified=false;
   document.getElementById('co-item-name').textContent=item.name;
   document.getElementById('co-serial').textContent=item.serial||item.sku||item.internal_sku||item.model||'';
-  document.getElementById('co-who').value='';document.getElementById('co-jobref').value='';
+  document.getElementById('co-who').value='';document.getElementById('co-jobref').value='';document.getElementById('co-return-date').value='';
   // Resolve scan requirement from item + product data returned by API
   const itemReq=item.require_scan_checkout!=null?item.require_scan_checkout:-1;
   const prodReq=item.product_scan_req||0;  // returned by JOIN in api_items
@@ -1062,14 +1176,32 @@ async function confirmCheckout(){
   if(!who){toast('Please enter tech name/initials','warn');return;}
   const btn=document.getElementById('coBtn');btn.disabled=true;btn.textContent='Checking out…';
   const scannedCode=document.getElementById('co-scan-input')?.value.trim()||'';
-  const res=await api('/api/checkout',{id:pendingCheckoutId,who,job_ref:document.getElementById('co-jobref').value.trim(),scanned_code:scannedCode});
+  const res=await api('/api/checkout',{id:pendingCheckoutId,who,job_ref:document.getElementById('co-jobref').value.trim(),scanned_code:scannedCode,expected_return_date:document.getElementById('co-return-date').value||null});
   btn.disabled=false;btn.innerHTML='📤 Check Out';
   if(res.ok){toast('Checked out ✓','ok');closeModal('checkoutModal');await loadItems();const u=allItems.find(i=>i.id===pendingCheckoutId);if(u)showDetail(u);}
   else if(res.msg==='scan_required') toast('Scan required — please verify the barcode first','warn');
   else if(res.msg==='scan_mismatch') toast(res.detail||'Scan mismatch','err');
   else toast(res.msg||'Error','err');
 }
-async function doCheckin(id){const item=allItems.find(i=>i.id===id);if(!item||!confirm(`Check in "${item.name}"?`))return;const res=await api('/api/checkin',{id});if(res.ok){toast('Checked in ✓','ok');await loadItems();}else toast(res.msg||'Error','err');}
+let pendingCheckinId=null;
+function openCheckin(id){
+  const item=allItems.find(i=>i.id===id);if(!item)return;
+  pendingCheckinId=id;
+  document.getElementById('ci-item-name').textContent=item.name;
+  document.getElementById('ci-item-sub').textContent=[item.checkout_by&&'Out: '+item.checkout_by,item.job_ref&&'Job: '+item.job_ref].filter(Boolean).join(' · ');
+  document.getElementById('ci-note').value='';
+  openModal('checkinModal');
+  setTimeout(()=>document.getElementById('ci-note').focus(),100);
+}
+async function confirmCheckin(){
+  if(!pendingCheckinId)return;
+  const btn=document.getElementById('ciBtn');btn.disabled=true;btn.textContent='Checking in…';
+  const note=document.getElementById('ci-note').value.trim();
+  const res=await api('/api/checkin',{id:pendingCheckinId,checkin_note:note||null});
+  btn.disabled=false;btn.innerHTML='📥 Check In';
+  if(res.ok){toast('Checked in ✓','ok');closeModal('checkinModal');await loadItems();const u=allItems.find(i=>i.id===pendingCheckinId);if(u)showDetail(u);}
+  else toast(res.msg||'Error','err');
+}
 
 // ── Qty, Modify, eBay, Labels ──
 function openQtyAdjust(id){const item=allItems.find(i=>i.id===id);if(!item)return;pendingQtyId=id;document.getElementById('qty-name').textContent=item.name;document.getElementById('qty-avail').textContent=item.available||0;document.getElementById('qty-total').textContent=item.qty;document.getElementById('qty-amount').value='';document.getElementById('qty-note').value='';setQtyAction('add');openModal('qtyModal');}
@@ -1084,6 +1216,145 @@ async function confirmModify(){const field=document.getElementById('mod-field').
 
 async function loadModHistory(itemId){const sec=document.getElementById('dp-mod-section');const hist=document.getElementById('dp-mod-history');try{const mods=await fetch('/api/item/modifications?item_id='+itemId).then(r=>r.json());if(mods.length===0){sec.style.display='none';return;}sec.style.display='';hist.innerHTML=mods.map(m=>`<div class="mod-hist-row"><div style="flex:1"><div style="font-weight:600;font-size:12.5px">${m.field_changed}: <span style="color:#b91c1c;text-decoration:line-through">${m.old_value||'—'}</span> → <span style="color:#15803d">${m.new_value||'—'}</span></div>${m.notes?`<div style="font-size:11.5px;color:#888;margin-top:2px">${m.notes}</div>`:''}${m.spawned_name?`<div style="margin-top:4px"><span class="lineage-link" onclick="jumpToItem(${m.spawned_item_id})">🔗 Spawned: ${m.spawned_name}</span></div>`:''}</div><div style="font-size:11px;color:#aaa;text-align:right;flex-shrink:0">${m.ts.substring(0,10)}<br>${m.modified_by}</div></div>`).join('');}catch(e){sec.style.display='none';}}
 async function loadChildItems(itemId){const sec=document.getElementById('dp-children-section');const list=document.getElementById('dp-children-list');try{const res=await fetch('/api/item/lineage?item_id='+itemId).then(r=>r.json());if(!res.ok||res.children.length===0){sec.style.display='none';return;}sec.style.display='';list.innerHTML=res.children.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f0efec"><span style="color:#1d4ed8;font-size:13px">↳</span><span class="lineage-link" onclick="jumpToItem(${c.id})" style="flex:1">${c.name} — ${c.condition||''}${c.shelf?' · '+c.shelf:''}</span></div>`).join('');}catch(e){sec.style.display='none';}}
+async function loadNotes(itemId){
+  const list=document.getElementById('dp-notes-list');
+  document.getElementById('dp-note-input').dataset.itemId=itemId;
+  try{
+    const notes=await fetch('/api/item/'+itemId+'/notes').then(r=>r.json());
+    if(!notes.length){list.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:4px 0">No notes yet.</div>';return;}
+    list.innerHTML=notes.map(n=>`<div style="padding:7px 0;border-bottom:1px solid #f0efec;font-size:12.5px"><div style="line-height:1.4">${escHtml(n.note)}</div><div style="font-size:11px;color:#94a3b8;margin-top:3px">${n.username} · ${n.created_at.substring(0,16)}</div></div>`).join('');
+  }catch(e){list.innerHTML='';}
+}
+async function addNote(){
+  const inp=document.getElementById('dp-note-input');
+  const note=inp.value.trim();const itemId=parseInt(inp.dataset.itemId);
+  if(!note||!itemId)return;
+  inp.disabled=true;
+  const res=await api('/api/item/'+itemId+'/note',{note});
+  inp.disabled=false;
+  if(res.ok){inp.value='';loadNotes(itemId);}else toast(res.msg||'Error','err');
+}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── Reservations ──
+async function loadReservations(itemId){
+  const list=document.getElementById('dp-reservations-list');
+  document.getElementById('res-by').dataset.itemId=itemId;
+  try{
+    const rows=await fetch('/api/item/'+itemId+'/reservations').then(r=>r.json());
+    const today=new Date().toISOString().split('T')[0];
+    if(!rows.length){list.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:4px 0">No reservations.</div>';return;}
+    list.innerHTML=rows.map(r=>{
+      const active=r.reserved_to>=today;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f0efec;font-size:12.5px">
+        <div style="flex:1">
+          <span style="font-weight:600">${escHtml(r.reserved_by)}</span>
+          <span style="color:#64748b"> · ${r.reserved_from} → ${r.reserved_to}</span>
+          ${r.purpose?`<span style="color:#94a3b8"> · ${escHtml(r.purpose)}</span>`:''}
+        </div>
+        <span style="font-size:11px;padding:1px 7px;border-radius:4px;${active?'background:#eff6ff;color:#1d4ed8':'background:#f5f4f1;color:#94a3b8'}">${active?'Active':'Past'}</span>
+        <button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 7px" onclick="cancelReservation(${r.id},${itemId})">Cancel</button>
+      </div>`;
+    }).join('');
+  }catch(e){list.innerHTML='';}
+}
+async function addReservation(){
+  const itemId=parseInt(document.getElementById('res-by').dataset.itemId);
+  if(!itemId)return;
+  const by=document.getElementById('res-by').value.trim();
+  const from=document.getElementById('res-from').value;
+  const to=document.getElementById('res-to').value;
+  if(!by||!from||!to){toast('Fill in reserved for, from, and to dates','warn');return;}
+  const res=await api('/api/item/'+itemId+'/reservation',{reserved_by:by,reserved_from:from,reserved_to:to,purpose:document.getElementById('res-purpose').value.trim()});
+  if(res.ok){
+    toast('Reservation added ✓','ok');
+    document.getElementById('res-by').value='';document.getElementById('res-from').value='';
+    document.getElementById('res-to').value='';document.getElementById('res-purpose').value='';
+    loadReservations(itemId);
+  } else toast(res.msg||'Error','err');
+}
+async function cancelReservation(resId,itemId){
+  if(!confirm('Cancel this reservation?'))return;
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  const res=await fetch('/api/reservation/'+resId,{method:'DELETE',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken}}).then(r=>r.json());
+  if(res.ok){toast('Reservation cancelled','warn');loadReservations(itemId);}
+  else toast(res.msg||'Error','err');
+}
+
+// ── Photos ──
+let _photoFile=null;
+function photoFileChanged(){
+  const inp=document.getElementById('dp-photo-file');
+  const f=inp.files[0];
+  const preview=document.getElementById('dp-photo-preview');
+  const uploadBtn=document.getElementById('dp-photo-upload-btn');
+  if(!f){preview.style.display='none';uploadBtn.style.display='none';_photoFile=null;return;}
+  _photoFile=f;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    document.getElementById('dp-photo-preview-img').src=e.target.result;
+    preview.style.display='';uploadBtn.style.display='';
+  };
+  reader.readAsDataURL(f);
+}
+async function uploadPhoto(){
+  const itemId=parseInt(document.getElementById('dp-note-input').dataset.itemId);
+  if(!itemId||!_photoFile){toast('Select a photo first','warn');return;}
+  const btn=document.getElementById('dp-photo-upload-btn');
+  btn.disabled=true;btn.textContent='Uploading…';
+  const fd=new FormData();
+  fd.append('photo',_photoFile);
+  fd.append('caption',document.getElementById('dp-photo-caption').value.trim());
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  try{
+    const res=await fetch('/api/item/'+itemId+'/photo',{method:'POST',headers:{'X-CSRF-Token':csrfToken},body:fd}).then(r=>r.json());
+    if(res.ok){
+      toast('Photo uploaded ✓','ok');
+      document.getElementById('dp-photo-file').value='';
+      document.getElementById('dp-photo-preview').style.display='none';
+      btn.style.display='none';_photoFile=null;
+      loadPhotos(itemId);
+    } else toast(res.msg||'Upload failed','err');
+  }finally{btn.disabled=false;btn.textContent='Upload';}
+}
+async function loadPhotos(itemId){
+  const list=document.getElementById('dp-photos-list');
+  try{
+    const rows=await fetch('/api/item/'+itemId+'/photos').then(r=>r.json());
+    if(!rows.length){list.innerHTML='<div style="color:#94a3b8;font-size:12px">No photos yet.</div>';return;}
+    list.innerHTML=rows.map(p=>`
+      <div style="position:relative;display:inline-block">
+        <img data-photo-id="${p.id}" data-item-id="${itemId}"
+             src="" loading="lazy"
+             style="width:90px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e5e3de;cursor:pointer"
+             onclick="viewPhoto(${p.id})" title="${escHtml(p.caption||'')}">
+        <button onclick="deletePhoto(${p.id},${itemId})"
+          style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1;padding:0">✕</button>
+        ${p.caption?`<div style="font-size:10px;color:#94a3b8;margin-top:2px;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.caption)}</div>`:''}
+      </div>`).join('');
+    // Lazy-load photo data
+    list.querySelectorAll('img[data-photo-id]').forEach(async img=>{
+      const pid=img.dataset.photoId;
+      const d=await fetch('/api/photo/'+pid+'/data').then(r=>r.json());
+      if(d.ok)img.src=d.data_url;
+    });
+  }catch(e){list.innerHTML='';}
+}
+async function viewPhoto(photoId){
+  const d=await fetch('/api/photo/'+photoId+'/data').then(r=>r.json());
+  if(!d.ok)return;
+  const w=window.open('','_blank','width=900,height=700');
+  w.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${d.data_url}" style="max-width:100%;max-height:100vh;object-fit:contain"></body></html>`);
+  w.document.close();
+}
+async function deletePhoto(photoId,itemId){
+  if(!confirm('Delete this photo?'))return;
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  const res=await fetch('/api/photo/'+photoId,{method:'DELETE',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken}}).then(r=>r.json());
+  if(res.ok){toast('Photo deleted','warn');loadPhotos(itemId);}
+  else toast(res.msg||'Error','err');
+}
+
 async function jumpToItem(id){await loadItems();const item=allItems.find(i=>i.id===id);if(item){showDetail(item);toast('Jumped to: '+item.name,'ok');}else toast('Item not found (may be inactive)','warn');}
 
 let pendingEbayId=null,currentEbayStatus='not_listed';

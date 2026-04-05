@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}User Activity · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">User Activity</span>
+  <span class="topbar-sub">Audit log filtered by user</span>
+  <div class="topbar-right">
+    <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Print / PDF</button>
+  </div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:20px 24px">
+
+<div class="card" style="margin-bottom:16px;padding:14px 18px">
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <div>
+      <label class="label">User</label>
+      <select class="select" id="f-user" style="min-width:180px" onchange="load(1)">
+        <option value="">All Users</option>
+        {% for u in users %}
+        <option value="{{ u.username }}">{{ u.username }} ({{ u.role }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="label">Action</label>
+      <select class="select" id="f-action" style="min-width:140px" onchange="load(1)">
+        <option value="">All Actions</option>
+        <option value="CHECKOUT">Checkout</option>
+        <option value="CHECKIN">Check In</option>
+        <option value="ITEM_ADD">Item Added</option>
+        <option value="ITEM_EDIT">Item Edited</option>
+        <option value="ITEM_DELETE">Item Deleted</option>
+        <option value="ITEM_SOLD">Item Sold</option>
+        <option value="LOGIN_OK">Login</option>
+        <option value="QTY_ADD">Qty Add</option>
+        <option value="QTY_REMOVE">Qty Remove</option>
+      </select>
+    </div>
+    <div>
+      <label class="label">From</label>
+      <input class="input" id="f-from" type="date" style="width:140px" onchange="load(1)">
+    </div>
+    <div>
+      <label class="label">To</label>
+      <input class="input" id="f-to" type="date" style="width:140px" onchange="load(1)">
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
+  </div>
+</div>
+
+<!-- User summary cards -->
+<div id="userSummary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px"></div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>Time</th>
+      <th>User</th>
+      <th>Action</th>
+      <th>Item</th>
+      <th>Detail</th>
+    </tr></thead>
+    <tbody id="actBody"><tr><td colspan="5" style="text-align:center;padding:40px;color:#94a3b8">Loading…</td></tr></tbody>
+  </table>
+</div>
+<div id="pagination" style="margin-top:12px;display:flex;gap:4px;align-items:center;flex-wrap:wrap"></div>
+
+</div>
+<style>
+@media print{.sidebar,.topbar-right,.card{display:none!important}}
+</style>
+<script>
+const ACTION_COLORS={CHECKOUT:'#b91c1c',CHECKIN:'#15803d',ITEM_ADD:'#0891b2',ITEM_EDIT:'#d97706',ITEM_DELETE:'#dc2626',ITEM_SOLD:'#7c3aed',LOGIN_OK:'#475569',QTY_ADD:'#047857',QTY_REMOVE:'#b45309'};
+let currentPage=1,_deb=null;
+
+async function load(page){
+  if(page)currentPage=page;
+  const params=new URLSearchParams({
+    user:document.getElementById('f-user').value,
+    action:document.getElementById('f-action').value,
+    from:document.getElementById('f-from').value,
+    to:document.getElementById('f-to').value,
+    page:currentPage,per_page:50
+  });
+  const data=await fetch('/api/audit?'+params).then(r=>r.json());
+  renderTable(data.rows||[],data.total||0,data.page||1,data.pages||1);
+  if(!document.getElementById('f-user').value) renderSummary(data.rows||[]);
+}
+
+function renderSummary(rows){
+  const counts={};
+  rows.forEach(r=>{if(r.username)counts[r.username]=(counts[r.username]||0)+1;});
+  const el=document.getElementById('userSummary');
+  if(!Object.keys(counts).length){el.innerHTML='';return;}
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  el.innerHTML=sorted.map(([u,c])=>`
+    <div class="card" style="padding:12px 14px;cursor:pointer" onclick="filterUser('${u}')">
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Actions</div>
+      <div style="font-size:22px;font-weight:700;font-family:'IBM Plex Mono',monospace">${c}</div>
+      <div style="font-size:12px;font-weight:600;margin-top:4px;color:#0f172a">${esc(u)}</div>
+    </div>`).join('');
+}
+
+function filterUser(u){document.getElementById('f-user').value=u;load(1);}
+
+function renderTable(rows,total,page,pages){
+  const tb=document.getElementById('actBody');
+  if(!rows.length){tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:40px;color:#94a3b8">No activity found.</td></tr>';renderPagination(total,page,pages);return;}
+  tb.innerHTML=rows.map(r=>{
+    const color=ACTION_COLORS[r.action]||'#94a3b8';
+    return `<tr>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#94a3b8;white-space:nowrap">${esc(r.ts?.substring(0,16)||'')}</td>
+      <td style="font-weight:500;font-size:13px">${esc(r.username||'—')}</td>
+      <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:${color}18;color:${color}">${esc(r.action)}</span></td>
+      <td style="font-size:12px">${r.item_name?esc(r.item_name):'<span style="color:#ccc">—</span>'}</td>
+      <td style="font-size:12px;color:#64748b;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.detail||'')}</td>
+    </tr>`;
+  }).join('');
+  renderPagination(total,page,pages);
+}
+
+function renderPagination(total,page,pages){
+  const el=document.getElementById('pagination');
+  if(pages<=1){el.innerHTML=`<span style="font-size:12px;color:#94a3b8">${total} entries</span>`;return;}
+  let html=`<button class="btn btn-secondary btn-sm" ${page===1?'disabled':''} onclick="load(${page-1})">‹</button>`;
+  for(let i=1;i<=Math.min(pages,7);i++){
+    html+=`<button class="btn btn-sm ${i===page?'btn-primary':'btn-secondary'}" onclick="load(${i})">${i}</button>`;
+  }
+  if(pages>7)html+='<span style="padding:4px 6px;color:#94a3b8">…</span>';
+  html+=`<button class="btn btn-secondary btn-sm" ${page===pages?'disabled':''} onclick="load(${page+1})">›</button>`;
+  html+=`<span style="font-size:12px;color:#94a3b8;margin-left:4px">${total} entries · page ${page}/${pages}</span>`;
+  el.innerHTML=html;
+}
+
+function clearFilters(){
+  ['f-user','f-action','f-from','f-to'].forEach(id=>{const el=document.getElementById(id);if(el.tagName==='SELECT')el.selectedIndex=0;else el.value='';});
+  load(1);
+}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+load(1);
+</script>
+{% endblock %}

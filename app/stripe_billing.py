@@ -13,12 +13,14 @@ PLANS = {
     "starter": {
         "name":       "Starter",
         "max_users":  5,
+        "max_items":  500,
         "monthly":    20,
         "yearly":     200,
         "excel":      False,
+        "api_access": False,
         "features":   [
             "5 users",
-            "Unlimited items",
+            "500 items",
             "All core features",
             "Barcode scanning",
             "Financial reports",
@@ -28,9 +30,11 @@ PLANS = {
     "pro": {
         "name":       "Pro",
         "max_users":  15,
+        "max_items":  None,   # unlimited
         "monthly":    50,
         "yearly":     500,
         "excel":      True,
+        "api_access": False,
         "features":   [
             "15 users",
             "Unlimited items",
@@ -43,16 +47,18 @@ PLANS = {
     "enterprise": {
         "name":       "Enterprise",
         "max_users":  None,   # unlimited
+        "max_items":  None,   # unlimited
         "monthly":    80,
         "yearly":     800,
         "excel":      True,
+        "api_access": True,
         "features":   [
             "Unlimited users",
             "Unlimited items",
             "Everything in Pro",
             "Dedicated support",
             "Custom onboarding",
-            "API access",
+            "REST API access",
         ],
     },
 }

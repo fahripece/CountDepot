@@ -23,15 +23,31 @@ def create_app():
 
     @app.context_processor
     def _inject_csrf():
-        """Make csrf_token available in every template."""
+        """Make csrf_token + brand settings available in every template."""
         if "_csrf_token" not in session:
             session["_csrf_token"] = secrets.token_hex(32)
-        return {"csrf_token": session["_csrf_token"]}
+        brand_name  = getattr(g, "brand_name",  None)
+        brand_color = getattr(g, "brand_color", None)
+        return {"csrf_token": session["_csrf_token"],
+                "brand_name": brand_name, "brand_color": brand_color}
 
     @app.before_request
     def before():
-        # CSRF validation — all state-changing requests except health + Stripe webhook
-        csrf_exempt = (request.path == "/_health" or request.path == "/_stripe/webhook")
+        # ── API key authentication ────────────────────────────────────────────
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer sk_live_"):
+            raw_key = auth_header[len("Bearer "):]
+            import hashlib as _hl
+            key_hash = _hl.sha256(raw_key.encode()).hexdigest()
+            # Tenant must be resolved first — fall through if no tenant yet
+            # (tenant resolution happens below, so we do API key check after)
+            g.pending_api_key = raw_key
+            g.pending_api_key_hash = key_hash
+
+        # CSRF validation — skip for API key requests and cross-login (uses JSON body token)
+        csrf_exempt = (request.path == "/_health" or request.path == "/_stripe/webhook"
+                       or request.path == "/_cross-login"
+                       or bool(auth_header.startswith("Bearer sk_live_")))
         if (request.method in ("POST", "PUT", "PATCH", "DELETE") and not csrf_exempt):
             token = (request.form.get("csrf_token")
                      or request.headers.get("X-CSRF-Token"))
@@ -45,7 +61,8 @@ def create_app():
         if (request.path.startswith("/_platform")
                 or request.path == "/_health"
                 or request.path == "/_stripe/webhook"
-                or request.path.startswith("/signup")):
+                or request.path.startswith("/signup")
+                or request.path == "/_cross-login"):
             return
 
         # Bare domain (countdepot.com with no subdomain) → landing page
@@ -69,11 +86,45 @@ def create_app():
             init_db()
             _initialized_tenants.add(g.tenant_slug)
 
+        # ── Resolve API key after tenant is set ──────────────────────────────
+        if getattr(g, "pending_api_key", None):
+            import hashlib as _hl
+            from app.db import query as _q
+            row = _q("SELECT ak.*, u.role, u.permissions, u.email FROM api_keys ak "
+                     "JOIN users u ON u.id=ak.user_id "
+                     "WHERE ak.key_hash=? AND ak.active=1", [g.pending_api_key_hash], one=True)
+            if row:
+                g.api_user_id          = row["user_id"]
+                g.api_user_role        = row["role"]
+                g.api_user_permissions = row["permissions"] or ""
+                g.api_key_auth         = True
+                from app.db import execute as _ex
+                from datetime import datetime as _dt2
+                _ex("UPDATE api_keys SET last_used=? WHERE id=?",
+                    [_dt2.now().strftime("%Y-%m-%d %H:%M:%S"), row["id"]])
+
+        # ── Load brand settings ───────────────────────────────────────────────
+        if getattr(g, "tenant_slug", None):
+            try:
+                from app.db import query as _bq
+                brand_name_row  = _bq("SELECT value FROM settings WHERE key='brand_name'",  one=True)
+                brand_color_row = _bq("SELECT value FROM settings WHERE key='brand_color'", one=True)
+                g.brand_name  = (brand_name_row["value"]  if brand_name_row  else None) or g.tenant.get("name")
+                g.brand_color = (brand_color_row["value"] if brand_color_row else None) or "#0f172a"
+            except Exception:
+                g.brand_name  = g.tenant.get("name") if hasattr(g, "tenant") and g.tenant else None
+                g.brand_color = "#0f172a"
+
         # Routes that don't need the intercept checks
         skip = ("/onboarding", "/login", "/logout", "/change-password",
                 "/forgot-password", "/reset-password", "/verify-email",
-                "/resend-verification", "/billing", "/static", "/signup")
+                "/resend-verification", "/billing", "/static", "/signup",
+                "/auto-login")
         if any(request.path.startswith(s) for s in skip):
+            return
+
+        # API key requests skip session checks — auth is via the key itself
+        if getattr(g, "api_key_auth", False):
             return
 
         if not session.get("user_id"):

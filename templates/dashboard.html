@@ -76,11 +76,24 @@ async function loadDashboard(){
       <div class="kcard-v" style="color:${c.checked_out>0?'#b91c1c':'#94a3b8'}">${c.checked_out}</div>
       <div class="kcard-sub">Currently out in the field</div>
     </div>
+    <div class="kcard" style="border-color:${(c.overdue||0)>0?'#fecaca':'#e5e3de'}">
+      <div class="kcard-l">Overdue</div>
+      <div class="kcard-v" style="color:${(c.overdue||0)>0?'#b91c1c':'#94a3b8'}">${c.overdue||0}</div>
+      <div class="kcard-sub">${(c.overdue||0)>0?'<a href="/?status=overdue" style="color:#b91c1c">View overdue →</a>':'No overdue items'}</div>
+    </div>
     <div class="kcard" style="border-color:${c.low_stock>0?'#fecaca':'#e5e3de'}">
       <div class="kcard-l">Low Stock Alerts</div>
       <div class="kcard-v" style="color:${c.low_stock>0?'#b91c1c':'#94a3b8'}">${c.low_stock}</div>
       <div class="kcard-sub">${c.low_stock>0?'<a href="/?status=low" style="color:#b91c1c">View items →</a>':'All items above threshold'}</div>
     </div>
+    <div class="kcard" style="border-color:${(c.maintenance_due||0)>0?'#fde68a':'#e5e3de'}">
+      <div class="kcard-l">Maintenance Due</div>
+      <div class="kcard-v" style="color:${(c.maintenance_due||0)>0?'#b45309':'#94a3b8'}">${c.maintenance_due||0}</div>
+      <div class="kcard-sub">${(c.maintenance_due||0)>0?'<a href="/?status=maintenance" style="color:#b45309">View items →</a>':'No maintenance due'}</div>
+    </div>
+  </div>
+  <!-- Available/Total row -->
+  <div class="dash-grid" style="grid-template-columns:1fr 1fr;max-width:50%">
     <div class="kcard">
       <div class="kcard-l">Available</div>
       <div class="kcard-v" style="color:#15803d">${c.total - c.checked_out}</div>

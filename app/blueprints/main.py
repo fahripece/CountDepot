@@ -184,6 +184,28 @@ def report_activity():
     return render_template("report_activity.html")
 
 
+@bp.route("/report/user-activity")
+@login_required
+@perm_required("view_audit")
+def report_user_activity():
+    users = query("SELECT id, username, email, role FROM users ORDER BY username")
+    return render_template("report_user_activity.html", users=users)
+
+
+@bp.route("/report/checkout-history")
+@login_required
+@perm_required("view_audit")
+def report_checkout_history():
+    return render_template("report_checkout_history.html")
+
+
+@bp.route("/report/locations")
+@login_required
+@perm_required("view_inventory")
+def report_locations():
+    return render_template("report_locations.html")
+
+
 # ── Low stock API (lives here because it's tightly coupled to the page) ───────
 
 @bp.route("/api/low-stock")
