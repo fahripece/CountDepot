@@ -11,22 +11,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   background:#0f172a;color:#f8fafc;min-height:100vh}
 .topbar{background:#1e293b;border-bottom:1px solid #334155;
   padding:0 24px;height:52px;display:flex;align-items:center;
-  justify-content:space-between}
+  justify-content:space-between;position:sticky;top:0;z-index:50}
 .topbar-brand{font-size:13px;font-weight:700;color:#f8fafc;letter-spacing:.3px}
 .topbar-brand span{color:#3b82f6}
 .topbar-right{display:flex;align-items:center;gap:14px}
 .topbar-right a{font-size:12px;color:#94a3b8;text-decoration:none}
 .topbar-right a:hover{color:#f8fafc}
-.main{max-width:1200px;margin:0 auto;padding:28px 24px}
-.page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
-h1{font-size:20px;font-weight:600}
-.sub{font-size:13px;color:#94a3b8;margin-top:3px}
+.main{max-width:1300px;margin:0 auto;padding:28px 24px}
 
 /* Buttons */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;
   border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;
   border:none;text-decoration:none;transition:background .15s;white-space:nowrap}
 .btn-sm{padding:5px 10px;font-size:12px}
+.btn-xs{padding:3px 8px;font-size:11px}
 .btn-primary{background:#3b82f6;color:#fff}
 .btn-primary:hover{background:#2563eb}
 .btn-danger{background:#7f1d1d;color:#fca5a5}
@@ -37,9 +35,22 @@ h1{font-size:20px;font-weight:600}
 .btn-green:hover{background:#166534}
 .btn-amber{background:#78350f;color:#fcd34d}
 .btn-amber:hover{background:#92400e}
+.btn-purple{background:#3b0764;color:#d8b4fe}
+.btn-purple:hover{background:#4c1d95}
+.btn-teal{background:#134e4a;color:#5eead4}
+.btn-teal:hover{background:#115e59}
+
+/* Tabs */
+.tabs{display:flex;gap:2px;margin-bottom:24px;border-bottom:1px solid #334155;padding-bottom:0}
+.tab{padding:10px 18px;font-size:13px;font-weight:600;color:#64748b;cursor:pointer;
+  border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s}
+.tab:hover{color:#94a3b8}
+.tab.active{color:#3b82f6;border-bottom-color:#3b82f6}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
 
 /* Summary cards */
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
   gap:14px;margin-bottom:28px}
 .card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:18px 20px}
 .card-val{font-size:26px;font-weight:700;color:#f8fafc;margin-bottom:3px}
@@ -49,14 +60,14 @@ h1{font-size:20px;font-weight:600}
 .card-lbl{font-size:12px;color:#94a3b8;font-weight:500}
 
 /* Table */
-.tbl-wrap{background:#1e293b;border:1px solid #334155;border-radius:10px;overflow:hidden}
-table{width:100%;border-collapse:collapse}
+.tbl-wrap{background:#1e293b;border:1px solid #334155;border-radius:10px;overflow:hidden;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:600px}
 th{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
   color:#64748b;padding:11px 14px;text-align:left;
-  border-bottom:1px solid #334155;background:#1e293b}
-td{padding:10px 14px;font-size:13px;border-bottom:1px solid #1e293b;vertical-align:middle}
+  border-bottom:1px solid #334155;background:#1e293b;white-space:nowrap}
+td{padding:9px 14px;font-size:13px;border-bottom:1px solid #1a2540;vertical-align:middle}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:#263548}
+tr:hover td{background:#1a2947}
 
 /* Badges */
 .badge{display:inline-block;padding:3px 8px;border-radius:5px;
@@ -65,35 +76,41 @@ tr:hover td{background:#263548}
 .badge-suspended{background:#450a0a;color:#fca5a5}
 .badge-standard{background:#1e3a5f;color:#93c5fd}
 .badge-pro{background:#2e1065;color:#c4b5fd}
-.badge-healthcare{background:#4a1942;color:#f0abfc}
+.badge-enterprise{background:#1a2e1a;color:#4ade80}
+.badge-free{background:#1a3a2a;color:#34d399}
 .sub-trial{background:#422006;color:#fcd34d}
 .sub-active{background:#14532d;color:#86efac}
 .sub-overdue{background:#450a0a;color:#fca5a5}
+.sub-expired{background:#1e293b;color:#64748b;border:1px solid #334155}
 .sub-cancelled{background:#1e293b;color:#64748b;border:1px solid #334155}
-.slug{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#94a3b8}
+.badge-admin{background:#1e3a5f;color:#93c5fd}
+.badge-worker{background:#1e293b;color:#94a3b8;border:1px solid #334155}
+.badge-online{background:#14532d;color:#86efac}
+.slug{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#64748b}
 .stat{font-size:12px;color:#64748b}
 .stat strong{color:#94a3b8}
 .muted{color:#475569;font-size:12px}
-.overdue-row td{background:rgba(127,29,29,.08)}
+.overdue-row td{background:rgba(127,29,29,.06)}
 
 /* Overlays / modals */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);
-  display:none;align-items:center;justify-content:center;z-index:100;
-  backdrop-filter:blur(2px)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);
+  display:none;align-items:center;justify-content:center;z-index:200;
+  backdrop-filter:blur(3px);padding:20px}
 .overlay.open{display:flex}
 .modal{background:#1e293b;border:1px solid #334155;border-radius:12px;
-  width:100%;overflow:hidden}
+  width:100%;overflow:hidden;max-height:90vh;display:flex;flex-direction:column}
 .modal-sm{max-width:420px}
-.modal-md{max-width:500px}
+.modal-md{max-width:540px}
+.modal-lg{max-width:720px}
 .modal-hdr{padding:18px 22px 14px;border-bottom:1px solid #334155;
-  display:flex;align-items:center;justify-content:space-between}
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .modal-hdr h2{font-size:16px;font-weight:600}
 .modal-hdr .close{background:none;border:none;color:#64748b;cursor:pointer;
   font-size:18px;line-height:1;padding:0}
 .modal-hdr .close:hover{color:#f8fafc}
-.modal-body{padding:20px 22px}
+.modal-body{padding:20px 22px;overflow-y:auto}
 .modal-foot{padding:14px 22px;border-top:1px solid #334155;
-  display:flex;justify-content:flex-end;gap:10px}
+  display:flex;justify-content:flex-end;gap:10px;flex-shrink:0}
 .field{margin-bottom:16px}
 .field label{display:block;font-size:12px;font-weight:600;
   text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:6px}
@@ -105,16 +122,31 @@ tr:hover td{background:#263548}
 .field .hint{font-size:11.5px;color:#475569;margin-top:4px}
 .err-banner{background:#450a0a;border:1px solid #7f1d1d;color:#fca5a5;
   border-radius:7px;padding:9px 12px;font-size:13px;margin-bottom:14px}
+.ok-banner{background:#14532d;border:1px solid #166534;color:#86efac;
+  border-radius:7px;padding:9px 12px;font-size:13px;margin-bottom:14px}
 .warn-box{background:#422006;border:1px solid #92400e;border-radius:8px;
   padding:12px 14px;font-size:13px;color:#fcd34d;margin-bottom:16px}
 .confirm-slug{background:#0f172a;border:1px solid #7f1d1d;border-radius:7px;
   padding:9px 12px;color:#f8fafc;font-size:13px;width:100%;outline:none;
   font-family:'IBM Plex Mono',monospace;margin-top:4px}
 .confirm-slug:focus{border-color:#ef4444}
-.free-month-btn{background:none;border:1px solid #334155;border-radius:6px;
-  color:#94a3b8;font-size:12px;padding:5px 10px;cursor:pointer;margin-top:6px;
-  transition:all .15s}
-.free-month-btn:hover{border-color:#3b82f6;color:#3b82f6}
+
+/* Section header */
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.sec-hdr h2{font-size:15px;font-weight:600}
+.search-box{display:flex;gap:8px;align-items:center}
+.search-box input{padding:8px 12px;background:#1e293b;border:1px solid #334155;
+  border-radius:7px;color:#f8fafc;font-size:13px;outline:none;width:260px}
+.search-box input:focus{border-color:#3b82f6}
+
+/* Actions wrap */
+.actions{display:flex;gap:4px;flex-wrap:wrap}
+
+/* Log colors */
+.ev-ok{color:#4ade80}
+.ev-fail{color:#f87171}
+.ev-warn{color:#fbbf24}
+.ev-info{color:#93c5fd}
 </style>
 </head>
 <body>
@@ -128,15 +160,8 @@ tr:hover td{background:#263548}
 </div>
 
 <div class="main">
-  <div class="page-hdr">
-    <div>
-      <h1>Tenants</h1>
-      <div class="sub">{{ tenants|length }} tenant{{ 's' if tenants|length != 1 else '' }} · {{ total_items }} items · {{ total_users }} users · {{ total_kb }} KB total</div>
-    </div>
-    <button class="btn btn-primary" onclick="openModal('newModal')">+ New Tenant</button>
-  </div>
 
-  <!-- Summary cards -->
+  <!-- KPI Cards -->
   <div class="cards">
     <div class="card">
       <div class="card-val">{{ tenants|length }}</div>
@@ -162,13 +187,28 @@ tr:hover td{background:#263548}
       <div class="card-val">{{ total_users }}</div>
       <div class="card-lbl">Users total</div>
     </div>
+    <div class="card">
+      <div class="card-val" style="font-size:18px">{{ total_kb }} KB</div>
+      <div class="card-lbl">Total DB size</div>
+    </div>
   </div>
 
-  <!-- Tenant table -->
-  <div class="tbl-wrap">
-    <table>
-      <thead>
-        <tr>
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('tenants',this)">Tenants</div>
+    <div class="tab" onclick="switchTab('users',this)">Users</div>
+    <div class="tab" onclick="switchTab('security',this)">Security</div>
+  </div>
+
+  <!-- ══ TENANTS TAB ══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel active" id="tab-tenants">
+    <div class="sec-hdr">
+      <h2>{{ tenants|length }} tenant{{ 's' if tenants|length != 1 else '' }}</h2>
+      <button class="btn btn-primary btn-sm" onclick="openModal('newModal')">+ New Tenant</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
           <th>Tenant</th>
           <th>Slug</th>
           <th>Plan</th>
@@ -177,93 +217,187 @@ tr:hover td{background:#263548}
           <th>Stats</th>
           <th>Last login</th>
           <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for t in tenants %}
-        <tr class="{% if t.subscription_status == 'overdue' %}overdue-row{% endif %}">
-          <td>
-            <div style="font-weight:600;font-size:13.5px">{{ t.name }}</div>
-            {% if t.notes %}
-            <div class="muted" style="margin-top:2px">{{ t.notes }}</div>
-            {% endif %}
-            {% if not t.active %}
-            <span class="badge badge-suspended" style="margin-top:4px">Suspended</span>
-            {% endif %}
-          </td>
-          <td><span class="slug">{{ t.slug }}</span></td>
-          <td><span class="badge badge-{{ t.plan }}">{{ t.plan }}</span></td>
-          <td>
-            <span class="badge sub-{{ t.subscription_status or 'trial' }}">
-              {{ t.subscription_status or 'trial' }}
-            </span>
-          </td>
-          <td>
-            {% if t.trial_ends_at %}
-              {% if t.trial_ends_at < today %}
-                <span style="color:#f87171;font-size:12px">{{ t.trial_ends_at }} (expired)</span>
-              {% else %}
-                <span style="font-size:12px;color:#94a3b8">{{ t.trial_ends_at }}</span>
+        </tr></thead>
+        <tbody>
+          {% for t in tenants %}
+          <tr class="{% if t.subscription_status == 'overdue' %}overdue-row{% endif %}">
+            <td>
+              <div style="font-weight:600;font-size:13px">{{ t.name }}</div>
+              {% if t.notes %}
+              <div class="muted" style="margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ t.notes }}">{{ t.notes }}</div>
               {% endif %}
-            {% else %}
-              <span class="muted">—</span>
-            {% endif %}
-          </td>
-          <td>
-            <span class="stat">
-              <strong>{{ t.stats.items }}</strong> items ·
-              <strong>{{ t.stats.users }}</strong> users ·
-              <strong>{{ t.stats.db_size_kb }}</strong> KB
-            </span>
-          </td>
-          <td>
-            <span class="stat">
-              {{ t.stats.last_login[:10] if t.stats.last_login else '—' }}
-            </span>
-          </td>
-          <td>
-            <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <button class="btn btn-muted btn-sm"
-                onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'trial' }}','{{ t.trial_ends_at or '' }}',{{ t.notes|tojson if t.notes else 'null' }})">
-                Billing
-              </button>
-              <button class="btn btn-muted btn-sm"
-                onclick="openEdit('{{ t.slug }}','{{ t.name }}','{{ t.plan }}')">
-                Edit
-              </button>
-              {% if t.active %}
-              <form method="POST" action="{{ url_for('platform.tenant_suspend', slug=t.slug) }}"
-                    onsubmit="return confirm('Suspend {{ t.name }}? Users will be blocked immediately.')">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button type="submit" class="btn btn-amber btn-sm">Suspend</button>
-              </form>
-              {% else %}
-              <form method="POST" action="{{ url_for('platform.tenant_activate', slug=t.slug) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button type="submit" class="btn btn-green btn-sm">Activate</button>
-              </form>
+              {% if not t.active %}
+              <span class="badge badge-suspended" style="margin-top:4px">Suspended</span>
               {% endif %}
-              <button class="btn btn-danger btn-sm"
-                onclick="openDelete('{{ t.slug }}','{{ t.name }}')">
-                Delete
-              </button>
-            </div>
-          </td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="8" style="text-align:center;padding:40px;color:#475569">
+            </td>
+            <td><span class="slug">{{ t.slug }}</span></td>
+            <td><span class="badge badge-{{ t.plan }}">{{ t.plan }}</span></td>
+            <td>
+              <span class="badge sub-{{ t.subscription_status or 'trial' }}">
+                {{ t.subscription_status or 'trial' }}
+              </span>
+            </td>
+            <td>
+              {% if t.trial_ends_at %}
+                {% if t.trial_ends_at < today %}
+                  <span style="color:#f87171;font-size:12px">{{ t.trial_ends_at }} ✕</span>
+                {% else %}
+                  <span style="font-size:12px;color:#94a3b8">{{ t.trial_ends_at }}</span>
+                {% endif %}
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td>
+              <span class="stat">
+                <strong>{{ t.stats.items }}</strong> items ·
+                <strong>{{ t.stats.users }}</strong> users ·
+                <strong>{{ t.stats.db_size_kb }}</strong> KB
+              </span>
+            </td>
+            <td><span class="stat">{{ t.stats.last_login[:10] if t.stats.last_login else '—' }}</span></td>
+            <td>
+              <div class="actions">
+                <button class="btn btn-muted btn-xs"
+                  onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'trial' }}','{{ t.trial_ends_at or '' }}',{{ t.notes|tojson if t.notes else 'null' }})">
+                  Billing
+                </button>
+                <button class="btn btn-green btn-xs"
+                  onclick="openGrantFree('{{ t.slug }}','{{ t.name }}')">
+                  Grant Free
+                </button>
+                <button class="btn btn-purple btn-xs"
+                  onclick="openUsersModal('{{ t.slug }}','{{ t.name }}')">
+                  Users
+                </button>
+                <button class="btn btn-teal btn-xs"
+                  onclick="openBannerModal('{{ t.slug }}','{{ t.name }}')">
+                  Banner
+                </button>
+                <a class="btn btn-muted btn-xs"
+                  href="{{ url_for('platform.tenant_download_db', slug=t.slug) }}"
+                  title="Download inventory.db">
+                  ↓ DB
+                </a>
+                <button class="btn btn-muted btn-xs"
+                  onclick="openEdit('{{ t.slug }}','{{ t.name }}','{{ t.plan }}')">
+                  Edit
+                </button>
+                {% if t.active %}
+                <form method="POST" action="{{ url_for('platform.tenant_suspend', slug=t.slug) }}"
+                      onsubmit="return confirm('Suspend {{ t.name }}?')" style="display:inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button type="submit" class="btn btn-amber btn-xs">Suspend</button>
+                </form>
+                {% else %}
+                <form method="POST" action="{{ url_for('platform.tenant_activate', slug=t.slug) }}" style="display:inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button type="submit" class="btn btn-green btn-xs">Activate</button>
+                </form>
+                {% endif %}
+                <button class="btn btn-danger btn-xs"
+                  onclick="openDelete('{{ t.slug }}','{{ t.name }}')">
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:#475569">
             No tenants yet. Click "+ New Tenant" to create the first one.
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
+          </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div><!-- /tab-tenants -->
 
 
-<!-- ── New Tenant modal ──────────────────────────────────────────────────── -->
+  <!-- ══ USERS TAB ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-users">
+    <div class="sec-hdr">
+      <h2>Global User Search</h2>
+      <div class="search-box">
+        <input id="user-search-input" type="text" placeholder="Search by email or username…"
+          oninput="debounceUserSearch()" autocomplete="off">
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>User</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Tenant</th>
+          <th>Last login</th>
+          <th>Session</th>
+          <th>Actions</th>
+        </tr></thead>
+        <tbody id="user-search-body">
+          <tr><td colspan="7" style="text-align:center;padding:40px;color:#475569">
+            Type at least 2 characters to search across all tenants.
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div><!-- /tab-users -->
+
+
+  <!-- ══ SECURITY TAB ═════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-security">
+
+    <!-- Rate limits -->
+    <div class="sec-hdr" style="margin-bottom:12px">
+      <h2>Rate-Limited IPs</h2>
+      <button class="btn btn-muted btn-sm" onclick="loadRateLimits()">Refresh</button>
+    </div>
+    <div class="tbl-wrap" style="margin-bottom:28px">
+      <table>
+        <thead><tr>
+          <th>IP</th>
+          <th>Endpoint</th>
+          <th>Attempts</th>
+          <th>Last attempt</th>
+          <th>Action</th>
+        </tr></thead>
+        <tbody id="rate-limits-body">
+          <tr><td colspan="5" style="text-align:center;padding:24px;color:#475569">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Security log -->
+    <div class="sec-hdr">
+      <h2>Security Log</h2>
+      <div class="search-box">
+        <input id="sec-log-search" type="text" placeholder="Search events…"
+          oninput="debounceLogSearch()">
+        <button class="btn btn-muted btn-sm" onclick="loadSecurityLog(1)">Search</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>Time</th>
+          <th>Event</th>
+          <th>User</th>
+          <th>Tenant</th>
+          <th>IP</th>
+          <th>Detail</th>
+        </tr></thead>
+        <tbody id="sec-log-body">
+          <tr><td colspan="6" style="text-align:center;padding:24px;color:#475569">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="sec-log-pagination" style="margin-top:10px;display:flex;gap:4px;align-items:center;flex-wrap:wrap"></div>
+
+  </div><!-- /tab-security -->
+
+</div><!-- /main -->
+
+
+<!-- ══════════════════════════ MODALS ══════════════════════════════════════════ -->
+
+<!-- New Tenant -->
 <div class="overlay" id="newModal">
   <div class="modal modal-md">
     <div class="modal-hdr">
@@ -286,13 +420,17 @@ tr:hover td{background:#263548}
         <select id="t-plan">
           <option value="standard">Standard</option>
           <option value="pro">Pro</option>
-          <option value="healthcare">Healthcare</option>
+          <option value="enterprise">Enterprise</option>
         </select>
+      </div>
+      <div class="field">
+        <label>Admin email</label>
+        <input id="t-email" type="email" placeholder="admin@company.com">
       </div>
       <div class="field">
         <label>Admin password</label>
         <input id="t-pw" type="password">
-        <div class="hint">Min 8 characters. Username will be <strong>admin</strong>.</div>
+        <div class="hint">Min 8 characters.</div>
       </div>
     </div>
     <div class="modal-foot">
@@ -302,8 +440,7 @@ tr:hover td{background:#263548}
   </div>
 </div>
 
-
-<!-- ── Edit modal ───────────────────────────────────────────────────────── -->
+<!-- Edit Tenant -->
 <div class="overlay" id="editModal">
   <div class="modal modal-sm">
     <div class="modal-hdr">
@@ -322,7 +459,7 @@ tr:hover td{background:#263548}
           <select name="plan" id="edit-plan">
             <option value="standard">Standard</option>
             <option value="pro">Pro</option>
-            <option value="healthcare">Healthcare</option>
+            <option value="enterprise">Enterprise</option>
           </select>
         </div>
       </div>
@@ -334,8 +471,7 @@ tr:hover td{background:#263548}
   </div>
 </div>
 
-
-<!-- ── Billing modal ────────────────────────────────────────────────────── -->
+<!-- Billing -->
 <div class="overlay" id="billingModal">
   <div class="modal modal-md">
     <div class="modal-hdr">
@@ -351,15 +487,18 @@ tr:hover td{background:#263548}
             <option value="trial">Trial</option>
             <option value="active">Active (paying)</option>
             <option value="overdue">Overdue</option>
+            <option value="expired">Expired</option>
             <option value="cancelled">Cancelled</option>
           </select>
         </div>
         <div class="field">
           <label>Trial / access ends</label>
           <input name="trial_ends_at" id="billing-trial-ends" type="date">
-          <button type="button" class="free-month-btn" onclick="grantFreeMonth()">
-            + Grant free month from today
-          </button>
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+            <button type="button" class="btn btn-muted btn-xs" onclick="addDays(7)">+7 days</button>
+            <button type="button" class="btn btn-muted btn-xs" onclick="addDays(30)">+30 days</button>
+            <button type="button" class="btn btn-muted btn-xs" onclick="addDays(90)">+90 days</button>
+          </div>
         </div>
         <div class="field">
           <label>Internal notes</label>
@@ -368,14 +507,128 @@ tr:hover td{background:#263548}
       </div>
       <div class="modal-foot">
         <button type="button" class="btn btn-muted" onclick="closeModal('billingModal')">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save billing</button>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   </div>
 </div>
 
+<!-- Grant Free -->
+<div class="overlay" id="grantFreeModal">
+  <div class="modal modal-sm">
+    <div class="modal-hdr">
+      <h2>Grant Free Access</h2>
+      <button class="close" onclick="closeModal('grantFreeModal')">✕</button>
+    </div>
+    <form id="grant-free-form" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <p style="font-size:13px;color:#94a3b8;margin-bottom:16px">
+          Sets <strong id="grant-free-name"></strong> to <strong>active</strong> with no billing requirement. No expiry date.
+        </p>
+        <div class="field">
+          <label>Upgrade to plan</label>
+          <select name="plan" id="grant-free-plan">
+            <option value="standard">Standard</option>
+            <option value="pro" selected>Pro</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Note (optional)</label>
+          <input name="note" id="grant-free-note" placeholder="e.g. Partner deal, lifetime access">
+          <div class="hint">Shown in the notes column.</div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-muted" onclick="closeModal('grantFreeModal')">Cancel</button>
+        <button type="submit" class="btn btn-green">Grant Free Access</button>
+      </div>
+    </form>
+  </div>
+</div>
 
-<!-- ── Delete modal ─────────────────────────────────────────────────────── -->
+<!-- Banner -->
+<div class="overlay" id="bannerModal">
+  <div class="modal modal-sm">
+    <div class="modal-hdr">
+      <h2>Tenant Banner</h2>
+      <button class="close" onclick="closeModal('bannerModal')">✕</button>
+    </div>
+    <form id="banner-form" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <p style="font-size:13px;color:#94a3b8;margin-bottom:16px">
+          Show a notice banner inside <strong id="banner-tenant-name"></strong>'s app. Leave blank to remove any existing banner.
+        </p>
+        <div class="field">
+          <label>Message</label>
+          <textarea name="message" id="banner-message" placeholder="e.g. Scheduled maintenance tonight 10pm–11pm UTC."></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-muted btn-sm" onclick="clearBanner()">Clear banner</button>
+        <button type="button" class="btn btn-muted" onclick="closeModal('bannerModal')">Cancel</button>
+        <button type="submit" class="btn btn-teal">Save banner</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Users modal -->
+<div class="overlay" id="usersModal">
+  <div class="modal modal-lg">
+    <div class="modal-hdr">
+      <h2 id="users-modal-title">Users</h2>
+      <button class="close" onclick="closeModal('usersModal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0">
+      <div id="users-modal-err" style="display:none;padding:12px 22px"></div>
+      <table style="min-width:unset">
+        <thead><tr>
+          <th>User</th>
+          <th>Role</th>
+          <th>Last login</th>
+          <th>Session</th>
+          <th>Actions</th>
+        </tr></thead>
+        <tbody id="users-modal-body">
+          <tr><td colspan="5" style="text-align:center;padding:32px;color:#475569">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-muted" onclick="closeModal('usersModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password modal -->
+<div class="overlay" id="resetPwModal">
+  <div class="modal modal-sm">
+    <div class="modal-hdr">
+      <h2>Reset Password</h2>
+      <button class="close" onclick="closeModal('resetPwModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:#94a3b8;margin-bottom:16px">
+        Reset password for <strong id="reset-pw-user"></strong>. The user will be forced to change it on next login.
+      </p>
+      <div id="reset-pw-err" class="err-banner" style="display:none"></div>
+      <div id="reset-pw-ok" class="ok-banner" style="display:none">Password reset successfully.</div>
+      <div class="field">
+        <label>New password</label>
+        <input id="reset-pw-input" type="text" placeholder="Min 8 characters" autocomplete="new-password">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-muted" onclick="closeModal('resetPwModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="doResetPassword()">Reset Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Tenant -->
 <div class="overlay" id="deleteModal">
   <div class="modal modal-sm">
     <div class="modal-hdr">
@@ -386,7 +639,7 @@ tr:hover td{background:#263548}
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="modal-body">
         <div class="warn-box">
-          This permanently deletes <strong id="delete-name"></strong> and all their inventory data. This cannot be undone.
+          Permanently deletes <strong id="delete-name"></strong> and all their data. Cannot be undone.
         </div>
         <div class="field">
           <label>Type the slug to confirm</label>
@@ -407,84 +660,332 @@ tr:hover td{background:#263548}
 <script>
 const _csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
-document.querySelectorAll('.overlay').forEach(o=>{
-  o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')});
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'security') { loadRateLimits(); loadSecurityLog(1); }
+}
+
+// ── Modal helpers ─────────────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
 });
 
-// ── New tenant ──────────────────────────────────────────────────────────────
-function suggestSlug(){
-  const v=document.getElementById('t-name').value;
-  const s=v.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,32);
-  document.getElementById('t-slug').value=s;
+// ── New Tenant ────────────────────────────────────────────────────────────────
+function suggestSlug() {
+  const v = document.getElementById('t-name').value;
+  const s = v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+  document.getElementById('t-slug').value = s;
   updateSlugPreview();
 }
-function updateSlugPreview(){
-  const s=document.getElementById('t-slug').value;
-  document.getElementById('slug-preview').textContent=s?s+'.yourdomain.com':'';
+function updateSlugPreview() {
+  const s = document.getElementById('t-slug').value;
+  document.getElementById('slug-preview').textContent = s ? s + '.yourdomain.com' : '';
 }
-function submitNew(){
-  const name=document.getElementById('t-name').value.trim();
-  const slug=document.getElementById('t-slug').value.trim().toLowerCase();
-  const plan=document.getElementById('t-plan').value;
-  const pw  =document.getElementById('t-pw').value;
-  const err =document.getElementById('new-err');
-  err.style.display='none';
-  if(!name)return showNewErr('Company name is required.');
-  if(!slug)return showNewErr('Slug is required.');
-  if(!/^[a-z0-9][a-z0-9\-]{1,31}$/.test(slug))return showNewErr('Invalid slug format.');
-  if(pw.length<8)return showNewErr('Password must be at least 8 characters.');
-  const form=document.createElement('form');
-  form.method='POST';
-  form.action='{{ url_for("platform.tenant_new") }}';
-  [['name',name],['slug',slug],['plan',plan],['admin_password',pw],['csrf_token',_csrf]].forEach(([k,v])=>{
-    const i=document.createElement('input');i.name=k;i.value=v;form.appendChild(i);
+function submitNew() {
+  const name  = document.getElementById('t-name').value.trim();
+  const slug  = document.getElementById('t-slug').value.trim().toLowerCase();
+  const plan  = document.getElementById('t-plan').value;
+  const email = document.getElementById('t-email').value.trim();
+  const pw    = document.getElementById('t-pw').value;
+  const err   = document.getElementById('new-err');
+  err.style.display = 'none';
+  if (!name)  return showNewErr('Company name is required.');
+  if (!slug)  return showNewErr('Slug is required.');
+  if (!/^[a-z0-9][a-z0-9\-]{1,31}$/.test(slug)) return showNewErr('Invalid slug format.');
+  if (!email || !email.includes('@')) return showNewErr('Valid admin email is required.');
+  if (pw.length < 8) return showNewErr('Password must be at least 8 characters.');
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '{{ url_for("platform.tenant_new") }}';
+  [['name',name],['slug',slug],['plan',plan],['admin_email',email],
+   ['admin_password',pw],['csrf_token',_csrf]].forEach(([k,v]) => {
+    const i = document.createElement('input'); i.name = k; i.value = v; form.appendChild(i);
   });
-  document.body.appendChild(form);form.submit();
+  document.body.appendChild(form); form.submit();
 }
-function showNewErr(msg){
-  const el=document.getElementById('new-err');el.textContent=msg;el.style.display='';
+function showNewErr(msg) {
+  const el = document.getElementById('new-err'); el.textContent = msg; el.style.display = '';
 }
 
-// ── Edit ────────────────────────────────────────────────────────────────────
-function openEdit(slug,name,plan){
-  document.getElementById('edit-form').action='/_platform/tenant/'+slug+'/edit';
-  document.getElementById('edit-name').value=name;
-  document.getElementById('edit-plan').value=plan;
+// ── Edit ──────────────────────────────────────────────────────────────────────
+function openEdit(slug, name, plan) {
+  document.getElementById('edit-form').action = '/_platform/tenant/' + slug + '/edit';
+  document.getElementById('edit-name').value = name;
+  document.getElementById('edit-plan').value = plan;
   openModal('editModal');
 }
 
-// ── Billing ─────────────────────────────────────────────────────────────────
-function openBilling(slug,name,status,trialEnds,notes){
-  document.getElementById('billing-title').textContent='Billing — '+name;
-  document.getElementById('billing-form').action='/_platform/tenant/'+slug+'/billing';
-  document.getElementById('billing-status').value=status||'trial';
-  document.getElementById('billing-trial-ends').value=trialEnds||'';
-  document.getElementById('billing-notes').value=notes||'';
+// ── Billing ───────────────────────────────────────────────────────────────────
+let _billingTrialBase = '';
+function openBilling(slug, name, status, trialEnds, notes) {
+  document.getElementById('billing-title').textContent = 'Billing — ' + name;
+  document.getElementById('billing-form').action = '/_platform/tenant/' + slug + '/billing';
+  document.getElementById('billing-status').value = status || 'trial';
+  document.getElementById('billing-trial-ends').value = trialEnds || '';
+  document.getElementById('billing-notes').value = notes || '';
+  _billingTrialBase = trialEnds || '';
   openModal('billingModal');
 }
-function grantFreeMonth(){
-  const d=new Date();
-  d.setMonth(d.getMonth()+1);
-  document.getElementById('billing-trial-ends').value=d.toISOString().slice(0,10);
+function addDays(n) {
+  const el  = document.getElementById('billing-trial-ends');
+  const cur = el.value || new Date().toISOString().slice(0,10);
+  const d   = new Date(cur + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  el.value  = d.toISOString().slice(0,10);
+  document.getElementById('billing-status').value = 'trial';
 }
 
-// ── Delete ──────────────────────────────────────────────────────────────────
-let _deleteSlug='';
-function openDelete(slug,name){
-  _deleteSlug=slug;
-  document.getElementById('delete-form').action='/_platform/tenant/'+slug+'/delete';
-  document.getElementById('delete-name').textContent=name;
-  document.getElementById('delete-slug-hint').textContent='Slug: '+slug;
-  document.getElementById('delete-confirm').value='';
-  document.getElementById('delete-submit').disabled=true;
+// ── Grant Free ────────────────────────────────────────────────────────────────
+function openGrantFree(slug, name) {
+  document.getElementById('grant-free-form').action = '/_platform/tenant/' + slug + '/grant-free';
+  document.getElementById('grant-free-name').textContent = name;
+  document.getElementById('grant-free-note').value = '';
+  openModal('grantFreeModal');
+}
+
+// ── Banner ────────────────────────────────────────────────────────────────────
+function openBannerModal(slug, name) {
+  document.getElementById('banner-form').action = '/_platform/tenant/' + slug + '/banner';
+  document.getElementById('banner-tenant-name').textContent = name;
+  document.getElementById('banner-message').value = '';
+  openModal('bannerModal');
+}
+function clearBanner() {
+  document.getElementById('banner-message').value = '';
+  document.getElementById('banner-form').submit();
+}
+
+// ── Users modal ───────────────────────────────────────────────────────────────
+let _usersSlug = '';
+function openUsersModal(slug, name) {
+  _usersSlug = slug;
+  document.getElementById('users-modal-title').textContent = 'Users — ' + name;
+  document.getElementById('users-modal-body').innerHTML =
+    '<tr><td colspan="5" style="text-align:center;padding:32px;color:#475569">Loading…</td></tr>';
+  openModal('usersModal');
+  fetch('/_platform/tenant/' + slug + '/users')
+    .then(r => r.json()).then(renderUsersModal).catch(() => {
+      document.getElementById('users-modal-body').innerHTML =
+        '<tr><td colspan="5" style="text-align:center;padding:24px;color:#f87171">Failed to load users.</td></tr>';
+    });
+}
+function renderUsersModal(users) {
+  const tb = document.getElementById('users-modal-body');
+  if (!users.length) {
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:#475569">No users found.</td></tr>';
+    return;
+  }
+  tb.innerHTML = users.map(u => `
+    <tr>
+      <td>
+        <div style="font-weight:600;font-size:13px">${esc(u.username)}</div>
+        <div style="font-size:11px;color:#64748b">${esc(u.email)}</div>
+      </td>
+      <td><span class="badge badge-${u.role}">${esc(u.role)}</span></td>
+      <td><span class="stat">${u.last_login ? u.last_login.slice(0,16) : '—'}</span></td>
+      <td>${u.active_session ? '<span class="badge badge-online">Online</span>' : '<span style="color:#475569;font-size:12px">—</span>'}</td>
+      <td>
+        <div class="actions">
+          <button class="btn btn-purple btn-xs" onclick="impersonateUser('${_usersSlug}',${u.id},'${esc(u.username)}')">Impersonate</button>
+          ${u.active_session ? `<button class="btn btn-amber btn-xs" onclick="forceLogout('${_usersSlug}',${u.id},this)">Force Logout</button>` : ''}
+          <button class="btn btn-muted btn-xs" onclick="openResetPw('${_usersSlug}',${u.id},'${esc(u.username)}')">Reset PW</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+async function impersonateUser(slug, userId, username) {
+  if (!confirm('Open a session as ' + username + '? A new tab will open.')) return;
+  const res  = await fetch('/_platform/tenant/' + slug + '/impersonate/' + userId,
+    { method: 'POST', headers: { 'X-CSRF-Token': _csrf } });
+  const data = await res.json();
+  if (data.ok) window.open(data.redirect, '_blank');
+  else alert('Error: ' + (data.msg || 'Unknown error'));
+}
+
+async function forceLogout(slug, userId, btn) {
+  if (!confirm('Force-logout this user? They will be kicked out immediately.')) return;
+  btn.disabled = true;
+  const res  = await fetch('/_platform/tenant/' + slug + '/user/' + userId + '/force-logout',
+    { method: 'POST', headers: { 'X-CSRF-Token': _csrf } });
+  const data = await res.json();
+  if (data.ok) { btn.textContent = 'Logged out'; btn.classList.replace('btn-amber','btn-muted'); }
+  else { btn.disabled = false; alert('Error: ' + data.msg); }
+}
+
+let _resetSlug = '', _resetUserId = 0;
+function openResetPw(slug, userId, username) {
+  _resetSlug   = slug;
+  _resetUserId = userId;
+  document.getElementById('reset-pw-user').textContent = username;
+  document.getElementById('reset-pw-input').value = '';
+  document.getElementById('reset-pw-err').style.display = 'none';
+  document.getElementById('reset-pw-ok').style.display  = 'none';
+  openModal('resetPwModal');
+}
+async function doResetPassword() {
+  const pw  = document.getElementById('reset-pw-input').value.trim();
+  const err = document.getElementById('reset-pw-err');
+  const ok  = document.getElementById('reset-pw-ok');
+  err.style.display = 'none'; ok.style.display = 'none';
+  if (pw.length < 8) { err.textContent = 'Password must be at least 8 characters.'; err.style.display = ''; return; }
+  const res  = await fetch('/_platform/tenant/' + _resetSlug + '/user/' + _resetUserId + '/reset-password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrf },
+    body: JSON.stringify({ password: pw })
+  });
+  const data = await res.json();
+  if (data.ok) { ok.style.display = ''; document.getElementById('reset-pw-input').value = ''; }
+  else { err.textContent = data.msg || 'Failed.'; err.style.display = ''; }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+let _deleteSlug = '';
+function openDelete(slug, name) {
+  _deleteSlug = slug;
+  document.getElementById('delete-form').action = '/_platform/tenant/' + slug + '/delete';
+  document.getElementById('delete-name').textContent = name;
+  document.getElementById('delete-slug-hint').textContent = 'Slug: ' + slug;
+  document.getElementById('delete-confirm').value = '';
+  document.getElementById('delete-submit').disabled = true;
   openModal('deleteModal');
 }
-document.getElementById('delete-confirm').addEventListener('input',function(){
-  document.getElementById('delete-submit').disabled=(this.value!==_deleteSlug);
+document.getElementById('delete-confirm').addEventListener('input', function() {
+  document.getElementById('delete-submit').disabled = (this.value !== _deleteSlug);
 });
-</script>
 
+// ── Global user search ────────────────────────────────────────────────────────
+let _userSearchDeb = null;
+function debounceUserSearch() {
+  clearTimeout(_userSearchDeb);
+  _userSearchDeb = setTimeout(() => {
+    const q = document.getElementById('user-search-input').value.trim();
+    if (q.length < 2) {
+      document.getElementById('user-search-body').innerHTML =
+        '<tr><td colspan="7" style="text-align:center;padding:40px;color:#475569">Type at least 2 characters to search.</td></tr>';
+      return;
+    }
+    document.getElementById('user-search-body').innerHTML =
+      '<tr><td colspan="7" style="text-align:center;padding:24px;color:#475569">Searching…</td></tr>';
+    fetch('/_platform/users/search?q=' + encodeURIComponent(q))
+      .then(r => r.json()).then(renderGlobalUsers).catch(() => {
+        document.getElementById('user-search-body').innerHTML =
+          '<tr><td colspan="7" style="text-align:center;color:#f87171;padding:24px">Search failed.</td></tr>';
+      });
+  }, 400);
+}
+function renderGlobalUsers(users) {
+  const tb = document.getElementById('user-search-body');
+  if (!users.length) {
+    tb.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:#475569">No users found.</td></tr>';
+    return;
+  }
+  tb.innerHTML = users.map(u => `
+    <tr>
+      <td>
+        <div style="font-weight:600">${esc(u.username)}</div>
+        <div style="font-size:11px;color:#64748b">${esc(u.email)}</div>
+      </td>
+      <td><span style="font-size:11px;color:#94a3b8">${esc(u.email)}</span></td>
+      <td><span class="badge badge-${u.role}">${esc(u.role)}</span></td>
+      <td><span class="slug">${esc(u.tenant_slug)}</span> <span style="font-size:11px;color:#475569">${esc(u.tenant_name)}</span></td>
+      <td><span class="stat">${u.last_login ? u.last_login.slice(0,10) : '—'}</span></td>
+      <td>${u.active_session ? '<span class="badge badge-online">Online</span>' : '<span style="color:#475569;font-size:12px">—</span>'}</td>
+      <td>
+        <div class="actions">
+          <button class="btn btn-purple btn-xs" onclick="impersonateUser('${esc(u.tenant_slug)}',${u.id},'${esc(u.username)}')">Impersonate</button>
+          ${u.active_session ? `<button class="btn btn-amber btn-xs" onclick="forceLogout('${esc(u.tenant_slug)}',${u.id},this)">Force Logout</button>` : ''}
+          <button class="btn btn-muted btn-xs" onclick="openResetPw('${esc(u.tenant_slug)}',${u.id},'${esc(u.username)}')">Reset PW</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+// ── Rate limits ───────────────────────────────────────────────────────────────
+async function loadRateLimits() {
+  const tb = document.getElementById('rate-limits-body');
+  tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:#475569">Loading…</td></tr>';
+  const rows = await fetch('/_platform/rate-limits').then(r => r.json());
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:#475569">No rate-limited IPs.</td></tr>';
+    return;
+  }
+  tb.innerHTML = rows.map(r => `
+    <tr>
+      <td><span style="font-family:monospace;font-size:12px">${esc(r.ip)}</span></td>
+      <td><span class="stat">${esc(r.endpoint)}</span></td>
+      <td><strong>${r.attempts}</strong></td>
+      <td><span class="stat">${r.last_attempt ? r.last_attempt.slice(0,16) : '—'}</span></td>
+      <td><button class="btn btn-green btn-xs" onclick="unlockIp('${esc(r.ip)}',this)">Unlock</button></td>
+    </tr>`).join('');
+}
+async function unlockIp(ip, btn) {
+  btn.disabled = true;
+  const res  = await fetch('/_platform/unlock-ip', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrf },
+    body: JSON.stringify({ ip })
+  });
+  const data = await res.json();
+  if (data.ok) btn.closest('tr').remove();
+  else { btn.disabled = false; alert('Error: ' + data.msg); }
+}
+
+// ── Security log ──────────────────────────────────────────────────────────────
+let _logPage = 1, _logDeb = null;
+const EVENT_COLORS = {
+  LOGIN_OK:'ev-ok', LOGIN_OK_2FA:'ev-ok', LOGOUT:'ev-info',
+  LOGIN_FAIL:'ev-fail', RATE_LIMITED:'ev-fail', '2FA_FAIL':'ev-fail',
+  '2FA_SENT':'ev-info', PW_CHANGE:'ev-warn', PW_RESET:'ev-warn',
+};
+function debounceLogSearch() {
+  clearTimeout(_logDeb);
+  _logDeb = setTimeout(() => loadSecurityLog(1), 400);
+}
+async function loadSecurityLog(page) {
+  _logPage = page;
+  const q   = document.getElementById('sec-log-search').value.trim();
+  const tb  = document.getElementById('sec-log-body');
+  tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:#475569">Loading…</td></tr>';
+  const data = await fetch('/_platform/security-log?page=' + page + '&q=' + encodeURIComponent(q))
+    .then(r => r.json());
+  if (!data.rows.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#475569">No entries found.</td></tr>';
+    renderLogPagination(0, 1, 1);
+    return;
+  }
+  tb.innerHTML = data.rows.map(r => {
+    const cls = EVENT_COLORS[r.event] || 'ev-info';
+    return `<tr>
+      <td style="font-size:11px;color:#64748b;white-space:nowrap;font-family:monospace">${r.ts ? r.ts.slice(0,16) : ''}</td>
+      <td><span class="${cls}" style="font-size:12px;font-weight:700">${esc(r.event)}</span></td>
+      <td style="font-size:12px">${esc(r.username || '—')}</td>
+      <td><span class="slug">${esc(r.tenant || '—')}</span></td>
+      <td style="font-size:11px;font-family:monospace;color:#64748b">${esc(r.ip || '—')}</td>
+      <td style="font-size:12px;color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.detail || '')}</td>
+    </tr>`;
+  }).join('');
+  renderLogPagination(data.total, data.page, data.pages);
+}
+function renderLogPagination(total, page, pages) {
+  const el = document.getElementById('sec-log-pagination');
+  if (pages <= 1) { el.innerHTML = `<span style="font-size:12px;color:#475569">${total} entries</span>`; return; }
+  let h = `<button class="btn btn-muted btn-xs" ${page===1?'disabled':''} onclick="loadSecurityLog(${page-1})">‹</button>`;
+  for (let i = 1; i <= Math.min(pages, 7); i++)
+    h += `<button class="btn btn-xs ${i===page?'btn-primary':'btn-muted'}" onclick="loadSecurityLog(${i})">${i}</button>`;
+  if (pages > 7) h += '<span style="padding:0 4px;color:#475569">…</span>';
+  h += `<button class="btn btn-muted btn-xs" ${page===pages?'disabled':''} onclick="loadSecurityLog(${page+1})">›</button>`;
+  h += `<span style="font-size:12px;color:#475569;margin-left:6px">${total} entries · p${page}/${pages}</span>`;
+  el.innerHTML = h;
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
 </body>
 </html>

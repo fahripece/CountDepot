@@ -382,7 +382,7 @@ def api_tenants():
 
 # ── Manual backup ─────────────────────────────────────────────────────────────
 
-@bp.route("/_platform/backup", methods=["POST"])
+@bp.route("/backup", methods=["POST"])
 @platform_login_required
 def platform_backup():
     from app.platform import backup_all_dbs
@@ -392,3 +392,281 @@ def platform_backup():
                         "count": len(files)})
     except Exception as e:
         return jsonify({"ok": False, "msg": str(e)})
+
+
+# ── Grant permanent free access ───────────────────────────────────────────────
+
+@bp.route("/tenant/<slug>/grant-free", methods=["POST"])
+@platform_login_required
+def tenant_grant_free(slug):
+    plan = request.form.get("plan", "pro")
+    note = request.form.get("note", "").strip() or \
+           f"Free access granted {datetime.utcnow().strftime('%Y-%m-%d')} by platform admin"
+    db = get_platform_db()
+    db.execute(
+        "UPDATE tenants SET subscription_status='active', trial_ends_at=NULL, plan=?, notes=? WHERE slug=?",
+        [plan, note, slug])
+    db.commit(); db.close()
+    return redirect(url_for("platform.dashboard"))
+
+
+# ── Extend trial ──────────────────────────────────────────────────────────────
+
+@bp.route("/tenant/<slug>/extend-trial", methods=["POST"])
+@platform_login_required
+def tenant_extend_trial(slug):
+    from datetime import date as _date
+    days = max(1, int(request.form.get("days", 30)))
+    db   = get_platform_db()
+    row  = db.execute("SELECT trial_ends_at FROM tenants WHERE slug=?", [slug]).fetchone()
+    current = (row["trial_ends_at"] or "")[:10] if row else ""
+    try:
+        base = _date.fromisoformat(current) if current else _date.today()
+        if base < _date.today():
+            base = _date.today()
+    except Exception:
+        base = _date.today()
+    new_end = (base + timedelta(days=days)).isoformat()
+    db.execute(
+        "UPDATE tenants SET subscription_status='trial', trial_ends_at=? WHERE slug=?",
+        [new_end, slug])
+    db.commit(); db.close()
+    return redirect(url_for("platform.dashboard"))
+
+
+# ── Set / clear tenant banner ─────────────────────────────────────────────────
+
+@bp.route("/tenant/<slug>/banner", methods=["POST"])
+@platform_login_required
+def tenant_banner(slug):
+    import sqlite3 as _sq
+    message = request.form.get("message", "").strip()
+    db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
+    if not os.path.exists(db_path):
+        return redirect(url_for("platform.dashboard"))
+    db = _sq.connect(db_path)
+    if message:
+        db.execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('banner_message',?)", [message])
+    else:
+        db.execute("DELETE FROM settings WHERE key='banner_message'")
+    db.commit(); db.close()
+    return redirect(url_for("platform.dashboard"))
+
+
+# ── Tenant users list (JSON) ──────────────────────────────────────────────────
+
+@bp.route("/tenant/<slug>/users")
+@platform_login_required
+def tenant_users(slug):
+    import sqlite3 as _sq
+    db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
+    if not os.path.exists(db_path):
+        return jsonify([])
+    db = _sq.connect(db_path)
+    db.row_factory = _sq.Row
+    try:
+        rows = db.execute(
+            "SELECT id, username, email, role, last_login, session_token FROM users"
+        ).fetchall()
+    except Exception:
+        rows = []
+    finally:
+        db.close()
+    return jsonify([{
+        "id":             r["id"],
+        "username":       r["username"],
+        "email":          r["email"] or "",
+        "role":           r["role"],
+        "last_login":     r["last_login"] or "",
+        "active_session": bool(r["session_token"]),
+    } for r in rows])
+
+
+# ── Force-logout a user ───────────────────────────────────────────────────────
+
+@bp.route("/tenant/<slug>/user/<int:user_id>/force-logout", methods=["POST"])
+@platform_login_required
+def tenant_force_logout(slug, user_id):
+    import sqlite3 as _sq
+    db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
+    if not os.path.exists(db_path):
+        return jsonify({"ok": False, "msg": "Tenant not found"}), 404
+    db = _sq.connect(db_path)
+    db.execute("UPDATE users SET session_token=NULL WHERE id=?", [user_id])
+    db.commit(); db.close()
+    return jsonify({"ok": True})
+
+
+# ── Reset a user's password ───────────────────────────────────────────────────
+
+@bp.route("/tenant/<slug>/user/<int:user_id>/reset-password", methods=["POST"])
+@platform_login_required
+def tenant_reset_password(slug, user_id):
+    import sqlite3 as _sq
+    data   = request.get_json(silent=True) or {}
+    new_pw = data.get("password", "").strip()
+    if len(new_pw) < 8:
+        return jsonify({"ok": False, "msg": "Password must be at least 8 characters."}), 400
+    db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
+    if not os.path.exists(db_path):
+        return jsonify({"ok": False, "msg": "Tenant not found"}), 404
+    db = _sq.connect(db_path)
+    db.execute(
+        "UPDATE users SET password=?, must_change_password=1, session_token=NULL WHERE id=?",
+        [hash_pw(new_pw), user_id])
+    db.commit(); db.close()
+    return jsonify({"ok": True})
+
+
+# ── Impersonate: generate cross-login token ───────────────────────────────────
+
+@bp.route("/tenant/<slug>/impersonate/<int:user_id>", methods=["POST"])
+@platform_login_required
+def tenant_impersonate(slug, user_id):
+    import sqlite3 as _sq
+    db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
+    if not os.path.exists(db_path):
+        return jsonify({"ok": False, "msg": "Tenant DB not found"}), 404
+    db = _sq.connect(db_path)
+    user = db.execute("SELECT id FROM users WHERE id=?", [user_id]).fetchone()
+    db.close()
+    if not user:
+        return jsonify({"ok": False, "msg": "User not found"}), 404
+
+    token      = secrets.token_urlsafe(32)
+    now        = datetime.utcnow()
+    expires_at = (now + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+    pdb = get_platform_db()
+    pdb.execute(
+        "INSERT INTO cross_login_tokens (tenant_slug,user_id,token,expires_at,created_at) VALUES (?,?,?,?,?)",
+        [slug, user_id, token, expires_at, now.strftime("%Y-%m-%d %H:%M:%S")])
+    pdb.commit(); pdb.close()
+
+    host = request.host
+    if "localhost" in host or "127.0.0.1" in host:
+        redirect_url = f"http://{host}/auto-login?token={token}"
+    else:
+        base = ".".join(host.split(".")[-2:])
+        redirect_url = f"https://{slug}.{base}/auto-login?token={token}"
+
+    return jsonify({"ok": True, "redirect": redirect_url})
+
+
+# ── Download tenant DB ────────────────────────────────────────────────────────
+
+@bp.route("/tenant/<slug>/download-db")
+@platform_login_required
+def tenant_download_db(slug):
+    from flask import send_file as _sf
+    db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
+    if not os.path.exists(db_path):
+        abort(404)
+    return _sf(db_path, as_attachment=True, download_name=f"{slug}_inventory.db")
+
+
+# ── Global user search (across all tenants) ───────────────────────────────────
+
+@bp.route("/users/search")
+@platform_login_required
+def users_search():
+    import sqlite3 as _sq
+    q = request.args.get("q", "").strip().lower()
+    if len(q) < 2:
+        return jsonify([])
+    pdb     = get_platform_db()
+    tenants = pdb.execute("SELECT slug, name FROM tenants WHERE active=1").fetchall()
+    pdb.close()
+    results = []
+    for t in tenants:
+        slug, tname = t[0], t[1]
+        db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
+        if not os.path.exists(db_path):
+            continue
+        db = _sq.connect(db_path)
+        db.row_factory = _sq.Row
+        try:
+            rows = db.execute(
+                "SELECT id, username, email, role, last_login, session_token FROM users "
+                "WHERE LOWER(COALESCE(email,'')) LIKE ? OR LOWER(username) LIKE ?",
+                [f"%{q}%", f"%{q}%"]
+            ).fetchall()
+        except Exception:
+            rows = []
+        finally:
+            db.close()
+        for u in rows:
+            results.append({
+                "tenant_slug":    slug,
+                "tenant_name":    tname,
+                "id":             u["id"],
+                "username":       u["username"],
+                "email":          u["email"] or "",
+                "role":           u["role"],
+                "last_login":     u["last_login"] or "",
+                "active_session": bool(u["session_token"]),
+            })
+    return jsonify(results)
+
+
+# ── Unlock rate-limited IP ────────────────────────────────────────────────────
+
+@bp.route("/unlock-ip", methods=["POST"])
+@platform_login_required
+def unlock_ip():
+    data = request.get_json(silent=True) or {}
+    ip   = data.get("ip", "").strip()
+    if not ip:
+        return jsonify({"ok": False, "msg": "IP required"}), 400
+    pdb = get_platform_db()
+    pdb.execute("DELETE FROM rate_limits WHERE ip=?", [ip])
+    pdb.commit(); pdb.close()
+    return jsonify({"ok": True})
+
+
+# ── Rate limits list ──────────────────────────────────────────────────────────
+
+@bp.route("/rate-limits")
+@platform_login_required
+def rate_limits_list():
+    pdb  = get_platform_db()
+    rows = pdb.execute("""
+        SELECT ip, endpoint, COUNT(*) as attempts, MAX(ts) as last_attempt
+        FROM rate_limits
+        GROUP BY ip, endpoint
+        ORDER BY last_attempt DESC
+        LIMIT 200
+    """).fetchall()
+    pdb.close()
+    return jsonify([dict(r) for r in rows])
+
+
+# ── Security log ──────────────────────────────────────────────────────────────
+
+@bp.route("/security-log")
+@platform_login_required
+def security_log():
+    q      = request.args.get("q", "").strip()
+    page   = max(1, int(request.args.get("page", 1)))
+    limit  = 100
+    offset = (page - 1) * limit
+    pdb    = get_platform_db()
+    if q:
+        like = f"%{q}%"
+        rows  = pdb.execute(
+            "SELECT * FROM security_log WHERE username LIKE ? OR ip LIKE ? "
+            "OR tenant LIKE ? OR event LIKE ? OR detail LIKE ? "
+            "ORDER BY id DESC LIMIT ? OFFSET ?",
+            [like]*5 + [limit, offset]).fetchall()
+        total = pdb.execute(
+            "SELECT COUNT(*) FROM security_log WHERE username LIKE ? OR ip LIKE ? "
+            "OR tenant LIKE ? OR event LIKE ? OR detail LIKE ?",
+            [like]*5).fetchone()[0]
+    else:
+        rows  = pdb.execute(
+            "SELECT * FROM security_log ORDER BY id DESC LIMIT ? OFFSET ?",
+            [limit, offset]).fetchall()
+        total = pdb.execute("SELECT COUNT(*) FROM security_log").fetchone()[0]
+    pdb.close()
+    pages = max(1, (total + limit - 1) // limit)
+    return jsonify({"rows": [dict(r) for r in rows], "total": total,
+                    "page": page, "pages": pages})

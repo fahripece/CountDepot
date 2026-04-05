@@ -253,7 +253,15 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
       </a>
     </div>
   </aside>
-  <div class="main">{% block content %}{% endblock %}</div>
+  <div class="main">
+    {% if banner_message %}
+    <div style="background:#78350f;color:#fef3c7;padding:10px 20px;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span>📢 {{ banner_message }}</span>
+      <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fef3c7;cursor:pointer;font-size:16px;line-height:1;opacity:.7;padding:0">✕</button>
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </div>
 </div>
 <div class="toast-wrap" id="toastWrap"></div>
 <script>

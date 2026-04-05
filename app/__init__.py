@@ -26,10 +26,12 @@ def create_app():
         """Make csrf_token + brand settings available in every template."""
         if "_csrf_token" not in session:
             session["_csrf_token"] = secrets.token_hex(32)
-        brand_name  = getattr(g, "brand_name",  None)
-        brand_color = getattr(g, "brand_color", None)
+        brand_name     = getattr(g, "brand_name",     None)
+        brand_color    = getattr(g, "brand_color",    None)
+        banner_message = getattr(g, "banner_message", None)
         return {"csrf_token": session["_csrf_token"],
-                "brand_name": brand_name, "brand_color": brand_color}
+                "brand_name": brand_name, "brand_color": brand_color,
+                "banner_message": banner_message}
 
     @app.before_request
     def before():
@@ -111,9 +113,12 @@ def create_app():
                 brand_color_row = _bq("SELECT value FROM settings WHERE key='brand_color'", one=True)
                 g.brand_name  = (brand_name_row["value"]  if brand_name_row  else None) or g.tenant.get("name")
                 g.brand_color = (brand_color_row["value"] if brand_color_row else None) or "#0f172a"
+                banner_row    = _bq("SELECT value FROM settings WHERE key='banner_message'", one=True)
+                g.banner_message = banner_row["value"] if banner_row else None
             except Exception:
-                g.brand_name  = g.tenant.get("name") if hasattr(g, "tenant") and g.tenant else None
-                g.brand_color = "#0f172a"
+                g.brand_name     = g.tenant.get("name") if hasattr(g, "tenant") and g.tenant else None
+                g.brand_color    = "#0f172a"
+                g.banner_message = None
 
         # Routes that don't need the intercept checks
         skip = ("/onboarding", "/login", "/logout", "/change-password",
