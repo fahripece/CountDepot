@@ -285,7 +285,7 @@ def api_dashboard():
                            CASE WHEN qty IS NULL THEN 1 ELSE COALESCE(qty,0) END
                        ELSE 0 END) FROM items WHERE active=1""", one=True)[0] or 0, 2)
     revenue     = round(query("SELECT SUM(COALESCE(sold_price,sale_price,0)) FROM items WHERE active=1 AND sold=1", one=True)[0] or 0, 2)
-    cost_sold   = query("SELECT SUM(COALESCE(cost_price,0)) FROM items WHERE active=1 AND sold=1", one=True)[0] or 0
+    cost_sold   = round(query("SELECT SUM(COALESCE(cost_price,0)) FROM items WHERE active=1 AND sold=1", one=True)[0] or 0, 2)
     profit      = round(revenue - cost_sold, 2)
     by_category = [{"name": r["name"], "color": r["color"],
                     "value": round(r["val"] or 0, 2), "count": r["cnt"]}
