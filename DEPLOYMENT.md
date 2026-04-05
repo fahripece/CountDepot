@@ -129,6 +129,9 @@ DEV_TENANT_SLUG=dev
 WEB_CONCURRENCY=4
 LOG_LEVEL=info
 
+# Optional: write rotating log files in addition to journald
+# LOG_FILE=/home/countdepot/logs/countdepot.log
+
 # ── Email (optional but strongly recommended) ──────────────────────────────
 # Leave SMTP_HOST empty and emails are printed to logs instead of sent
 # Works with any SMTP provider: Postmark, Mailgun, SendGrid, Gmail, etc.
@@ -214,57 +217,76 @@ If `SIGNUP_ENABLED=true`, clients can go to `https://countdepot.com/signup` and 
 
 Without backups, one failed disk loses all client data.
 
+The backup script (`scripts/backup.py`) uses SQLite's native backup API — safe to run while the app is live, even with WAL mode active. It also runs a WAL checkpoint after each backup to keep WAL files small.
+
 ```bash
 mkdir -p /home/countdepot/backups
-
-cat > /home/countdepot/backup.sh << 'EOF'
-#!/bin/bash
-set -e
-
-BACKUP_DIR="/home/countdepot/backups"
-DATA_DIR="/home/countdepot/countdepot/data"
-DATE=$(date +%Y%m%d_%H%M%S)
-DEST="$BACKUP_DIR/$DATE"
-
-mkdir -p "$DEST"
-
-# Platform registry (tenant list)
-cp "$DATA_DIR/platform.db" "$DEST/platform.db"
-
-# Each tenant's inventory DB
-for dir in "$DATA_DIR/tenants"/*/; do
-    slug=$(basename "$dir")
-    [ -f "$dir/inventory.db" ] && cp "$dir/inventory.db" "$DEST/${slug}_inventory.db"
-done
-
-# Compress and clean up
-tar -czf "$BACKUP_DIR/storelax_$DATE.tar.gz" -C "$BACKUP_DIR" "$DATE"
-rm -rf "$DEST"
-
-# Keep last 14 days
-find "$BACKUP_DIR" -name "storelax_*.tar.gz" -mtime +14 -delete
-
-echo "Backup done: storelax_$DATE.tar.gz"
-
-# Optional: copy to S3
-# aws s3 cp "$BACKUP_DIR/storelax_$DATE.tar.gz" s3://your-bucket/storelax/
-EOF
-
-chmod +x /home/countdepot/backup.sh
-chown countdepot:countdepot /home/countdepot/backup.sh
+chmod +x /home/countdepot/countdepot/scripts/backup.sh
 ```
 
-Schedule nightly at 2am:
+### Option A — systemd timer (recommended)
+
+Systemd timers log to journald and restart automatically on failure.
+
+```bash
+# Service that runs the backup
+cat > /etc/systemd/system/countdepot-backup.service << 'EOF'
+[Unit]
+Description=CountDepot nightly backup
+After=network.target
+
+[Service]
+Type=oneshot
+User=countdepot
+WorkingDirectory=/home/countdepot/countdepot
+Environment=COUNTDEPOT_BACKUP_DIR=/home/countdepot/backups
+Environment=COUNTDEPOT_BACKUP_KEEP_DAYS=14
+ExecStart=/home/countdepot/countdepot/scripts/backup.sh
+StandardOutput=journal
+StandardError=journal
+EOF
+
+# Timer that fires it at 2 AM every day
+cat > /etc/systemd/system/countdepot-backup.timer << 'EOF'
+[Unit]
+Description=Run CountDepot backup nightly at 2 AM
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now countdepot-backup.timer
+systemctl list-timers countdepot-backup.timer
+```
+
+### Option B — cron
+
 ```bash
 crontab -u countdepot -e
 # Add:
-0 2 * * * /home/countdepot/backup.sh >> /home/countdepot/backups/backup.log 2>&1
+0 2 * * * COUNTDEPOT_BACKUP_DIR=/home/countdepot/backups /home/countdepot/countdepot/scripts/backup.sh >> /home/countdepot/backups/backup.log 2>&1
 ```
 
-Test it right now:
+### Test it now
+
 ```bash
-su - countdepot -c /home/countdepot/backup.sh
+su - countdepot -c "COUNTDEPOT_BACKUP_DIR=/home/countdepot/backups /home/countdepot/countdepot/scripts/backup.sh"
 ls -lh /home/countdepot/backups/
+```
+
+### Check backup logs
+
+```bash
+# systemd timer logs
+journalctl -u countdepot-backup.service --since today
+
+# Trigger manually
+systemctl start countdepot-backup.service
 ```
 
 ---
