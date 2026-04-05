@@ -329,11 +329,21 @@ def api_dashboard():
 @bp.route("/api/items")
 @login_required
 def api_items():
-    search  = request.args.get("q", "").strip()
-    cat_id  = request.args.get("cat", "")
-    status  = request.args.get("status", "")
-    sort    = request.args.get("sort", "name")
-    prod_id = request.args.get("product", "")
+    search   = request.args.get("q", "").strip()
+    cat_id   = request.args.get("cat", "")
+    status   = request.args.get("status", "")
+    sort     = request.args.get("sort", "name")
+    prod_id  = request.args.get("product", "")
+    page     = max(1, int(request.args.get("page", 1) or 1))
+    per_page = min(200, max(10, int(request.args.get("per_page", 50) or 50)))
+    # hide_out=0 is used by the auto-open ?item=ID flow — skip pagination for it
+    no_paginate = request.args.get("hide_out", "1") == "0"
+
+    base_where = """FROM items i
+             LEFT JOIN categories c  ON c.id=i.category_id
+             LEFT JOIN products p    ON p.id=i.product_id
+             LEFT JOIN companies co  ON co.id=i.company_id
+             WHERE i.active=1"""
     sql  = """SELECT i.*, c.name as category, c.color,
                     p.name as product_name, p.serial_tracked, p.qty_tracked,
                     p.require_scan_checkout as product_scan_req,
@@ -342,40 +352,55 @@ def api_items():
                     p.require_internal_sku as product_req_internal_sku,
                     p.print_scan_label as product_print_scan,
                     co.name as company_name
-             FROM items i
-             LEFT JOIN categories c  ON c.id=i.category_id
-             LEFT JOIN products p    ON p.id=i.product_id
-             LEFT JOIN companies co  ON co.id=i.company_id
-             WHERE i.active=1"""
+             """ + base_where
     args = []
     if search:
         id_search = search.lstrip("#")
-        sql += (" AND (i.name LIKE ? OR i.serial LIKE ? OR i.model LIKE ? "
+        cond = (" AND (i.name LIKE ? OR i.serial LIKE ? OR i.model LIKE ? "
                 "OR i.sku LIKE ? OR i.internal_sku LIKE ? "
                 "OR CAST(i.shelf AS TEXT) LIKE ? OR i.job_ref LIKE ? "
                 "OR i.owner_company LIKE ? OR i.manufacturer LIKE ? "
                 "OR i.po_number LIKE ? OR CAST(i.id AS TEXT) = ?)")
         s = f"%{search}%"
         args += [s]*10 + [id_search]
+        sql += cond
     if cat_id:  sql += " AND i.category_id=?"; args.append(cat_id)
     if prod_id: sql += " AND i.product_id=?";  args.append(prod_id)
     if status == "out":
         sql += " AND i.checked_out=1"
     elif status == "in":
-        sql += " AND i.checked_out=0"
+        sql += " AND i.checked_out=0 AND i.sold=0"
     elif status == "low":
         sql += """ AND i.product_id IN (
             SELECT p.id FROM products p
             LEFT JOIN items ii ON ii.product_id=p.id AND ii.active=1 AND ii.sold=0 AND ii.checked_out=0
             WHERE p.active=1 AND p.low_stock_threshold>0
             GROUP BY p.id HAVING COUNT(ii.id)<=p.low_stock_threshold)"""
+    elif status == "incomplete":
+        sql += """ AND (
+            (p.require_serial=1 AND (i.serial IS NULL OR i.serial='')) OR
+            (p.require_vendor_sku=1 AND (i.sku IS NULL OR i.sku='')) OR
+            i.cost_price IS NULL OR
+            (i.shelf IS NULL OR i.shelf=''))"""
     else:
-        if request.args.get("hide_out", "1") == "1":
+        if not no_paginate:
             sql += " AND i.checked_out=0 AND i.sold=0"
+
     order = {"name": "i.name", "shelf": "i.shelf", "cat": "c.name",
              "cost": "i.cost_price", "sale": "i.sale_price",
              "date": "i.purchase_date"}.get(sort, "i.name")
+
+    # Count total matching rows
+    count_sql = "SELECT COUNT(*) " + sql.split("FROM", 1)[1].split("ORDER")[0]
+    # Strip SELECT clause, keep from FROM onward (without ORDER BY)
+    where_part = sql[sql.index("FROM"):]
+    if "ORDER" in where_part: where_part = where_part[:where_part.rindex("ORDER")]
+    total = query("SELECT COUNT(*) " + where_part, args, one=True)[0]
+
     sql += f" ORDER BY {order}"
+    if not no_paginate:
+        sql += f" LIMIT {per_page} OFFSET {(page - 1) * per_page}"
+
     result = []
     for r in query(sql, args):
         d = dict(r)
@@ -391,7 +416,12 @@ def api_items():
         d["is_incomplete"]  = len(missing) > 0
         d["missing_fields"] = missing
         result.append(d)
-    return jsonify(result)
+
+    if no_paginate:
+        return jsonify(result)
+    pages = max(1, -(-total // per_page))  # ceil division
+    return jsonify({"items": result, "total": total, "page": page,
+                    "pages": pages, "per_page": per_page})
 
 
 @bp.route("/api/scan")
@@ -1289,6 +1319,7 @@ def import_excel():
         return jsonify({"ok": False, "msg": "openpyxl not installed"})
     f = request.files.get("file")
     if not f: return jsonify({"ok": False, "msg": "No file uploaded"})
+    dry_run = request.form.get("dry_run", "0") == "1"
     try:
         wb   = openpyxl.load_workbook(f, read_only=True, data_only=True)
         ws   = wb.active
@@ -1296,18 +1327,39 @@ def import_excel():
         if len(rows) < 2: return jsonify({"ok": False, "msg": "File is empty"})
         cat_map  = {r["name"].lower(): r["id"] for r in query("SELECT id,name FROM categories")}
         prod_map = {r["name"].lower(): r["id"] for r in query("SELECT id,name FROM products WHERE active=1")}
-        added = skipped = 0; errors = []
+        added = skipped = 0; errors = []; preview = []
         for i, row in enumerate(rows[1:], 2):
             try:
                 name = str(row[0] or "").strip()
-                if not name: skipped += 1; continue
+                if not name:
+                    skipped += 1
+                    if dry_run: preview.append({"row": i, "name": "—", "status": "skip", "note": "Empty name"})
+                    continue
+                cat_name  = str(row[5] or "").strip()
+                prod_name = str(row[6] or "").strip()
+                row_errors = []
+                if cat_name and not cat_map.get(cat_name.lower()):
+                    row_errors.append(f"unknown category '{cat_name}'")
+                if prod_name and not prod_map.get(prod_name.lower()):
+                    row_errors.append(f"unknown product '{prod_name}'")
+                if dry_run:
+                    status = "error" if row_errors else "ok"
+                    preview.append({"row": i, "name": name,
+                                    "category": cat_name or "—", "product": prod_name or "—",
+                                    "serial": str(row[3] or "").strip() or "—",
+                                    "shelf":  str(row[10] or "").strip() or "—",
+                                    "cost":   row[16], "status": status,
+                                    "note":   "; ".join(row_errors) if row_errors else ""})
+                    if not row_errors: added += 1
+                    else: errors.append(f"Row {i}: {'; '.join(row_errors)}")
+                    continue
                 _save_item(dict(name=name,
                     manufacturer=str(row[1] or "").strip() or None,
                     model=str(row[2] or "").strip() or None,
                     serial=str(row[3] or "").strip() or None,
                     sku=str(row[4] or "").strip() or None,
-                    category_id=cat_map.get(str(row[5] or "").strip().lower()),
-                    product_id=prod_map.get(str(row[6] or "").strip().lower()),
+                    category_id=cat_map.get(cat_name.lower()),
+                    product_id=prod_map.get(prod_name.lower()),
                     condition=str(row[7] or "New").strip(),
                     owner_company=str(row[8] or "").strip() or None,
                     purchase_date=str(row[9] or "").strip() or None,
@@ -1320,6 +1372,9 @@ def import_excel():
                 added += 1
             except Exception as e:
                 errors.append(f"Row {i}: {e}")
+        if dry_run:
+            return jsonify({"ok": True, "dry_run": True, "preview": preview,
+                            "would_add": added, "skipped": skipped, "errors": errors[:20]})
         return jsonify({"ok": True, "added": added, "skipped": skipped, "errors": errors[:10]})
     except Exception as e:
         return jsonify({"ok": False, "msg": str(e)})

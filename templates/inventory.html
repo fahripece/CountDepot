@@ -107,6 +107,7 @@
     <tbody id="itemTableBody"><tr class="empty-row"><td colspan="10">Loading…</td></tr></tbody>
   </table>
 </div>
+<div id="paginationBar" style="display:none;align-items:center;gap:4px;margin-top:12px;flex-wrap:wrap"></div>
 </div>
 
 <!-- DETAIL PANEL -->
@@ -465,19 +466,36 @@
 
 <!-- ══ IMPORT MODAL ══ -->
 <div class="overlay" id="importModal">
-  <div class="modal modal-sm">
-    <div class="modal-header"><div class="modal-title">Import from Excel</div><button class="modal-close" onclick="closeModal('importModal')">✕</button></div>
+  <div class="modal" style="width:600px">
+    <div class="modal-header"><div class="modal-title">Import from Excel</div><button class="modal-close" onclick="closeImportModal()">✕</button></div>
     <div class="modal-body">
       <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12.5px;color:#1e40af;line-height:1.6">
         Export first → fill in your data → re-import.<br>
         Columns: Name, Manufacturer, Model, Serial, SKU, Category, Product, Condition, Owner, Date, Shelf, Qty, …
       </div>
-      <div class="field"><label class="label">Excel File (.xlsx)</label><input type="file" id="importFile" accept=".xlsx" class="input" style="padding:6px"></div>
+      <div id="importFileField" class="field"><label class="label">Excel File (.xlsx)</label><input type="file" id="importFile" accept=".xlsx" class="input" style="padding:6px"></div>
+      <div id="importPreview" style="display:none">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px" id="importPreviewSummary"></div>
+        <div style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:7px">
+          <table style="width:100%;font-size:12px;border-collapse:collapse">
+            <thead><tr style="background:#f8f8f7;position:sticky;top:0">
+              <th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border)">#</th>
+              <th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border)">Name</th>
+              <th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border)">Category</th>
+              <th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border)">Serial</th>
+              <th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border)">Cost</th>
+              <th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border)">Status</th>
+            </tr></thead>
+            <tbody id="importPreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
       <div id="importResult" style="display:none;font-size:13px;padding:10px;border-radius:7px;margin-top:8px"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('importModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmImport()">Import</button>
+      <button class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
+      <button class="btn btn-secondary" id="importPreviewBtn" onclick="previewImport()">🔍 Preview</button>
+      <button class="btn btn-primary" id="importConfirmBtn" style="display:none" onclick="confirmImport()">✓ Import Now</button>
     </div>
   </div>
 </div>
@@ -531,30 +549,59 @@ const companies = {{ companies | tojson }};
 let allItems=[], selectedIds=new Set(), scanOpen=false, scanMode='lookup';
 let pendingCheckoutId=null, pendingQtyId=null, qtyAction='add', debTimer=null, currentDetailId=null;
 let pendingSaveData=null;
+let currentPage=1, totalItems=0, totalPages=1;
+const PER_PAGE=50;
 
-function loadItemsDebounced(){clearTimeout(debTimer);debTimer=setTimeout(loadItems,300)}
+function loadItemsDebounced(){clearTimeout(debTimer);debTimer=setTimeout(()=>loadItemsPage(1),300)}
+async function loadItems(){await loadItemsPage(currentPage);}
 
-async function loadItems(){
+async function loadItemsPage(page){
+  currentPage=page;
   const q=document.getElementById('searchInput').value;
   const cat=document.getElementById('catFilter').value;
   const status=document.getElementById('statusFilter').value;
   const sort=document.getElementById('sortFilter').value;
-  // 'incomplete' is filtered client-side since it's computed, not a DB column
-  const serverStatus=status==='incomplete'?'':status;
-  const params=new URLSearchParams({q,cat,status:serverStatus,sort});
-  let items=await fetch('/api/items?'+params).then(r=>r.json());
-  if(status==='incomplete') items=items.filter(i=>i.is_incomplete);
-  allItems=items; renderTable(items); updateStats(items); refreshAlertBadge();
+  const params=new URLSearchParams({q,cat,status,sort,page,per_page:PER_PAGE});
+  const data=await fetch('/api/items?'+params).then(r=>r.json());
+  const items=data.items||data;
+  totalItems=data.total!=null?data.total:items.length;
+  totalPages=data.pages||1;
+  allItems=items; renderTable(items); updateStats(data); renderPagination(); refreshAlertBadge();
   if(currentDetailId){const u=allItems.find(i=>i.id===currentDetailId);if(u)showDetail(u);}
 }
 
-function updateStats(items){
-  document.getElementById('st-total').textContent=items.length;
+function updateStats(data){
+  const items=data.items||data;
+  const t=data.total!=null?data.total:items.length;
+  document.getElementById('st-total').textContent=t;
   document.getElementById('st-out').textContent=items.filter(i=>i.checked_out).length;
   const val=items.reduce((a,i)=>a+(i.cost_price||0)*(i.qty===null?1:(i.qty||0)),0);
   document.getElementById('st-val').textContent='$'+val.toFixed(0);
-  document.getElementById('itemCount').textContent=items.length+' item'+(items.length===1?'':'s');
-  // Low stock count comes from product-level alerts (refreshed separately)
+  document.getElementById('itemCount').textContent=t+' item'+(t===1?'':'s');
+}
+
+function renderPagination(){
+  const el=document.getElementById('paginationBar');
+  if(!el)return;
+  if(totalPages<=1){el.style.display='none';return;}
+  el.style.display='flex';
+  let pages=[];
+  if(totalPages<=7){for(let i=1;i<=totalPages;i++)pages.push(i);}
+  else{
+    pages=[1];
+    const start=Math.max(2,currentPage-2),end=Math.min(totalPages-1,currentPage+2);
+    if(start>2)pages.push('…');
+    for(let i=start;i<=end;i++)pages.push(i);
+    if(end<totalPages-1)pages.push('…');
+    pages.push(totalPages);
+  }
+  el.innerHTML=`
+    <button class="btn btn-secondary btn-sm" ${currentPage===1?'disabled':''} onclick="loadItemsPage(${currentPage-1})">‹ Prev</button>
+    ${pages.map(p=>p==='…'?`<span style="padding:4px 8px;color:#94a3b8">…</span>`
+      :`<button class="btn btn-sm ${p===currentPage?'btn-primary':'btn-secondary'}" onclick="loadItemsPage(${p})">${p}</button>`).join('')}
+    <button class="btn btn-secondary btn-sm" ${currentPage===totalPages?'disabled':''} onclick="loadItemsPage(${currentPage+1})">Next ›</button>
+    <span style="font-size:12px;color:#94a3b8;align-self:center;margin-left:4px">Page ${currentPage} of ${totalPages} · ${totalItems} items</span>
+  `;
 }
 
 function renderTable(items){
@@ -1065,7 +1112,66 @@ function toggleSelectAll(checked){allItems.forEach(i=>{if(checked)selectedIds.ad
 function updateSelectionUI(){const n=selectedIds.size;const btn=document.getElementById('massDeleteBtn');const pBtn=document.getElementById('massPrintBtn');if(btn){btn.style.display=n>0?'':'none';document.getElementById('selCount').textContent=n;}if(pBtn){pBtn.style.display=n>0?'':'none';document.getElementById('selCountPrint').textContent=n;}}
 async function massDelete(){const n=selectedIds.size;if(!n)return;if(!confirm(`Delete ${n} selected item${n===1?'':'s'}?`))return;const res=await api('/api/item/delete',{ids:[...selectedIds]});if(res.ok){toast(`Deleted ${res.deleted} item(s)`,'warn');selectedIds.clear();updateSelectionUI();closeDetail();loadItems();}else toast(res.msg||'Error','err');}
 
-async function confirmImport(){const file=document.getElementById('importFile').files[0];if(!file){toast('Select a file first','warn');return}const fd=new FormData();fd.append('file',file);const res=await fetch('/import/excel',{method:'POST',body:fd}).then(r=>r.json());const el=document.getElementById('importResult');el.style.display='';if(res.ok){el.style.cssText='background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;padding:10px;border-radius:7px;margin-top:8px';el.textContent=`✓ Imported ${res.added} items`;if(res.added>0)setTimeout(()=>{closeModal('importModal');loadItems();},1500);}else{el.style.cssText='background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px;border-radius:7px;margin-top:8px';el.textContent='Error: '+(res.msg||'Unknown');}}
+function closeImportModal(){
+  closeModal('importModal');
+  document.getElementById('importFile').value='';
+  document.getElementById('importPreview').style.display='none';
+  document.getElementById('importFileField').style.display='';
+  document.getElementById('importResult').style.display='none';
+  document.getElementById('importPreviewBtn').style.display='';
+  document.getElementById('importConfirmBtn').style.display='none';
+}
+async function previewImport(){
+  const file=document.getElementById('importFile').files[0];
+  if(!file){toast('Select a file first','warn');return}
+  const btn=document.getElementById('importPreviewBtn');
+  btn.disabled=true;btn.textContent='Previewing…';
+  const fd=new FormData();fd.append('file',file);fd.append('dry_run','1');
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  const res=await fetch('/import/excel',{method:'POST',headers:{'X-CSRF-Token':csrfToken},body:fd}).then(r=>r.json());
+  btn.disabled=false;btn.textContent='🔍 Preview';
+  if(!res.ok){toast(res.msg||'Error reading file','err');return}
+  const statusColor={ok:'#15803d',error:'#b91c1c',skip:'#94a3b8'};
+  const statusLabel={ok:'✓ OK',error:'✗ Error',skip:'— Skip'};
+  document.getElementById('importPreviewBody').innerHTML=res.preview.map(p=>`
+    <tr style="border-bottom:1px solid #f0efec;background:${p.status==='error'?'#fef2f2':p.status==='skip'?'#fafaf9':''}">
+      <td style="padding:6px 10px;color:#94a3b8">${p.row}</td>
+      <td style="padding:6px 10px;font-weight:500">${p.name}</td>
+      <td style="padding:6px 10px;color:#64748b">${p.category||'—'}</td>
+      <td style="padding:6px 10px;font-family:monospace;font-size:11px">${p.serial||'—'}</td>
+      <td style="padding:6px 10px">${p.cost!=null?'$'+p.cost:'—'}</td>
+      <td style="padding:6px 10px;font-weight:600;color:${statusColor[p.status]}">${statusLabel[p.status]}${p.note?` <span style="font-weight:400;font-size:11px">(${p.note})</span>`:''}</td>
+    </tr>`).join('');
+  const errCount=res.errors.length;
+  document.getElementById('importPreviewSummary').innerHTML=
+    `<span style="color:#15803d">✓ ${res.would_add} will be imported</span>`+
+    (res.skipped?` · <span style="color:#94a3b8">${res.skipped} skipped</span>`:'')+
+    (errCount?` · <span style="color:#b91c1c">${errCount} error${errCount>1?'s':''}</span>`:'');
+  document.getElementById('importFileField').style.display='none';
+  document.getElementById('importPreview').style.display='';
+  document.getElementById('importPreviewBtn').style.display='none';
+  document.getElementById('importConfirmBtn').style.display=res.would_add>0?'':'none';
+}
+async function confirmImport(){
+  const file=document.getElementById('importFile').files[0];
+  if(!file){toast('Select a file first','warn');return}
+  const btn=document.getElementById('importConfirmBtn');
+  btn.disabled=true;btn.textContent='Importing…';
+  const fd=new FormData();fd.append('file',file);
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  const res=await fetch('/import/excel',{method:'POST',headers:{'X-CSRF-Token':csrfToken},body:fd}).then(r=>r.json());
+  btn.disabled=false;btn.textContent='✓ Import Now';
+  const el=document.getElementById('importResult');el.style.display='';
+  document.getElementById('importPreview').style.display='none';
+  if(res.ok){
+    el.style.cssText='background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;padding:10px;border-radius:7px;margin-top:8px';
+    el.textContent=`✓ Imported ${res.added} items`+(res.skipped?` (${res.skipped} skipped)`:'');
+    if(res.added>0)setTimeout(()=>{closeImportModal();loadItems();},1500);
+  }else{
+    el.style.cssText='background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px;border-radius:7px;margin-top:8px';
+    el.textContent='Error: '+(res.msg||'Unknown');
+  }
+}
 
 // ── Scanner ──
 function toggleScan(){scanOpen=!scanOpen;document.getElementById('scanBar').style.display=scanOpen?'flex':'none';if(scanOpen)setTimeout(()=>document.getElementById('scanInput').focus(),50);}
