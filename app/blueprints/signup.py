@@ -96,6 +96,7 @@ def signup():
             return render_template("signup_success.html",
                                    name=name,
                                    slug=slug,
-                                   domain=Config.APP_DOMAIN)
+                                   domain=Config.APP_DOMAIN,
+                                   smtp_enabled=bool(Config.SMTP_HOST))
 
     return render_template("signup.html", error=error)

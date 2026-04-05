@@ -65,18 +65,20 @@ def send_welcome_email(to: str, name: str, slug: str, temp_password: str = None,
   <p style="color:#64748b;margin-bottom:24px">Your inventory workspace for <strong>{name}</strong> is ready.</p>
   {verify_block_html}
   <div style="background:#f8f7f4;border-radius:10px;padding:18px 20px;margin-bottom:24px">
-    <div style="font-size:12px;color:#94a3b8;margin-bottom:4px">YOUR URL</div>
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:4px">YOUR WORKSPACE URL</div>
     <a href="{url}" style="font-size:16px;font-weight:700;color:#1d4ed8;text-decoration:none">{url}</a>
-    <div style="display:flex;gap:32px;margin-top:14px">
-      <div><div style="font-size:11px;color:#94a3b8;margin-bottom:2px">USERNAME</div><strong>admin</strong></div>
-      <div><div style="font-size:11px;color:#94a3b8;margin-bottom:2px">PASSWORD</div><strong style="font-family:monospace">{temp_password}</strong></div>
+    <div style="margin-top:14px">
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">LOGIN EMAIL</div>
+      <strong style="font-family:monospace">{to}</strong>
     </div>
+    {f'<div style="margin-top:10px"><div style="font-size:11px;color:#94a3b8;margin-bottom:2px">TEMPORARY PASSWORD</div><strong style="font-family:monospace">{temp_password}</strong></div>' if temp_password else ''}
   </div>
-  <p style="font-size:13px;color:#64748b;margin-bottom:20px">After verifying, choose your business type to set up the right categories.</p>
+  <p style="font-size:13px;color:#64748b;margin-bottom:20px">After verifying your email, choose your business type to finish setup.</p>
   <a href="{url}" style="display:inline-block;padding:12px 24px;background:#1d4ed8;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;font-size:14px">Go to my workspace →</a>
   <p style="margin-top:28px;font-size:11px;color:#94a3b8">If you didn't sign up for CountDepot, ignore this email.</p>
 </div>"""
-    text = (f"Welcome to CountDepot\n\nURL: {url}\nUsername: admin\nPassword: {temp_password}\n"
+    pw_line = f"Temporary password: {temp_password}\n" if temp_password else ""
+    text = (f"Welcome to CountDepot\n\nURL: {url}\nLogin email: {to}\n{pw_line}"
             f"{verify_block_text}\n")
     return send_email(to, subject, html, text)
 
