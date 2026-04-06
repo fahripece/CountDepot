@@ -34,6 +34,23 @@ def _valid_slug(slug):
     return bool(re.match(r'^[a-z0-9][a-z0-9\-]{1,31}$', slug))
 
 
+def _slug_belongs_to_email(slug, email):
+    """Return True if `email` is already an admin user of tenant `slug`.
+    Used to allow re-verification when a tenant was manually created."""
+    if not email:
+        return False
+    db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
+    if not os.path.exists(db_path):
+        return False
+    try:
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT id FROM users WHERE email=?", [email]).fetchone()
+        conn.close()
+        return row is not None
+    except Exception:
+        return False
+
+
 def _clean_expired_pending():
     """Delete expired/used pending signup rows."""
     try:
@@ -65,7 +82,7 @@ def signup():
             error = "A subdomain is required."
         elif not _valid_slug(slug):
             error = "Subdomain must be lowercase letters, numbers and hyphens (2–32 chars)."
-        elif get_tenant_by_slug(slug):
+        elif get_tenant_by_slug(slug) and not _slug_belongs_to_email(slug, email if "@" in (email or "") else ""):
             error = f"The subdomain '{slug}' is already taken. Please choose another."
         elif not email or "@" not in email:
             error = "A valid email address is required."
@@ -132,9 +149,29 @@ def verify_signup(token):
     email = row["email"]
     phash = row["password_hash"]
 
-    # Slug might have been taken in the 24h window
+    # Slug might already exist (e.g. manually created by platform admin, or double-click on link)
     if get_tenant_by_slug(slug):
+        # Check if this email is already the admin of that tenant — if so, just send them to login
+        db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
+        already_there = False
+        if os.path.exists(db_path):
+            try:
+                conn = sqlite3.connect(db_path)
+                u = conn.execute("SELECT id FROM users WHERE email=?", [email]).fetchone()
+                conn.close()
+                if u:
+                    already_there = True
+            except Exception:
+                pass
+        db.execute("UPDATE pending_signups SET used=1 WHERE id=?", [row["id"]])
+        db.commit()
         db.close()
+        if already_there:
+            workspace_url = f"https://{slug}.{Config.APP_DOMAIN}"
+            return render_template("signup_success.html",
+                                   name=name, slug=slug, domain=Config.APP_DOMAIN,
+                                   smtp_enabled=bool(Config.SMTP_HOST),
+                                   workspace_url=workspace_url)
         return render_template("signup_verify_error.html",
                                reason=f"The subdomain '{slug}' was taken while you were waiting. "
                                       "Please sign up again with a different subdomain.")
