@@ -208,7 +208,7 @@ async function confirmCheckin(){
   if(!pendingCheckinId) return;
   const btn=document.getElementById('ciBtn');
   btn.disabled=true;btn.textContent='Checking in…';
-  const res=await fetch('/api/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:pendingCheckinId})}).then(r=>r.json());
+  const res=await fetch('/api/checkin',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify({id:pendingCheckinId})}).then(r=>r.json());
   if(res.ok){
     closeModal('checkinModal');
     toast('Item checked in ✓','ok');

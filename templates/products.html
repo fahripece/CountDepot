@@ -335,7 +335,7 @@ async function saveProd(){
   };
   if(id) payload.id=parseInt(id);
   const url=id?'/api/product/edit':'/api/product/add';
-  const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
+  const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify(payload)}).then(r=>r.json());
   if(res.ok){toast(id?'Product updated ✓':'Product added ✓','ok');closeModal('productModal');loadProds();}
   else toast(res.msg||'Error','err');
 }
@@ -343,7 +343,7 @@ async function saveProd(){
 async function deleteProd(){
   const id=document.getElementById('edit-prod-id').value;
   if(!id||!confirm('Delete this product? Items using it will keep their data but lose the product link.'))return;
-  const res=await fetch('/api/product/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:parseInt(id)})}).then(r=>r.json());
+  const res=await fetch('/api/product/delete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify({id:parseInt(id)})}).then(r=>r.json());
   if(res.ok){toast('Deleted','warn');closeModal('productModal');loadProds();}
   else toast(res.msg||'Error','err');
 }
