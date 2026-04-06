@@ -5,473 +5,542 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CountDepot — Inventory Management Made Easy</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --navy:#06101e;
-  --navy2:#0b1828;
-  --card:#0f2035;
-  --card2:#122338;
-  --border:#1a3050;
-  --border2:#1e3a60;
-  --blue:#1d4ed8;
-  --blue2:#2563eb;
-  --blue-hi:#3b82f6;
-  --sky:#60a5fa;
-  --text:#f0f6ff;
-  --text2:#cbd5e1;
+  --bg:#0a0f1e;
+  --bg2:#0f1628;
+  --card:#141d35;
+  --border:#1e2d50;
+  --blue:#2563eb;
+  --blue-light:#3b82f6;
+  --accent:#38bdf8;
+  --text:#f1f5f9;
   --muted:#64748b;
-  --muted2:#475569;
+  --muted2:#94a3b8;
 }
 html{scroll-behavior:smooth;overflow-x:hidden}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--navy);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body{
+  font-family:'DM Sans',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  overflow-x:hidden;
+}
 
 /* ── NAV ── */
 nav{
   position:fixed;top:0;left:0;right:0;z-index:100;
-  height:60px;
+  padding:20px 48px;
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 40px;
-  background:rgba(6,16,30,0.92);
-  backdrop-filter:blur(16px);
-  border-bottom:1px solid var(--border);
+  background:rgba(10,15,30,0.85);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(255,255,255,0.04);
 }
 .nav-logo{
-  font-size:17px;font-weight:700;color:var(--text);
-  letter-spacing:-0.3px;text-decoration:none;
-  display:flex;align-items:center;gap:9px;
+  font-family:'Syne',sans-serif;
+  font-weight:800;font-size:22px;
+  color:var(--text);
+  letter-spacing:-0.5px;
 }
-.nav-logo-icon{
-  width:28px;height:28px;background:var(--blue);border-radius:7px;
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;
-}
-.nav-logo-icon svg{width:14px;height:14px;fill:#fff}
-.nav-links{display:flex;align-items:center;gap:28px}
+.nav-logo span{color:var(--accent)}
+.nav-links{display:flex;align-items:center;gap:32px}
 .nav-links a{
-  color:var(--text2);font-size:13.5px;font-weight:400;
-  text-decoration:none;transition:color .15s;
+  color:var(--muted2);font-size:14px;font-weight:500;
+  text-decoration:none;transition:color .2s;
 }
 .nav-links a:hover{color:var(--text)}
-.nav-right{display:flex;align-items:center;gap:10px}
-.btn-ghost{
-  color:var(--text2);font-size:13.5px;font-weight:500;
-  background:none;border:1px solid var(--border2);
-  border-radius:7px;padding:7px 16px;
-  text-decoration:none;cursor:pointer;font-family:inherit;
-  transition:all .15s;
-}
-.btn-ghost:hover{color:var(--text);border-color:#2d5080;background:rgba(255,255,255,0.04)}
-.btn-nav-cta{
+.nav-cta{
   background:var(--blue);color:#fff;
-  font-size:13.5px;font-weight:500;
-  padding:8px 18px;border-radius:7px;
-  text-decoration:none;border:none;cursor:pointer;font-family:inherit;
-  transition:background .15s;white-space:nowrap;
+  padding:10px 22px;border-radius:8px;
+  font-size:14px;font-weight:500;
+  text-decoration:none;
+  transition:background .2s,transform .15s;
 }
-.btn-nav-cta:hover{background:var(--blue2)}
+.nav-cta:hover{background:var(--blue-light);transform:translateY(-1px)}
+.nav-link-signin{
+  color:var(--text);
+  font-size:14px;font-weight:500;
+  text-decoration:none;
+  padding:9px 20px;
+  border:1px solid rgba(255,255,255,0.18);
+  border-radius:8px;
+  transition:border-color .2s,background .2s;
+  cursor:pointer;
+}
+.nav-link-signin:hover{border-color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.05)}
 
 /* ── HERO ── */
 .hero{
   min-height:100vh;
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  align-items:center;
-  gap:60px;
-  max-width:1200px;
-  margin:0 auto;
-  padding:100px 40px 60px;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  text-align:center;
+  padding:120px 24px 80px;
+  position:relative;
+  overflow:hidden;
 }
-.hero-left{max-width:520px}
-.hero-tag{
+.hero-glow{
+  position:absolute;
+  width:800px;height:800px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(37,99,235,0.15) 0%, transparent 70%);
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+.hero-glow-2{
+  position:absolute;
+  width:400px;height:400px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%);
+  top:30%;left:60%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+.badge{
   display:inline-flex;align-items:center;gap:8px;
-  background:rgba(29,78,216,0.1);
-  border:1px solid rgba(29,78,216,0.25);
-  border-radius:6px;
-  color:var(--sky);
-  font-size:12px;font-weight:500;
-  padding:5px 12px;
-  margin-bottom:28px;
-  letter-spacing:0.3px;
+  background:rgba(37,99,235,0.12);
+  border:1px solid rgba(37,99,235,0.3);
+  color:var(--accent);
+  padding:6px 16px;border-radius:100px;
+  font-size:13px;font-weight:500;
+  margin-bottom:32px;
+  animation:fadeUp .6s ease both;
 }
-.hero-tag svg{width:12px;height:12px;stroke:var(--sky);fill:none;stroke-width:2.5;flex-shrink:0}
+.badge-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--accent);
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
 h1{
-  font-size:clamp(36px,4.5vw,58px);
-  font-weight:700;
-  line-height:1.08;
-  letter-spacing:-1.5px;
-  color:var(--text);
-  margin-bottom:20px;
+  font-family:'Syne',sans-serif;
+  font-size:clamp(42px,7vw,84px);
+  font-weight:800;
+  line-height:1.05;
+  letter-spacing:-2px;
+  margin-bottom:24px;
+  animation:fadeUp .6s .1s ease both;
 }
-h1 em{
-  font-style:normal;
-  color:var(--sky);
+h1 span{
+  background:linear-gradient(135deg, var(--blue-light), var(--accent));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
 }
 .hero-sub{
-  font-size:16px;
-  color:var(--text2);
-  line-height:1.75;
-  font-weight:400;
-  margin-bottom:36px;
-  max-width:440px;
+  font-size:clamp(16px,2.5vw,20px);
+  color:var(--muted2);
+  font-weight:300;
+  max-width:560px;
+  line-height:1.7;
+  margin-bottom:48px;
+  animation:fadeUp .6s .2s ease both;
 }
-.hero-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:32px}
+.hero-actions{
+  display:flex;align-items:center;gap:16px;
+  flex-wrap:wrap;justify-content:center;
+  animation:fadeUp .6s .3s ease both;
+}
 .btn-primary{
   background:var(--blue);color:#fff;
-  padding:11px 26px;border-radius:8px;
-  font-size:14.5px;font-weight:500;
-  text-decoration:none;border:none;cursor:pointer;font-family:inherit;
-  transition:all .15s;white-space:nowrap;
-  display:inline-flex;align-items:center;gap:8px;
-}
-.btn-primary:hover{background:var(--blue2);transform:translateY(-1px);box-shadow:0 6px 24px rgba(29,78,216,0.35)}
-.btn-outline{
-  color:var(--text2);
-  padding:11px 22px;border-radius:8px;
-  font-size:14.5px;font-weight:400;
+  padding:14px 32px;border-radius:10px;
+  font-size:16px;font-weight:500;
   text-decoration:none;
-  border:1px solid var(--border2);
-  transition:all .15s;
+  transition:all .2s;
+  border:1px solid transparent;
 }
-.btn-outline:hover{color:var(--text);border-color:#2d5080;background:rgba(255,255,255,0.04)}
-.hero-trust{
-  display:flex;align-items:center;gap:10px;
-  font-size:12.5px;color:var(--muted);
-}
-.hero-trust-checks{display:flex;gap:16px;flex-wrap:wrap}
-.hero-trust-checks span{display:flex;align-items:center;gap:5px}
-.hero-trust-checks svg{width:13px;height:13px;stroke:#22c55e;fill:none;stroke-width:2.5;flex-shrink:0}
-
-/* ── PRODUCT PREVIEW ── */
-.hero-right{position:relative}
-.product-frame{
-  background:var(--card);
+.btn-primary:hover{background:var(--blue-light);transform:translateY(-2px);box-shadow:0 8px 30px rgba(37,99,235,0.4)}
+.btn-secondary{
+  color:var(--muted2);
+  padding:14px 32px;border-radius:10px;
+  font-size:16px;font-weight:400;
+  text-decoration:none;
   border:1px solid var(--border);
-  border-radius:14px;
-  overflow:hidden;
-  box-shadow:0 32px 80px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.03);
+  transition:all .2s;
 }
-.product-topbar{
-  background:var(--navy2);
-  border-bottom:1px solid var(--border);
-  padding:10px 16px;
-  display:flex;align-items:center;gap:10px;
+.btn-secondary:hover{color:var(--text);border-color:var(--muted)}
+.hero-note{
+  margin-top:24px;
+  font-size:13px;color:var(--muted);
+  animation:fadeUp .6s .4s ease both;
 }
-.product-topbar-dots{display:flex;gap:5px}
-.product-topbar-dots span{width:9px;height:9px;border-radius:50%;background:#1a3050}
-.product-topbar-title{font-size:12px;font-weight:500;color:var(--muted);margin-left:4px}
-.product-topbar-right{margin-left:auto;display:flex;gap:6px}
-.product-topbar-btn{
-  font-size:10.5px;color:var(--muted);
-  background:var(--card2);border:1px solid var(--border);
-  border-radius:5px;padding:3px 9px;font-family:inherit;
-}
-.product-body{display:flex}
-.product-sidebar{
-  width:48px;background:var(--navy2);
-  border-right:1px solid var(--border);
-  padding:12px 0;
-  display:flex;flex-direction:column;align-items:center;gap:16px;
-}
-.ps-icon{
-  width:28px;height:28px;border-radius:7px;
-  display:flex;align-items:center;justify-content:center;
-}
-.ps-icon.active{background:rgba(29,78,216,0.2)}
-.ps-icon svg{width:14px;height:14px;fill:none;stroke-width:1.8;stroke:var(--muted)}
-.ps-icon.active svg{stroke:var(--sky)}
-.product-main{flex:1;padding:14px 16px;min-width:0}
-.product-filters{display:flex;gap:6px;margin-bottom:12px}
-.pf{
-  background:var(--card2);border:1px solid var(--border);
-  border-radius:5px;padding:4px 9px;font-size:10.5px;color:var(--text2);font-family:inherit;
-}
-.pf.active{border-color:var(--blue2);color:var(--sky);background:rgba(29,78,216,0.1)}
-.product-table{width:100%;border-collapse:collapse;font-size:11px}
-.product-table th{
-  text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;
-  letter-spacing:.5px;color:var(--muted);
-  padding:5px 8px;border-bottom:1px solid var(--border);
-}
-.product-table td{padding:7px 8px;border-bottom:1px solid rgba(26,48,80,0.5);color:var(--text2)}
-.product-table tr:last-child td{border-bottom:none}
-.product-table tr:hover td{background:rgba(255,255,255,0.02)}
-.item-name{font-weight:500;color:var(--text);font-size:11.5px}
-.tag{display:inline-flex;align-items:center;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:500}
-.tag-in{background:rgba(34,197,94,0.12);color:#4ade80}
-.tag-out{background:rgba(251,191,36,0.12);color:#fbbf24}
-.tag-cat{background:rgba(29,78,216,0.15);color:#93c5fd}
-.shelf-tag{font-family:monospace;font-size:10px;color:var(--muted);background:var(--card2);padding:1px 6px;border-radius:3px;border:1px solid var(--border)}
-.cost-val{font-size:11px;color:#94a3b8;font-family:monospace}
 
-/* ── TRUST STRIP ── */
-.trust-strip{
+/* ── STATS BAR ── */
+.stats{
+  display:flex;align-items:center;justify-content:center;
+  gap:0;
   border-top:1px solid var(--border);
   border-bottom:1px solid var(--border);
-  background:var(--navy2);
-  padding:20px 40px;
-  display:flex;align-items:center;justify-content:center;
-  gap:12px;
-  font-size:13px;color:var(--muted);
-  flex-wrap:wrap;
+  background:var(--bg2);
+  padding:0;
+  overflow:hidden;
 }
-.trust-divider{width:1px;height:16px;background:var(--border);flex-shrink:0}
-.trust-item{display:flex;align-items:center;gap:7px;white-space:nowrap}
-.trust-item svg{width:15px;height:15px;fill:none;stroke:var(--muted);stroke-width:1.8;flex-shrink:0}
+.stat{
+  flex:1;
+  padding:28px 24px;
+  text-align:center;
+  border-right:1px solid var(--border);
+}
+.stat:last-child{border-right:none}
+.stat-val{
+  font-family:'Syne',sans-serif;
+  font-size:32px;font-weight:800;
+  color:var(--text);
+  letter-spacing:-1px;
+}
+.stat-val span{color:var(--accent)}
+.stat-label{font-size:13px;color:var(--muted);margin-top:4px;font-weight:400}
 
-/* ── SECTION BASE ── */
-section{padding:90px 40px}
+/* ── SECTION ── */
+section{padding:100px 24px}
 .container{max-width:1100px;margin:0 auto}
-.section-eyebrow{
-  font-size:11.5px;font-weight:600;
-  text-transform:uppercase;letter-spacing:1.5px;
-  color:var(--sky);margin-bottom:14px;
+.section-label{
+  font-size:12px;font-weight:600;
+  text-transform:uppercase;letter-spacing:2px;
+  color:var(--accent);margin-bottom:16px;
 }
 .section-title{
-  font-size:clamp(26px,3.5vw,40px);
-  font-weight:700;letter-spacing:-1px;line-height:1.15;
-  margin-bottom:14px;
+  font-family:'Syne',sans-serif;
+  font-size:clamp(28px,4vw,48px);
+  font-weight:800;
+  letter-spacing:-1px;
+  line-height:1.1;
+  margin-bottom:16px;
 }
 .section-sub{
-  font-size:16px;color:var(--text2);
-  font-weight:400;line-height:1.7;
-  max-width:480px;
+  font-size:17px;color:var(--muted2);
+  font-weight:300;line-height:1.7;
+  max-width:520px;
 }
 
 /* ── FEATURES ── */
-#features{background:var(--navy2)}
-.features-layout{
+#features{background:var(--bg2)}
+.features-grid{
   display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:64px;
-  align-items:center;
+  grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:1px;
+  background:var(--border);
+  border:1px solid var(--border);
+  border-radius:16px;
+  overflow:hidden;
   margin-top:64px;
 }
-.features-list{display:flex;flex-direction:column;gap:0}
-.feat-item{
-  display:flex;gap:16px;
-  padding:22px 0;
-  border-bottom:1px solid var(--border);
-  cursor:pointer;
-  transition:all .15s;
-}
-.feat-item:first-child{padding-top:0}
-.feat-item:last-child{border-bottom:none;padding-bottom:0}
-.feat-icon-wrap{
-  width:38px;height:38px;flex-shrink:0;
-  background:rgba(29,78,216,0.1);
-  border:1px solid rgba(29,78,216,0.2);
-  border-radius:9px;
-  display:flex;align-items:center;justify-content:center;
-  margin-top:2px;
-  transition:all .15s;
-}
-.feat-item:hover .feat-icon-wrap{background:rgba(29,78,216,0.18);border-color:rgba(29,78,216,0.4)}
-.feat-icon-wrap svg{width:16px;height:16px;stroke:var(--sky);fill:none;stroke-width:1.8}
-.feat-text h3{font-size:14.5px;font-weight:600;color:var(--text);margin-bottom:5px}
-.feat-text p{font-size:13.5px;color:var(--text2);line-height:1.65;font-weight:400}
-.feat-panel{
-  background:var(--card);border:1px solid var(--border);
-  border-radius:12px;overflow:hidden;
-  box-shadow:0 20px 60px rgba(0,0,0,0.35);
-  position:relative;
-}
-.feat-panel-header{
-  background:var(--card2);border-bottom:1px solid var(--border);
-  padding:12px 16px;
-  display:flex;align-items:center;gap:8px;
-  font-size:12px;color:var(--muted);font-weight:500;
-}
-.feat-panel-header svg{width:14px;height:14px;stroke:var(--sky);fill:none;stroke-width:1.8}
-.feat-panel-body{padding:16px}
-
-/* ── SECTORS ── */
-.sectors-grid{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:16px;
-  margin-top:48px;
-}
-.sector-card{
+.feature{
   background:var(--card);
-  border:1px solid var(--border);
-  border-radius:12px;
-  padding:24px 22px;
-  transition:all .2s;
+  padding:40px 36px;
+  transition:background .2s;
 }
-.sector-card:hover{border-color:var(--border2);background:var(--card2);transform:translateY(-2px)}
-.sector-icon{font-size:26px;margin-bottom:12px;display:block}
-.sector-card h3{font-size:14.5px;font-weight:600;margin-bottom:6px}
-.sector-card p{font-size:13px;color:var(--text2);line-height:1.6;font-weight:400}
+.feature:hover{background:#18243f}
+.feature-icon{
+  font-size:28px;margin-bottom:20px;
+  width:52px;height:52px;
+  background:rgba(37,99,235,0.1);
+  border:1px solid rgba(37,99,235,0.2);
+  border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+}
+.feature h3{
+  font-family:'Syne',sans-serif;
+  font-size:18px;font-weight:700;
+  margin-bottom:10px;letter-spacing:-0.3px;
+}
+.feature p{font-size:14px;color:var(--muted2);line-height:1.7;font-weight:300}
+
+/* ── HOW IT WORKS ── */
+.steps{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:32px;
+  margin-top:64px;
+}
+.step{position:relative;padding-left:0;text-align:center}
+.step-num{
+  font-family:'Syne',sans-serif;
+  font-size:64px;font-weight:800;
+  color:rgba(37,99,235,0.12);
+  line-height:1;
+  margin-bottom:16px;
+}
+.step h3{
+  font-family:'Syne',sans-serif;
+  font-size:17px;font-weight:700;
+  margin-bottom:8px;
+}
+.step p{font-size:14px;color:var(--muted2);line-height:1.7;font-weight:300}
 
 /* ── PRICING ── */
-#pricing{background:var(--navy2)}
+#pricing{background:var(--bg2)}
 .pricing-grid{
   display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:20px;
-  margin-top:48px;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:24px;
+  margin-top:64px;
   align-items:start;
 }
 .plan{
   background:var(--card);
   border:1px solid var(--border);
-  border-radius:12px;
-  padding:32px 28px;
+  border-radius:16px;
+  padding:36px 32px;
+  transition:transform .2s,border-color .2s;
   position:relative;
-  transition:border-color .2s;
 }
-.plan:hover{border-color:var(--border2)}
+.plan:hover{transform:translateY(-4px);border-color:var(--blue)}
 .plan.featured{
-  border-color:var(--blue2);
-  background:linear-gradient(160deg,#0f2540,#0a1a30);
+  border-color:var(--blue);
+  background:linear-gradient(135deg,#141d35,#0f1e3d);
 }
 .plan-badge{
-  position:absolute;top:-11px;left:28px;
+  position:absolute;top:-12px;left:50%;transform:translateX(-50%);
   background:var(--blue);color:#fff;
-  font-size:10.5px;font-weight:600;
-  text-transform:uppercase;letter-spacing:.8px;
-  padding:3px 12px;border-radius:4px;
+  font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:1px;
+  padding:4px 14px;border-radius:100px;
+  white-space:nowrap;
 }
-.plan-name{font-size:13px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px}
-.plan-price{display:flex;align-items:baseline;gap:3px;margin-bottom:6px}
-.plan-price .amount{font-size:44px;font-weight:700;letter-spacing:-2px;color:var(--text)}
-.plan-price .period{font-size:14px;color:var(--muted);font-weight:400}
-.plan-billing{font-size:12.5px;color:var(--sky);margin-bottom:24px;height:18px}
-.plan-divider{height:1px;background:var(--border);margin-bottom:22px}
-.plan-features{list-style:none;display:flex;flex-direction:column;gap:11px;margin-bottom:28px}
+.plan-name{
+  font-family:'Syne',sans-serif;
+  font-size:18px;font-weight:700;
+  margin-bottom:8px;
+}
+.plan-price{
+  display:flex;align-items:baseline;gap:4px;
+  margin-bottom:4px;
+}
+.plan-price .amount{
+  font-family:'Syne',sans-serif;
+  font-size:48px;font-weight:800;
+  letter-spacing:-2px;
+  color:var(--text);
+}
+.plan-price .period{font-size:14px;color:var(--muted);font-weight:300}
+.plan-annual{font-size:13px;color:var(--accent);margin-bottom:24px;font-weight:400}
+.plan-divider{height:1px;background:var(--border);margin-bottom:24px}
+.plan-features{list-style:none;display:flex;flex-direction:column;gap:12px;margin-bottom:32px}
 .plan-features li{
-  font-size:13.5px;color:var(--text2);
-  display:flex;align-items:flex-start;gap:10px;font-weight:400;line-height:1.4;
+  font-size:14px;color:var(--muted2);
+  display:flex;align-items:center;gap:10px;font-weight:300;
 }
-.plan-features li svg{width:14px;height:14px;stroke:#22c55e;fill:none;stroke-width:2.5;flex-shrink:0;margin-top:1px}
+.plan-features li::before{
+  content:'✓';
+  color:var(--accent);font-size:13px;
+  font-weight:700;flex-shrink:0;
+}
 .plan-cta{
   display:block;text-align:center;
-  padding:11px;border-radius:7px;
-  font-size:13.5px;font-weight:500;
+  padding:12px;border-radius:8px;
+  font-size:14px;font-weight:500;
   text-decoration:none;
-  transition:all .15s;font-family:inherit;border:none;cursor:pointer;
+  transition:all .2s;
 }
-.cta-solid{background:var(--blue);color:#fff}
-.cta-solid:hover{background:var(--blue2)}
-.cta-ghost{background:rgba(255,255,255,0.04);color:var(--text2);border:1px solid var(--border2)}
-.cta-ghost:hover{background:rgba(255,255,255,0.07);color:var(--text)}
+.plan-cta-outline{
+  border:1px solid var(--border);color:var(--text);
+}
+.plan-cta-outline:hover{border-color:var(--blue);background:rgba(37,99,235,0.08)}
+.plan-cta-solid{
+  background:var(--blue);color:#fff;
+}
+.plan-cta-solid:hover{background:var(--blue-light)}
+
 .pricing-toggle{
-  display:flex;align-items:center;justify-content:center;gap:14px;
-  font-size:13.5px;color:var(--text2);margin-top:28px;
+  display:flex;align-items:center;justify-content:center;
+  gap:16px;margin-top:32px;
+  font-size:14px;color:var(--muted2);
 }
-.toggle-wrap{position:relative;width:40px;height:22px;cursor:pointer}
+.toggle-wrap{
+  position:relative;
+  width:44px;height:24px;
+  cursor:pointer;
+}
 .toggle-wrap input{opacity:0;width:0;height:0;position:absolute}
 .toggle-slider{
-  position:absolute;inset:0;background:var(--border2);border-radius:100px;transition:background .2s;
+  position:absolute;inset:0;
+  background:var(--border);border-radius:100px;
+  transition:background .2s;
 }
 .toggle-slider::before{
-  content:'';position:absolute;width:16px;height:16px;border-radius:50%;
-  background:#fff;top:3px;left:3px;transition:transform .2s;
+  content:'';position:absolute;
+  width:18px;height:18px;border-radius:50%;
+  background:#fff;top:3px;left:3px;
+  transition:transform .2s;
 }
 .toggle-wrap input:checked + .toggle-slider{background:var(--blue)}
-.toggle-wrap input:checked + .toggle-slider::before{transform:translateX(18px)}
+.toggle-wrap input:checked + .toggle-slider::before{transform:translateX(20px)}
+.annual-label{color:var(--accent)}
 
-/* ── BOTTOM CTA ── */
-.bottom-cta{
-  text-align:center;padding:100px 40px;
-  border-top:1px solid var(--border);
+/* ── TRIAL CTA ── */
+.trial-section{
+  text-align:center;
+  padding:100px 24px;
+  position:relative;overflow:hidden;
 }
-.bottom-cta h2{
-  font-size:clamp(28px,4vw,46px);font-weight:700;
-  letter-spacing:-1.2px;margin-bottom:14px;line-height:1.1;
+.trial-glow{
+  position:absolute;
+  width:600px;height:600px;border-radius:50%;
+  background:radial-gradient(circle,rgba(37,99,235,0.12) 0%,transparent 70%);
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  pointer-events:none;
 }
-.bottom-cta p{font-size:16px;color:var(--text2);margin-bottom:36px;font-weight:400}
-.cta-note{margin-top:14px;font-size:12.5px;color:var(--muted)}
+.trial-section h2{
+  font-family:'Syne',sans-serif;
+  font-size:clamp(32px,5vw,56px);
+  font-weight:800;letter-spacing:-1.5px;
+  margin-bottom:16px;
+}
+.trial-section p{
+  font-size:18px;color:var(--muted2);
+  font-weight:300;margin-bottom:40px;
+}
+.trial-note{margin-top:16px;font-size:13px;color:var(--muted)}
 
 /* ── FOOTER ── */
 footer{
   border-top:1px solid var(--border);
-  background:var(--navy2);
-  padding:28px 40px;
+  padding:40px 48px;
   display:flex;align-items:center;justify-content:space-between;
-  flex-wrap:wrap;gap:12px;
+  flex-wrap:wrap;gap:16px;
 }
-.footer-logo{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
-.footer-logo-icon{width:22px;height:22px;background:var(--blue);border-radius:5px;display:flex;align-items:center;justify-content:center}
-.footer-logo-icon svg{width:11px;height:11px;fill:#fff}
-footer p{font-size:12.5px;color:var(--muted)}
-.footer-links{display:flex;gap:20px}
-.footer-links a{font-size:12.5px;color:var(--muted);text-decoration:none;transition:color .15s}
-.footer-links a:hover{color:var(--text2)}
-
-/* ── SIGN-IN MODAL ── */
-.modal-overlay{
-  display:none;position:fixed;inset:0;z-index:200;
-  background:rgba(2,8,18,0.75);backdrop-filter:blur(6px);
-  align-items:center;justify-content:center;
+.footer-logo{
+  font-family:'Syne',sans-serif;
+  font-weight:800;font-size:18px;
 }
-.modal-overlay.open{display:flex}
-.modal-box{
-  background:var(--card);
-  border:1px solid var(--border2);
-  border-radius:14px;
-  padding:36px;
-  width:100%;max-width:420px;
-  margin:0 20px;
-  position:relative;
-  box-shadow:0 40px 100px rgba(0,0,0,0.6);
-}
-.modal-close{
-  position:absolute;top:14px;right:14px;
-  background:none;border:none;color:var(--muted);font-size:18px;
-  cursor:pointer;line-height:1;padding:4px 8px;border-radius:5px;
-  transition:color .15s,background .15s;
-}
-.modal-close:hover{color:var(--text);background:rgba(255,255,255,0.06)}
-.modal-title{font-size:20px;font-weight:700;letter-spacing:-0.4px;margin-bottom:6px}
-.modal-sub{font-size:13.5px;color:var(--muted);margin-bottom:24px}
-.modal-error{
-  display:none;background:rgba(185,28,28,0.12);
-  border:1px solid rgba(185,28,28,0.3);border-radius:7px;
-  padding:10px 13px;font-size:13px;color:#fca5a5;margin-bottom:14px;
-}
-.field-label{display:block;font-size:11.5px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.field-input{
-  width:100%;background:var(--navy2);
-  border:1px solid var(--border2);border-radius:8px;
-  padding:11px 14px;color:var(--text);font-size:14.5px;
-  font-family:inherit;outline:none;margin-bottom:14px;
-  transition:border-color .15s;
-}
-.field-input:focus{border-color:var(--blue2);box-shadow:0 0 0 3px rgba(29,78,216,0.15)}
-.btn-signin-submit{
-  width:100%;background:var(--blue);color:#fff;border:none;
-  border-radius:8px;padding:12px;font-size:14.5px;font-weight:500;
-  cursor:pointer;font-family:inherit;transition:background .15s;
-}
-.btn-signin-submit:hover{background:var(--blue2)}
-.modal-footer-text{margin-top:16px;text-align:center;font-size:13px;color:var(--muted)}
-.modal-footer-text a{color:var(--sky);text-decoration:none}
+.footer-logo span{color:var(--accent)}
+footer p{font-size:13px;color:var(--muted);font-weight:300}
 
 /* ── RESPONSIVE ── */
-@media(max-width:900px){
-  .hero{grid-template-columns:1fr;gap:48px;padding:90px 24px 48px;text-align:left}
-  .hero-right{order:-1;display:none}
-  nav{padding:0 20px}
-  .nav-links{display:none}
-  section{padding:64px 24px}
-  .features-layout{grid-template-columns:1fr;gap:40px}
-  .feat-panel{display:none}
-  .sectors-grid{grid-template-columns:1fr 1fr}
-  .pricing-grid{grid-template-columns:1fr}
-  .section-title{font-size:clamp(24px,6vw,36px)}
-  footer{flex-direction:column;align-items:flex-start;padding:24px}
-  .footer-links{flex-wrap:wrap;gap:14px}
-  .bottom-cta{padding:64px 24px}
-  .trust-strip{padding:16px 24px;gap:8px;font-size:12px}
+/* ── PRODUCT PREVIEW ── */
+.hero-preview{
+  width:100%;max-width:960px;
+  margin-top:56px;
+  position:relative;z-index:1;
 }
-@media(max-width:600px){
-  h1{font-size:clamp(28px,8vw,40px);letter-spacing:-0.8px}
-  .sectors-grid{grid-template-columns:1fr}
-  .hero-actions{flex-direction:column;align-items:flex-start}
-  .btn-primary,.btn-outline{width:100%;text-align:center;justify-content:center}
+.preview-frame{
+  background:#141d35;
+  border:1px solid #1e2d50;
+  border-radius:14px;
+  overflow:hidden;
+  box-shadow:0 40px 100px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.03);
+}
+.preview-topbar{
+  background:#0f1628;
+  border-bottom:1px solid #1e2d50;
+  padding:10px 16px;
+  display:flex;align-items:center;gap:10px;
+}
+.preview-dots{display:flex;gap:5px}
+.preview-dots span{width:9px;height:9px;border-radius:50%;background:#1e2d50;display:block}
+.preview-url{font-size:11.5px;color:#64748b;font-weight:500;margin-left:4px;flex:1;text-align:center}
+.preview-actions{display:flex;gap:6px;margin-left:auto}
+.preview-btn{
+  font-size:11px;color:#64748b;
+  background:#141d35;border:1px solid #1e2d50;
+  border-radius:5px;padding:3px 10px;cursor:default;
+}
+.preview-btn-blue{background:rgba(37,99,235,0.15);color:#60a5fa;border-color:rgba(37,99,235,0.3)}
+.preview-body{display:flex}
+.preview-sidebar{
+  width:44px;background:#0f1628;
+  border-right:1px solid #1e2d50;
+  padding:14px 0;
+  display:flex;flex-direction:column;align-items:center;gap:18px;
+  flex-shrink:0;
+}
+.psb-item{
+  width:30px;height:30px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;
+  color:#475569;cursor:default;
+}
+.psb-item.active{background:rgba(37,99,235,0.15);color:#60a5fa}
+.preview-main{flex:1;padding:14px 16px;min-width:0;overflow:hidden}
+.preview-filters{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.pfilter{
+  font-size:11px;color:#94a3b8;
+  background:#0f1628;border:1px solid #1e2d50;
+  border-radius:5px;padding:4px 10px;cursor:default;
+}
+.pfilter.active{color:#38bdf8;border-color:rgba(37,99,235,0.4);background:rgba(37,99,235,0.1)}
+.preview-table{width:100%;border-collapse:collapse;font-size:11.5px}
+.preview-table th{
+  text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.5px;color:#475569;
+  padding:5px 10px;border-bottom:1px solid #1e2d50;white-space:nowrap;
+}
+.preview-table td{padding:8px 10px;border-bottom:1px solid rgba(30,45,80,0.5);vertical-align:middle}
+.preview-table tr:last-child td{border-bottom:none}
+.pt-name{font-weight:500;color:#f1f5f9;font-size:12px;white-space:nowrap}
+.pt-sub{font-size:10px;color:#475569;margin-top:1px}
+.pt-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10.5px;font-weight:500;white-space:nowrap}
+.pt-tag-blue{background:rgba(37,99,235,0.15);color:#93c5fd}
+.pt-tag-indigo{background:rgba(99,102,241,0.15);color:#a5b4fc}
+.pt-tag-green{background:rgba(34,197,94,0.1);color:#4ade80}
+.pt-tag-amber{background:rgba(251,191,36,0.1);color:#fbbf24}
+.pt-tag-slate{background:rgba(100,116,139,0.15);color:#94a3b8}
+.pt-mono{font-family:monospace;font-size:10.5px;color:#64748b}
+.pt-shelf{font-family:monospace;font-size:10.5px;color:#94a3b8;background:#0f1628;padding:2px 6px;border-radius:3px;border:1px solid #1e2d50}
+.pt-cost{font-family:monospace;font-size:11px;color:#94a3b8}
+
+@media(max-width:768px){
+  /* Nav */
+  nav{padding:16px 20px}
+  .nav-links{display:none}
+
+  /* Global overflow guard */
+  *{max-width:100%;box-sizing:border-box}
+  html,body{overflow-x:hidden;width:100%}
+  section{padding-left:20px!important;padding-right:20px!important}
+  .container{padding-left:0;padding-right:0}
+
+  /* Hero — biggest fix: shrink headline for narrow screens */
+  .hero{padding:100px 20px 60px;overflow:hidden}
+  h1{
+    font-size:clamp(26px,8vw,42px)!important;
+    letter-spacing:-0.5px;
+    word-break:break-word;
+    overflow-wrap:break-word;
+  }
+  .hero-sub{font-size:15px}
+  .hero-actions{flex-direction:column;width:100%;align-items:stretch}
+  .btn-primary,.btn-secondary{
+    width:100%;text-align:center;
+    padding:13px 20px;font-size:15px;
+  }
+  .hero-note{font-size:12px}
+  .hero-preview{display:none}
+
+  /* Stats */
+  .stats{flex-direction:column}
+  .stat{border-right:none;border-bottom:1px solid var(--border)}
+  .stat:last-child{border-bottom:none}
+
+  /* Features */
+  .features-grid{grid-template-columns:1fr;margin-top:40px}
+  .feature{padding:28px 24px}
+
+  /* Section titles */
+  .section-title{font-size:clamp(22px,6vw,36px)!important;letter-spacing:-0.5px;word-break:break-word}
+  .section-sub{font-size:15px}
+
+  /* How it works */
+  .steps{grid-template-columns:1fr;gap:24px;margin-top:40px}
+
+  /* Pricing */
+  .pricing-grid{grid-template-columns:1fr;margin-top:40px}
+  .plan{padding:28px 24px}
+  .plan-badge{font-size:10px;padding:3px 10px}
+  .pricing-toggle{flex-wrap:wrap;justify-content:center;gap:10px}
+  .plan-price .amount{font-size:36px}
+
+  /* Trial CTA */
+  .trial-section{padding:60px 20px}
+  .trial-section h2{font-size:clamp(24px,7vw,40px)!important;letter-spacing:-0.5px}
+  .trial-section .btn-primary{display:block;width:100%;text-align:center;font-size:15px;padding:14px 24px}
+
+  /* Footer */
+  footer{flex-direction:column;text-align:center;padding:32px 20px}
 }
 </style>
 </head>
@@ -479,123 +548,106 @@ footer p{font-size:12.5px;color:var(--muted)}
 
 <!-- NAV -->
 <nav>
-  <a href="/" class="nav-logo">
-    <div class="nav-logo-icon">
-      <svg viewBox="0 0 24 24"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3H8a2 2 0 00-2 2v2h12V5a2 2 0 00-2-2z"/></svg>
-    </div>
-    CountDepot
-  </a>
+  <div class="nav-logo">Count<span>Depot</span></div>
   <div class="nav-links">
     <a href="#features">Features</a>
-    <a href="#sectors">Industries</a>
+    <a href="#how">How it works</a>
     <a href="#pricing">Pricing</a>
-  </div>
-  <div class="nav-right">
-    <button class="btn-ghost" onclick="openSignin()">Sign in</button>
-    <a href="/signup" class="btn-nav-cta">Start free trial</a>
+    <a href="#signin" class="nav-link-signin">Sign in</a>
+    <a href="/signup" class="nav-cta">Start free trial</a>
   </div>
 </nav>
 
-<!-- SIGN IN MODAL -->
-<div class="modal-overlay" id="signin-overlay" onclick="if(event.target===this)closeSignin()">
-  <div class="modal-box">
-    <button class="modal-close" onclick="closeSignin()">×</button>
-    <div class="modal-title">Welcome back</div>
-    <div class="modal-sub">Sign in to your workspace</div>
-    <div class="modal-error" id="signin-error"></div>
-    <label class="field-label">Email address</label>
-    <input id="signin-email" type="email" class="field-input" placeholder="you@company.com"
-      autocomplete="email" onkeydown="if(event.key==='Enter')doSignin()">
-    <label class="field-label">Password</label>
-    <input id="signin-password" type="password" class="field-input" placeholder="••••••••"
-      autocomplete="current-password" onkeydown="if(event.key==='Enter')doSignin()">
-    <button class="btn-signin-submit" id="signin-btn" onclick="doSignin()">Sign in →</button>
-    <div class="modal-footer-text">No account? <a href="/signup">Start your free trial</a></div>
+<!-- SIGN IN MODAL OVERLAY -->
+<div id="signin-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center">
+  <div style="background:#0f1628;border:1px solid #1e2d50;border-radius:16px;padding:40px;width:100%;max-width:440px;margin:0 20px;position:relative">
+    <button onclick="closeSignin()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1">×</button>
+    <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:6px">Sign in</div>
+    <div style="font-size:14px;color:#64748b;margin-bottom:28px">Enter your email and password to continue.</div>
+    <div id="signin-error" style="display:none;background:#1e0a0a;border:1px solid #7f1d1d;border-radius:8px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:16px"></div>
+    <label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Email address</label>
+    <input id="signin-email" type="email" placeholder="you@company.com" autocomplete="email"
+      style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:13px 16px;color:#f1f5f9;font-size:15px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:14px"
+      onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#1e2d50'"
+      onkeydown="if(event.key==='Enter')doSignin()">
+    <label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Password</label>
+    <input id="signin-password" type="password" placeholder="Enter password" autocomplete="current-password"
+      style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:13px 16px;color:#f1f5f9;font-size:15px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:20px"
+      onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#1e2d50'"
+      onkeydown="if(event.key==='Enter')doSignin()">
+    <button id="signin-btn" onclick="doSignin()" style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .2s"
+      onmouseover="this.style.background='#3b82f6'" onmouseout="this.style.background='#2563eb'">
+      Sign in →
+    </button>
+    <div style="margin-top:16px;text-align:center;font-size:13px;color:#64748b">
+      Don't have an account? <a href="/signup" style="color:#38bdf8;text-decoration:none">Start free trial</a>
+    </div>
   </div>
 </div>
 
 <!-- HERO -->
-<div class="hero">
-  <div class="hero-left">
-    <div class="hero-tag">
-      <svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><path d="M21 12A9 9 0 113 12a9 9 0 0118 0z"/></svg>
-      7-day free trial · No credit card required
-    </div>
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-glow-2"></div>
 
-    <h1>Inventory Management<br><em>Made Easy</em></h1>
-
-    <p class="hero-sub">
-      Purpose-built for professional businesses. Track assets, manage check-outs, generate financial reports, and maintain a complete audit trail — all in one platform.
-    </p>
-
-    <div class="hero-actions">
-      <a href="/signup" class="btn-primary">
-        Get started free
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </a>
-      <button class="btn-outline" onclick="openSignin()">Sign in to your workspace</button>
-    </div>
-
-    <div class="hero-trust">
-      <div class="hero-trust-checks">
-        <span>
-          <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-          Barcode scanning
-        </span>
-        <span>
-          <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-          Full audit log
-        </span>
-        <span>
-          <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-          Financial reports
-        </span>
-        <span>
-          <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-          Your data, your server
-        </span>
-      </div>
-    </div>
+  <div class="badge">
+    <div class="badge-dot"></div>
+    7-day free trial — no credit card required
   </div>
 
-  <!-- PRODUCT MOCKUP -->
-  <div class="hero-right">
-    <div class="product-frame">
-      <div class="product-topbar">
-        <div class="product-topbar-dots"><span></span><span></span><span></span></div>
-        <span class="product-topbar-title">Inventory · CountDepot</span>
-        <div class="product-topbar-right">
-          <span class="product-topbar-btn">↓ Export</span>
-          <span class="product-topbar-btn">+ Add Item</span>
+  <h1>Inventory Management<br><span>Made Easy</span></h1>
+
+  <p class="hero-sub">
+    Track every asset your business owns. Check items in and out, scan barcodes,
+    generate reports, and always know exactly what you have and where it is.
+  </p>
+
+  <div class="hero-actions">
+    <a href="/signup" class="btn-primary">Start your free trial →</a>
+    <a href="#features" class="btn-secondary">See what's included</a>
+  </div>
+
+  <p class="hero-note">No credit card · 7 days free · Cancel anytime</p>
+
+  <!-- PRODUCT PREVIEW -->
+  <div class="hero-preview" style="animation:fadeUp .6s .5s ease both">
+    <div class="preview-frame">
+      <div class="preview-topbar">
+        <div class="preview-dots"><span></span><span></span><span></span></div>
+        <div class="preview-url">Inventory · CountDepot</div>
+        <div class="preview-actions">
+          <span class="preview-btn">↓ Export</span>
+          <span class="preview-btn preview-btn-blue">+ Add Item</span>
         </div>
       </div>
-      <div class="product-body">
-        <div class="product-sidebar">
-          <div class="ps-icon active">
-            <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <div class="preview-body">
+        <div class="preview-sidebar">
+          <div class="psb-item active">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           </div>
-          <div class="ps-icon">
-            <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+          <div class="psb-item">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
           </div>
-          <div class="ps-icon">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <div class="psb-item">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           </div>
-          <div class="ps-icon">
-            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <div class="psb-item">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </div>
         </div>
-        <div class="product-main">
-          <div class="product-filters">
-            <span class="pf active">All Items</span>
-            <span class="pf">Available</span>
-            <span class="pf">Checked Out</span>
-            <span class="pf">Low Stock</span>
+        <div class="preview-main">
+          <div class="preview-filters">
+            <span class="pfilter active">All Items</span>
+            <span class="pfilter">Available</span>
+            <span class="pfilter">Checked Out</span>
+            <span class="pfilter">Low Stock</span>
           </div>
-          <table class="product-table">
+          <table class="preview-table">
             <thead>
               <tr>
-                <th>Item</th>
+                <th>Item / Product</th>
                 <th>Category</th>
+                <th>Serial / SKU</th>
                 <th>Shelf</th>
                 <th>Status</th>
                 <th>Cost</th>
@@ -603,39 +655,44 @@ footer p{font-size:12.5px;color:var(--muted)}
             </thead>
             <tbody>
               <tr>
-                <td><div class="item-name">ThinkPad X1 Carbon</div><div style="font-size:10px;color:#475569">Lenovo · Gen 11</div></td>
-                <td><span class="tag tag-cat">Laptops</span></td>
-                <td><span class="shelf-tag">A-12</span></td>
-                <td><span class="tag tag-in">✓ In</span></td>
-                <td><span class="cost-val">$1,340</span></td>
+                <td><div class="pt-name">ThinkPad X1 Carbon</div><div class="pt-sub">Lenovo · Gen 11</div></td>
+                <td><span class="pt-tag pt-tag-blue">Laptops</span></td>
+                <td><span class="pt-mono">SN-4421-LNV</span></td>
+                <td><span class="pt-shelf">A-12</span></td>
+                <td><span class="pt-tag pt-tag-green">✓ In</span></td>
+                <td><span class="pt-cost">$1,340</span></td>
               </tr>
               <tr>
-                <td><div class="item-name">Dell PowerEdge R750</div><div style="font-size:10px;color:#475569">Dell · Server</div></td>
-                <td><span class="tag tag-cat">Servers</span></td>
-                <td><span class="shelf-tag">DC-02</span></td>
-                <td><span class="tag tag-out">📤 J.Smith</span></td>
-                <td><span class="cost-val">$8,200</span></td>
+                <td><div class="pt-name">Dell PowerEdge R750</div><div class="pt-sub">Dell · Server</div></td>
+                <td><span class="pt-tag pt-tag-indigo">Servers</span></td>
+                <td><span class="pt-mono">SN-9810-DLL</span></td>
+                <td><span class="pt-shelf">DC-02</span></td>
+                <td><span class="pt-tag pt-tag-amber">📤 J.Smith</span></td>
+                <td><span class="pt-cost">$8,200</span></td>
               </tr>
               <tr>
-                <td><div class="item-name">Cisco Catalyst 9300</div><div style="font-size:10px;color:#475569">Cisco · 48-port</div></td>
-                <td><span class="tag tag-cat">Networking</span></td>
-                <td><span class="shelf-tag">B-04</span></td>
-                <td><span class="tag tag-in">✓ In</span></td>
-                <td><span class="cost-val">$4,100</span></td>
+                <td><div class="pt-name">Cisco Catalyst 9300</div><div class="pt-sub">Cisco · 48-port</div></td>
+                <td><span class="pt-tag pt-tag-blue">Networking</span></td>
+                <td><span class="pt-mono">SN-7732-CSC</span></td>
+                <td><span class="pt-shelf">B-04</span></td>
+                <td><span class="pt-tag pt-tag-green">✓ In</span></td>
+                <td><span class="pt-cost">$4,100</span></td>
               </tr>
               <tr>
-                <td><div class="item-name">MacBook Pro 16"</div><div style="font-size:10px;color:#475569">Apple · M3 Pro</div></td>
-                <td><span class="tag tag-cat">Laptops</span></td>
-                <td><span class="shelf-tag">A-09</span></td>
-                <td><span class="tag tag-in">✓ In</span></td>
-                <td><span class="cost-val">$2,499</span></td>
+                <td><div class="pt-name">MacBook Pro 16"</div><div class="pt-sub">Apple · M3 Pro</div></td>
+                <td><span class="pt-tag pt-tag-blue">Laptops</span></td>
+                <td><span class="pt-mono">SN-2291-APL</span></td>
+                <td><span class="pt-shelf">A-09</span></td>
+                <td><span class="pt-tag pt-tag-green">✓ In</span></td>
+                <td><span class="pt-cost">$2,499</span></td>
               </tr>
               <tr>
-                <td><div class="item-name">APC Smart-UPS 1500</div><div style="font-size:10px;color:#475569">APC · 1500VA</div></td>
-                <td><span class="tag tag-cat">Power</span></td>
-                <td><span class="shelf-tag">C-01</span></td>
-                <td><span class="tag tag-out">📤 M.Torres</span></td>
-                <td><span class="cost-val">$620</span></td>
+                <td><div class="pt-name">APC Smart-UPS 1500</div><div class="pt-sub">APC · 1500VA</div></td>
+                <td><span class="pt-tag pt-tag-slate">Power</span></td>
+                <td><span class="pt-mono">SN-0054-APC</span></td>
+                <td><span class="pt-shelf">C-01</span></td>
+                <td><span class="pt-tag pt-tag-amber">📤 M.Torres</span></td>
+                <td><span class="pt-cost">$620</span></td>
               </tr>
             </tbody>
           </table>
@@ -643,205 +700,112 @@ footer p{font-size:12.5px;color:var(--muted)}
       </div>
     </div>
   </div>
-</div>
+</section>
 
-<!-- TRUST STRIP -->
-<div class="trust-strip">
-  <div class="trust-item">
-    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-    Isolated per-tenant database
+<!-- STATS -->
+<div class="stats">
+  <div class="stat">
+    <div class="stat-val">7<span>-day</span></div>
+    <div class="stat-label">Free trial</div>
   </div>
-  <div class="trust-divider"></div>
-  <div class="trust-item">
-    <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-    Real-time inventory tracking
+  <div class="stat">
+    <div class="stat-val"><span>$</span>20</div>
+    <div class="stat-label">Starting at / month</div>
   </div>
-  <div class="trust-divider"></div>
-  <div class="trust-item">
-    <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-    Works across locations &amp; teams
+  <div class="stat">
+    <div class="stat-val">∞</div>
+    <div class="stat-label">Items tracked</div>
   </div>
-  <div class="trust-divider"></div>
-  <div class="trust-item">
-    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-    Full audit trail — immutable log
-  </div>
-  <div class="trust-divider"></div>
-  <div class="trust-item">
-    <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-    IT · Healthcare · Retail · More
+  <div class="stat">
+    <div class="stat-val">100<span>%</span></div>
+    <div class="stat-label">Your data, your server</div>
   </div>
 </div>
 
 <!-- FEATURES -->
 <section id="features">
   <div class="container">
-    <div class="section-eyebrow">Core Platform</div>
-    <h2 class="section-title">Built for the way your team<br>actually works</h2>
-    <p class="section-sub">Every feature designed around real inventory workflows — not a spreadsheet dressed up as software.</p>
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Everything your team needs.<br>Nothing you don't.</h2>
+    <p class="section-sub">Built for businesses who are tired of spreadsheets and overpriced enterprise software.</p>
 
-    <div class="features-layout">
-      <div class="features-list">
-
-        <div class="feat-item">
-          <div class="feat-icon-wrap">
-            <svg viewBox="0 0 24 24"><path d="M3 5h3M3 9h3M3 19h3M3 15h3M18 5h3M18 9h3M18 15h3M18 19h3M7 3v5M7 16v5M17 3v5M17 16v5M7 8h10v8H7z"/></svg>
-          </div>
-          <div class="feat-text">
-            <h3>Barcode Scanning</h3>
-            <p>Plug in any USB scanner and it works instantly. Check items in or out without touching the keyboard.</p>
-          </div>
-        </div>
-
-        <div class="feat-item">
-          <div class="feat-icon-wrap">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </div>
-          <div class="feat-text">
-            <h3>Check In / Check Out</h3>
-            <p>Assign items to jobs, team members, or locations with a full history of who had what and when.</p>
-          </div>
-        </div>
-
-        <div class="feat-item">
-          <div class="feat-icon-wrap">
-            <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          </div>
-          <div class="feat-text">
-            <h3>Financial Reporting</h3>
-            <p>Track stock value, cost vs. sale prices, and profit margins. Export to Excel for your accountant.</p>
-          </div>
-        </div>
-
-        <div class="feat-item">
-          <div class="feat-icon-wrap">
-            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-          </div>
-          <div class="feat-text">
-            <h3>Team Permissions</h3>
-            <p>Granular control over who can view, add, edit, or delete. Staff see only what they need to.</p>
-          </div>
-        </div>
-
-        <div class="feat-item">
-          <div class="feat-icon-wrap">
-            <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          </div>
-          <div class="feat-text">
-            <h3>Low Stock Alerts</h3>
-            <p>Set minimum thresholds on any product. Get notified before you run out — not after.</p>
-          </div>
-        </div>
-
-        <div class="feat-item">
-          <div class="feat-icon-wrap">
-            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          </div>
-          <div class="feat-text">
-            <h3>Full Audit Log</h3>
-            <p>Every action recorded permanently. Immutable, searchable, exportable — always know who did what.</p>
-          </div>
-        </div>
-
+    <div class="features-grid">
+      <div class="feature">
+        <div class="feature-icon">📦</div>
+        <h3>Asset Tracking</h3>
+        <p>Track every item by serial number, SKU, or barcode. Know exactly where every asset is at all times — across locations, jobs, and teams.</p>
       </div>
-
-      <!-- Right panel: audit log preview -->
-      <div class="feat-panel">
-        <div class="feat-panel-header">
-          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Audit Log
-        </div>
-        <div class="feat-panel-body">
-          <div style="display:flex;flex-direction:column;gap:0">
-            <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:12px">
-              <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                <span style="font-weight:600;color:var(--text)">CHECKOUT</span>
-                <span style="color:var(--muted);font-size:11px">2m ago</span>
-              </div>
-              <span style="color:var(--text2)">ThinkPad X1 #4421</span>
-              <span style="color:var(--muted)"> → checked out by </span>
-              <span style="color:var(--sky)">jsmith</span>
-            </div>
-            <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:12px">
-              <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                <span style="font-weight:600;color:var(--text)">ADD_ITEM</span>
-                <span style="color:var(--muted);font-size:11px">1h ago</span>
-              </div>
-              <span style="color:var(--text2)">Cisco Catalyst 9300</span>
-              <span style="color:var(--muted)"> added by </span>
-              <span style="color:var(--sky)">admin</span>
-            </div>
-            <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:12px">
-              <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                <span style="font-weight:600;color:#4ade80">CHECKIN</span>
-                <span style="color:var(--muted);font-size:11px">3h ago</span>
-              </div>
-              <span style="color:var(--text2)">MacBook Pro 16"</span>
-              <span style="color:var(--muted)"> returned by </span>
-              <span style="color:var(--sky)">mtorres</span>
-            </div>
-            <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:12px">
-              <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                <span style="font-weight:600;color:#fbbf24">QTY_ADJUST</span>
-                <span style="color:var(--muted);font-size:11px">5h ago</span>
-              </div>
-              <span style="color:var(--text2)">Cat6 Cable 10ft</span>
-              <span style="color:var(--muted)"> qty: 50 → 38 by </span>
-              <span style="color:var(--sky)">admin</span>
-            </div>
-            <div style="padding:10px 0;font-size:12px">
-              <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                <span style="font-weight:600;color:#c084fc">EDIT_ITEM</span>
-                <span style="color:var(--muted);font-size:11px">Yesterday</span>
-              </div>
-              <span style="color:var(--text2)">PowerEdge R750</span>
-              <span style="color:var(--muted)"> shelf: </span>
-              <span style="color:var(--text2)">DC-01 → DC-02</span>
-            </div>
-          </div>
-        </div>
+      <div class="feature">
+        <div class="feature-icon">🔄</div>
+        <h3>Check In / Check Out</h3>
+        <p>Assign items to jobs, locations, or team members. Log who took what and when — with a full audit trail and one-click return.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📱</div>
+        <h3>Barcode Scanning</h3>
+        <p>Plug in any USB barcode scanner and it works instantly. Scan to check items in or out without typing a thing.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📊</div>
+        <h3>Financial Reports</h3>
+        <p>Know your stock value, track what you've sold, calculate profit margins. Real numbers, not guesses.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔔</div>
+        <h3>Low Stock Alerts</h3>
+        <p>Set thresholds on any item and get alerted before you run out. Stay stocked and keep operations running without interruption.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">👥</div>
+        <h3>Team Permissions</h3>
+        <p>Control what each team member can see and do. Staff can check items in and out without ever touching financial data.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🏷️</div>
+        <h3>Label Printing</h3>
+        <p>Print barcoded asset labels directly from the app. Works with standard label printers and Avery sheets.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🗂️</div>
+        <h3>Custom Categories</h3>
+        <p>Choose your industry on setup and get pre-configured categories. IT, Healthcare, Retail, Construction — all covered.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📋</div>
+        <h3>Full Audit Log</h3>
+        <p>Every action is permanently recorded. See exactly who did what and when — immutable and searchable.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- SECTORS -->
-<section id="sectors">
+<!-- HOW IT WORKS -->
+<section id="how">
   <div class="container">
-    <div class="section-eyebrow">Industries</div>
-    <h2 class="section-title">Pre-configured for your industry</h2>
-    <p class="section-sub">Choose your sector on setup. Categories, custom fields, and workflows come pre-built — no configuration required.</p>
+    <div class="section-label">How it works</div>
+    <h2 class="section-title">Up and running in minutes.</h2>
+    <p class="section-sub">No technical setup required. Sign up, pick your industry, and start tracking in minutes.</p>
 
-    <div class="sectors-grid">
-      <div class="sector-card">
-        <span class="sector-icon">💻</span>
-        <h3>IT &amp; MSP</h3>
-        <p>Laptops, servers, networking gear, cameras. Track serial numbers, specs, and check-outs across client sites.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <h3>Sign up</h3>
+        <p>Create your workspace at your own subdomain. No credit card needed for the 7-day trial.</p>
       </div>
-      <div class="sector-card">
-        <span class="sector-icon">🏥</span>
-        <h3>Healthcare</h3>
-        <p>Medical devices, equipment, and consumables. Maintenance schedules, calibration records, and compliance tracking.</p>
+      <div class="step">
+        <div class="step-num">02</div>
+        <h3>Choose your industry</h3>
+        <p>Pick your sector — Healthcare, Retail, Construction, Education, and more. Your categories and fields are pre-configured instantly.</p>
       </div>
-      <div class="sector-card">
-        <span class="sector-icon">🛒</span>
-        <h3>Retail</h3>
-        <p>SKU-based inventory, quantity tracking, reorder points. Know your stock levels and value in real time.</p>
+      <div class="step">
+        <div class="step-num">03</div>
+        <h3>Add your inventory</h3>
+        <p>Import from Excel or add items one by one. Scan barcodes to populate serial numbers automatically.</p>
       </div>
-      <div class="sector-card">
-        <span class="sector-icon">🎓</span>
-        <h3>Education</h3>
-        <p>Chromebooks, AV equipment, lab instruments. Check items out to students and staff with full return tracking.</p>
-      </div>
-      <div class="sector-card">
-        <span class="sector-icon">🏗️</span>
-        <h3>Construction</h3>
-        <p>Tools, machinery, and materials across job sites. Track who has what equipment and where it's deployed.</p>
-      </div>
-      <div class="sector-card">
-        <span class="sector-icon">📦</span>
-        <h3>General Business</h3>
-        <p>Office equipment, vehicles, furniture, and anything else your business needs to track and manage.</p>
+      <div class="step">
+        <div class="step-num">04</div>
+        <h3>Invite your team</h3>
+        <p>Add team members and set their permissions. Everyone works from the same live inventory, in real time.</p>
       </div>
     </div>
   </div>
@@ -850,9 +814,9 @@ footer p{font-size:12.5px;color:var(--muted)}
 <!-- PRICING -->
 <section id="pricing">
   <div class="container">
-    <div class="section-eyebrow">Pricing</div>
-    <h2 class="section-title">Straightforward pricing.<br>No surprises.</h2>
-    <p class="section-sub">A fraction of the cost of legacy inventory platforms. Cancel any time — no contracts, no setup fees.</p>
+    <div class="section-label">Pricing</div>
+    <h2 class="section-title">Simple, honest pricing.</h2>
+    <p class="section-sub">Way less than the alternatives. Cancel any time — no contracts, no surprises.</p>
 
     <div class="pricing-toggle">
       <span>Monthly</span>
@@ -860,27 +824,28 @@ footer p{font-size:12.5px;color:var(--muted)}
         <input type="checkbox" id="annual-toggle">
         <span class="toggle-slider"></span>
       </label>
-      <span style="color:var(--sky);font-weight:500">Annual — 2 months free</span>
+      <span class="annual-label">Annual <strong>(2 months free)</strong></span>
     </div>
 
     <div class="pricing-grid">
+
       <div class="plan">
         <div class="plan-name">Standard</div>
         <div class="plan-price">
           <span class="amount" data-monthly="20" data-annual="17">$20</span>
           <span class="period">/mo</span>
         </div>
-        <div class="plan-billing" id="standard-billing">&nbsp;</div>
+        <div class="plan-annual" id="standard-annual" style="visibility:hidden">$200/yr — 2 months free</div>
         <div class="plan-divider"></div>
         <ul class="plan-features">
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Up to 5 users</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Unlimited items</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Barcode scanning</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Financial reports</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Audit log</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Email support</li>
+          <li>5 users</li>
+          <li>Unlimited items</li>
+          <li>All core features</li>
+          <li>Barcode scanning</li>
+          <li>Financial reports</li>
+          <li>Email support</li>
         </ul>
-        <a href="/signup" class="plan-cta cta-ghost">Start free trial</a>
+        <a href="/signup" class="plan-cta plan-cta-outline">Start free trial</a>
       </div>
 
       <div class="plan featured">
@@ -890,17 +855,17 @@ footer p{font-size:12.5px;color:var(--muted)}
           <span class="amount" data-monthly="50" data-annual="42">$50</span>
           <span class="period">/mo</span>
         </div>
-        <div class="plan-billing" id="pro-billing">&nbsp;</div>
+        <div class="plan-annual" id="pro-annual" style="visibility:hidden">$500/yr — 2 months free</div>
         <div class="plan-divider"></div>
         <ul class="plan-features">
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Up to 15 users</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Everything in Standard</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Priority support</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Advanced reporting</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Excel import / export</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Kits &amp; bundles</li>
+          <li>15 users</li>
+          <li>Unlimited items</li>
+          <li>Everything in Standard</li>
+          <li>Priority support</li>
+          <li>Advanced reporting</li>
+          <li>Excel import / export</li>
         </ul>
-        <a href="/signup" class="plan-cta cta-solid">Start free trial</a>
+        <a href="/signup" class="plan-cta plan-cta-solid">Start free trial</a>
       </div>
 
       <div class="plan">
@@ -909,95 +874,103 @@ footer p{font-size:12.5px;color:var(--muted)}
           <span class="amount" data-monthly="80" data-annual="67">$80</span>
           <span class="period">/mo</span>
         </div>
-        <div class="plan-billing" id="enterprise-billing">&nbsp;</div>
+        <div class="plan-annual" id="enterprise-annual" style="visibility:hidden">$800/yr — 2 months free</div>
         <div class="plan-divider"></div>
         <ul class="plan-features">
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Unlimited users</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Everything in Pro</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Dedicated support</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Custom onboarding</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>API access</li>
-          <li><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>SLA guarantee</li>
+          <li>Unlimited users</li>
+          <li>Unlimited items</li>
+          <li>Everything in Pro</li>
+          <li>Dedicated support</li>
+          <li>Custom onboarding</li>
+          <li>API access</li>
         </ul>
-        <a href="/signup" class="plan-cta cta-ghost">Start free trial</a>
+        <a href="/signup" class="plan-cta plan-cta-outline">Start free trial</a>
       </div>
+
     </div>
   </div>
 </section>
 
-<!-- BOTTOM CTA -->
-<div class="bottom-cta">
-  <h2>Ready to get your<br>inventory under control?</h2>
+<!-- TRIAL CTA -->
+<section class="trial-section">
+  <div class="trial-glow"></div>
+  <h2>Ready to get organized?</h2>
   <p>Start your 7-day free trial today. No credit card required.</p>
-  <a href="/signup" class="btn-primary" style="font-size:15px;padding:13px 32px;display:inline-flex">
-    Create your free workspace
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-left:8px"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-  </a>
-  <p class="cta-note">Takes 2 minutes · Your data stays on your server · Cancel anytime</p>
-</div>
+  <a href="/signup" class="btn-primary" style="font-size:17px;padding:16px 40px">Create your workspace →</a>
+  <p class="trial-note">Takes 2 minutes · Your data stays yours · Cancel anytime</p>
+</section>
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-logo">
-    <div class="footer-logo-icon">
-      <svg viewBox="0 0 24 24"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3H8a2 2 0 00-2 2v2h12V5a2 2 0 00-2-2z"/></svg>
-    </div>
-    CountDepot
-  </div>
-  <p>© 2026 CountDepot · Inventory Management Made Easy</p>
-  <div class="footer-links">
-    <a href="#features">Features</a>
-    <a href="#sectors">Industries</a>
-    <a href="#pricing">Pricing</a>
-    <a href="/signup">Sign up</a>
-  </div>
+  <div class="footer-logo">Count<span>Depot</span></div>
+  <p>© 2026 CountDepot. Inventory Management Made Easy.</p>
+  <a href="/signup" class="nav-cta">Get started free</a>
 </footer>
 
 <script>
-function openSignin(){
-  document.getElementById('signin-overlay').classList.add('open');
-  setTimeout(()=>document.getElementById('signin-email').focus(),60);
+// Sign in modal
+function openSignin() {
+  const overlay = document.getElementById('signin-overlay');
+  overlay.style.display = 'flex';
+  setTimeout(() => document.getElementById('signin-email').focus(), 50);
 }
-function closeSignin(){
-  document.getElementById('signin-overlay').classList.remove('open');
-  document.getElementById('signin-error').style.display='none';
-  document.getElementById('signin-email').value='';
-  document.getElementById('signin-password').value='';
-  document.getElementById('signin-btn').textContent='Sign in →';
-  document.getElementById('signin-btn').disabled=false;
+function closeSignin() {
+  document.getElementById('signin-overlay').style.display = 'none';
+  document.getElementById('signin-error').style.display = 'none';
+  document.getElementById('signin-email').value = '';
+  document.getElementById('signin-password').value = '';
 }
-async function doSignin(){
-  const email=document.getElementById('signin-email').value.trim();
-  const password=document.getElementById('signin-password').value;
-  const errEl=document.getElementById('signin-error');
-  const btn=document.getElementById('signin-btn');
-  errEl.style.display='none';
-  if(!email||!password){errEl.textContent='Please enter your email and password.';errEl.style.display='block';return;}
-  btn.textContent='Signing in…';btn.disabled=true;
-  try{
-    const res=await fetch('/_cross-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
-    const data=await res.json();
-    if(data.ok){btn.textContent='Redirecting…';window.location.href=data.redirect;}
-    else{errEl.textContent=data.msg||'Invalid email or password.';errEl.style.display='block';btn.textContent='Sign in →';btn.disabled=false;}
-  }catch(e){errEl.textContent='Connection error. Please try again.';errEl.style.display='block';btn.textContent='Sign in →';btn.disabled=false;}
+async function doSignin() {
+  const email    = document.getElementById('signin-email').value.trim();
+  const password = document.getElementById('signin-password').value;
+  const errEl    = document.getElementById('signin-error');
+  const btn      = document.getElementById('signin-btn');
+  errEl.style.display = 'none';
+  if (!email || !password) { errEl.textContent = 'Please enter your email and password.'; errEl.style.display = 'block'; return; }
+  btn.textContent = 'Signing in…';
+  btn.disabled = true;
+  try {
+    const res  = await fetch('/_cross-login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, password}) });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = 'Redirecting…';
+      window.location.href = data.redirect;
+    } else {
+      errEl.textContent = data.msg || 'Invalid email or password.';
+      errEl.style.display = 'block';
+      btn.textContent = 'Sign in →';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    errEl.textContent = 'Connection error. Please try again.';
+    errEl.style.display = 'block';
+    btn.textContent = 'Sign in →';
+    btn.disabled = false;
+  }
 }
+document.getElementById('signin-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeSignin();
+});
+document.querySelector('.nav-link-signin').addEventListener('click', function(e) {
+  e.preventDefault(); openSignin();
+});
 
-// Pricing toggle
-const toggle=document.getElementById('annual-toggle');
-const plans=[
-  {amount:'standard-billing',monthly:null,annual:'$200/yr — 2 months free',planId:'standard'},
-  {amount:'pro-billing',monthly:null,annual:'$500/yr — 2 months free',planId:'pro'},
-  {amount:'enterprise-billing',monthly:null,annual:'$800/yr — 2 months free',planId:'enterprise'},
-];
-toggle.addEventListener('change',()=>{
-  const isAnnual=toggle.checked;
-  document.querySelectorAll('.amount').forEach(el=>{
-    el.textContent='$'+(isAnnual?el.dataset.annual:el.dataset.monthly);
+// Annual billing toggle
+const toggle = document.getElementById('annual-toggle');
+const amounts = document.querySelectorAll('.amount');
+const annualLabels = ['standard-annual','pro-annual','enterprise-annual'];
+
+toggle.addEventListener('change', () => {
+  const isAnnual = toggle.checked;
+  amounts.forEach(el => {
+    const val = isAnnual ? el.dataset.annual : el.dataset.monthly;
+    el.textContent = '$' + val;
   });
-  plans.forEach(p=>{
-    document.getElementById(p.amount).textContent=isAnnual?p.annual:'';
+  annualLabels.forEach(id => {
+    document.getElementById(id).style.visibility = isAnnual ? 'visible' : 'hidden';
   });
 });
 </script>
+
 </body>
 </html>
