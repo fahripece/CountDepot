@@ -145,6 +145,21 @@
   <div id="locationList"><div style="color:#94a3b8;font-size:13px;padding:8px 0">Loading…</div></div>
 </div>
 
+<!-- SECTOR / WORKSPACE MODE -->
+<div class="card" style="margin-bottom:20px">
+  <div style="margin-bottom:16px">
+    <div style="font-weight:600;font-size:15px">Workspace Sector</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:1px">Switch the active industry preset — reseeds categories and custom fields</div>
+  </div>
+  <div id="sector-current" style="font-size:13px;color:#475569;margin-bottom:14px">Loading…</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px" id="sector-grid"></div>
+  <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e;margin-bottom:14px;line-height:1.6">
+    <strong>Warning:</strong> Switching sectors wipes all existing categories and their custom fields. Items remain but lose category associations. Only use this for testing.
+  </div>
+  <button class="btn btn-primary btn-sm" id="sector-apply-btn" onclick="applySector()" style="display:none">Apply Sector</button>
+  <span id="sector-saved" style="font-size:12px;color:#15803d;margin-left:10px;display:none">✓ Switched — reload the page to see new categories</span>
+</div>
+
 </div><!-- end scroll area -->
 
 <!-- ADD USER MODAL -->
@@ -486,6 +501,61 @@ document.getElementById('newKeyModal')?.addEventListener('click',function(e){
   }
 });
 loadApiKeys();
+
+// ── Sector switcher ──────────────────────────────────────────────────────────
+let _selectedSector = null;
+
+async function loadSector() {
+  try {
+    const d = await fetch('/api/admin/sector').then(r => r.json());
+    if (!d.ok) return;
+    const cur = d.sector;
+    const curLabel = d.label;
+    const curIcon = d.icon;
+    document.getElementById('sector-current').innerHTML =
+      cur ? `Current sector: <strong>${curIcon} ${curLabel}</strong>` : 'No sector set.';
+    const grid = document.getElementById('sector-grid');
+    grid.innerHTML = d.all_sectors.map(s => `
+      <div id="sc-${s.key}" onclick="selectSector('${s.key}')" style="border:2px solid ${cur===s.key?'#1d4ed8':'#e5e3de'};border-radius:10px;padding:12px;cursor:pointer;background:${cur===s.key?'#eff6ff':'#fff'};transition:all .15s">
+        <div style="font-size:20px;margin-bottom:4px">${s.icon}</div>
+        <div style="font-weight:600;font-size:13px">${s.label}</div>
+        <div style="font-size:11.5px;color:#64748b;margin-top:2px;line-height:1.4">${s.description}</div>
+        ${cur===s.key?'<div style="font-size:10px;font-weight:600;color:#1d4ed8;margin-top:6px">ACTIVE</div>':''}
+      </div>`).join('');
+    _selectedSector = cur;
+  } catch(e) {}
+}
+
+function selectSector(key) {
+  _selectedSector = key;
+  document.querySelectorAll('[id^="sc-"]').forEach(el => {
+    const isSelected = el.id === 'sc-' + key;
+    el.style.borderColor = isSelected ? '#1d4ed8' : '#e5e3de';
+    el.style.background = isSelected ? '#eff6ff' : '#fff';
+  });
+  document.getElementById('sector-apply-btn').style.display = '';
+}
+
+async function applySector() {
+  if (!_selectedSector) return;
+  if (!confirm(`Switch to sector "${_selectedSector}"? This will wipe all categories and reseed them. Items will remain. Continue?`)) return;
+  const btn = document.getElementById('sector-apply-btn');
+  btn.disabled = true; btn.textContent = 'Switching…';
+  const res = await fetch('/api/admin/switch-sector', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken },
+    body: JSON.stringify({ sector: _selectedSector })
+  }).then(r => r.json());
+  btn.disabled = false; btn.textContent = 'Apply Sector';
+  if (res.ok) {
+    const saved = document.getElementById('sector-saved');
+    saved.style.display = '';
+    toast(`Switched to ${res.label} ✓`, 'ok');
+    setTimeout(() => loadSector(), 500);
+  } else toast(res.msg || 'Error', 'err');
+}
+
+loadSector();
 </script>
 
 <!-- NEW API KEY MODAL -->

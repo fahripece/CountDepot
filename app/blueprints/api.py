@@ -2187,3 +2187,47 @@ def api_product_types():
                      "qty_tracked": r["qty_tracked"],
                      "require_scan_checkout": r["require_scan_checkout"], "active": r["active"]}
                     for r in prods])
+
+
+# ── Sector switcher (admin-only, dev/test tool) ───────────────────────────────
+
+@bp.route("/api/admin/switch-sector", methods=["POST"])
+@login_required
+@admin_required
+def api_switch_sector():
+    from flask import g
+    from app.sectors import SECTORS, seed_sector_categories
+    from app.platform import set_tenant_sector
+    from app.db import get_db
+    d = request.json or {}
+    sector_key = d.get("sector", "").strip()
+    if sector_key not in SECTORS:
+        return jsonify({"ok": False, "msg": "Unknown sector"})
+    db = get_db()
+    seed_sector_categories(db, sector_key)
+    db.commit()
+    set_tenant_sector(g.tenant_slug, sector_key)
+    log_action("SECTOR_SWITCH", detail=f"Sector switched to {sector_key}")
+    return jsonify({"ok": True, "sector": sector_key, "label": SECTORS[sector_key]["label"]})
+
+
+@bp.route("/api/admin/sector", methods=["GET"])
+@login_required
+@admin_required
+def api_get_sector():
+    from flask import g
+    from app.sectors import SECTORS
+    from app.platform import get_tenant_by_slug
+    tenant = get_tenant_by_slug(g.tenant_slug)
+    sector_key = tenant["sector"] if tenant and tenant["sector"] else None
+    sector_info = SECTORS.get(sector_key, {}) if sector_key else {}
+    return jsonify({
+        "ok": True,
+        "sector": sector_key,
+        "label": sector_info.get("label", "Unknown"),
+        "icon": sector_info.get("icon", ""),
+        "all_sectors": [
+            {"key": k, "label": v["label"], "icon": v["icon"], "description": v["description"]}
+            for k, v in SECTORS.items()
+        ]
+    })
