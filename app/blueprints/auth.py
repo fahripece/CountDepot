@@ -6,11 +6,26 @@ import secrets as _secrets
 from app.db import query, execute
 from app.helpers import (hash_pw, verify_pw, validate_password,
                          check_login_rate, clear_login_rate, check_rate_limit,
-                         get_user_perms, log_auth_event)
+                         get_user_perms, get_user_location_ids, log_auth_event)
 
 bp = Blueprint("auth", __name__)
 
 SESSION_LIFETIME_HOURS = 8
+
+
+def _build_session(user, perms):
+    """Return a dict of session keys for a logged-in user."""
+    loc_ids = get_user_location_ids(user["id"], user["role"])
+    return {
+        "user_id":              user["id"],
+        "username":             user["username"],
+        "role":                 user["role"],
+        "permissions":          ",".join(perms),
+        "must_change_password": bool(user["must_change_password"]),
+        "expires_at":           (datetime.utcnow() + timedelta(hours=SESSION_LIFETIME_HOURS)).isoformat(),
+        "session_token":        _secrets.token_hex(32),
+        "location_ids":         loc_ids,
+    }
 
 
 def check_session_expiry():
@@ -81,18 +96,11 @@ def login_page():
             perms = get_user_perms(
                 user["id"], user["role"],
                 user["permissions"] if "permissions" in user.keys() else "")
-            now = datetime.utcnow()
-            tok = _secrets.token_hex(32)
+            sess = _build_session(user, perms)
             session.clear()
-            session["user_id"]              = user["id"]
-            session["username"]             = user["username"]
-            session["role"]                 = user["role"]
-            session["permissions"]          = ",".join(perms)
-            session["must_change_password"] = bool(user["must_change_password"])
-            session["expires_at"]           = (now + timedelta(hours=SESSION_LIFETIME_HOURS)).isoformat()
-            session["session_token"]        = tok
+            session.update(sess)
             execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
-                    [now.strftime("%Y-%m-%d %H:%M:%S"), tok, user["id"]])
+                    [datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), sess["session_token"], user["id"]])
             log_auth_event("LOGIN_OK", username=user["username"], ip=ip,
                            tenant=getattr(g, "tenant_slug", ""))
             return redirect(url_for("main.inventory"))
@@ -161,18 +169,11 @@ def verify_2fa():
             clear_login_rate(ip)
             perms = get_user_perms(user["id"], user["role"],
                                    user["permissions"] if "permissions" in user.keys() else "")
-            now_dt = datetime.utcnow()
-            tok = _secrets.token_hex(32)
+            sess = _build_session(user, perms)
             session.clear()
-            session["user_id"]              = user["id"]
-            session["username"]             = user["username"]
-            session["role"]                 = user["role"]
-            session["permissions"]          = ",".join(perms)
-            session["must_change_password"] = bool(user["must_change_password"])
-            session["expires_at"]           = (now_dt + timedelta(hours=SESSION_LIFETIME_HOURS)).isoformat()
-            session["session_token"]        = tok
+            session.update(sess)
             execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
-                    [now_dt.strftime("%Y-%m-%d %H:%M:%S"), tok, user["id"]])
+                    [datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), sess["session_token"], user["id"]])
             log_auth_event("LOGIN_OK_2FA", username=user["username"], ip=ip,
                            tenant=getattr(g, "tenant_slug", ""))
             return redirect(url_for("main.inventory"))
@@ -372,18 +373,11 @@ def auto_login():
 
     perms  = get_user_perms(user["id"], user["role"],
                             user["permissions"] if "permissions" in user.keys() else "")
-    now_dt = datetime.utcnow()
-    tok    = _secrets.token_hex(32)
+    sess = _build_session(user, perms)
     session.clear()
-    session["user_id"]              = user["id"]
-    session["username"]             = user["username"]
-    session["role"]                 = user["role"]
-    session["permissions"]          = ",".join(perms)
-    session["must_change_password"] = bool(user["must_change_password"])
-    session["expires_at"]           = (now_dt + timedelta(hours=SESSION_LIFETIME_HOURS)).isoformat()
-    session["session_token"]        = tok
+    session.update(sess)
     execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
-            [now_dt.strftime("%Y-%m-%d %H:%M:%S"), tok, user["id"]])
+            [datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), sess["session_token"], user["id"]])
     log_auth_event("LOGIN_OK", username=user["username"],
                    ip=request.remote_addr or "", tenant=tenant_slug,
                    detail="via cross-login token")

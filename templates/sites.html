@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Sites · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Sites</span>
+  <span class="topbar-sub" id="site-count"></span>
+  {% if session.get('role') == 'admin' %}
+  <div class="topbar-right">
+    <button class="btn btn-primary btn-sm" onclick="openAddSite()">+ Add Site</button>
+  </div>
+  {% endif %}
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:22px 24px">
+  <div id="site-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px"></div>
+</div>
+
+{% if session.get('role') == 'admin' %}
+<!-- ADD SITE MODAL -->
+<div class="overlay" id="siteModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <div class="modal-title" id="siteModalTitle">Add Site</div>
+      <button class="modal-close" onclick="closeModal('siteModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="site-id">
+      <div class="field"><label class="label">Site Name *</label><input class="input" id="site-name" placeholder="e.g. Roslindale Hub"></div>
+      <div class="field"><label class="label">Description</label><input class="input" id="site-desc" placeholder="Optional notes"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn btn-danger btn-sm" id="site-delete-btn" style="display:none" onclick="deleteSite()">Delete Site</button>
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn btn-secondary" onclick="closeModal('siteModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSite()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<style>
+.site-card{background:#fff;border:1.5px solid #e5e3de;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px;cursor:pointer;transition:box-shadow .15s,border-color .15s;text-decoration:none;color:inherit}
+.site-card:hover{box-shadow:0 4px 18px rgba(0,0,0,.08);border-color:#94a3b8}
+.site-icon{width:44px;height:44px;border-radius:10px;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;flex-shrink:0}
+.site-stat{display:flex;flex-direction:column;align-items:center;flex:1}
+.site-stat-val{font-size:22px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:#0f172a}
+.site-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;font-weight:600;margin-top:2px}
+body.dark .site-card{background:#1e293b;border-color:#334155;color:#e2e8f0}
+body.dark .site-card:hover{border-color:#64748b}
+body.dark .site-stat-val{color:#e2e8f0}
+body.dark .site-icon{background:#334155}
+</style>
+
+<script>
+let allSites=[];
+
+async function loadSites(){
+  allSites=await fetch('/api/locations').then(r=>r.json());
+  const locIds={{ session.get('location_ids', [])|tojson }};
+  // If user has site restrictions, only show their sites
+  const visible = locIds.length ? allSites.filter(s=>locIds.includes(s.id)) : allSites;
+  document.getElementById('site-count').textContent=visible.length+' site'+(visible.length!==1?'s':'');
+  renderSites(visible);
+}
+
+function renderSites(sites){
+  const grid=document.getElementById('site-grid');
+  if(!sites.length){
+    grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:60px;color:#94a3b8">
+      <div style="font-size:32px;margin-bottom:12px">🏢</div>
+      <div style="font-size:15px;font-weight:600;color:#374151;margin-bottom:4px">No sites yet</div>
+      <div style="font-size:13px">Add a site to start organising items by location.</div>
+    </div>`;
+    return;
+  }
+  grid.innerHTML=sites.map(s=>{
+    const initial=(s.name||'?')[0].toUpperCase();
+    const out=s.item_count-(s.available_count||0);
+    const pct=s.item_count?Math.round(((s.available_count||0)/s.item_count)*100):100;
+    const barColor=pct>66?'#15803d':pct>33?'#d97706':'#b91c1c';
+    const adminEdit=`{% if session.get('role') == 'admin' %}<button class="btn btn-secondary btn-sm" style="font-size:11px" onclick="event.preventDefault();event.stopPropagation();openEditSite(${s.id})">Edit</button>{% endif %}`;
+    return `<a href="/sites/${s.id}" class="site-card">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="site-icon">${initial}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}</div>
+          ${s.description?`<div style="font-size:12px;color:#94a3b8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.description}</div>`:''}
+        </div>
+        ${adminEdit}
+      </div>
+      <div style="display:flex;gap:0;border:1.5px solid #e5e3de;border-radius:8px;overflow:hidden">
+        <div class="site-stat" style="padding:10px 0;border-right:1px solid #e5e3de">
+          <div class="site-stat-val">${s.item_count||0}</div>
+          <div class="site-stat-label">Total</div>
+        </div>
+        <div class="site-stat" style="padding:10px 0;border-right:1px solid #e5e3de">
+          <div class="site-stat-val" style="color:#15803d">${s.available_count||0}</div>
+          <div class="site-stat-label">Available</div>
+        </div>
+        <div class="site-stat" style="padding:10px 0">
+          <div class="site-stat-val" style="color:${out>0?'#d97706':'#94a3b8'}">${out}</div>
+          <div class="site-stat-label">Out</div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:4px"><span>Availability</span><span>${pct}%</span></div>
+        <div style="height:5px;background:#f0efec;border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .4s"></div></div>
+      </div>
+    </a>`;
+  }).join('');
+}
+
+{% if session.get('role') == 'admin' %}
+function openAddSite(){
+  document.getElementById('site-id').value='';
+  document.getElementById('site-name').value='';
+  document.getElementById('site-desc').value='';
+  document.getElementById('siteModalTitle').textContent='Add Site';
+  document.getElementById('site-delete-btn').style.display='none';
+  openModal('siteModal');
+  setTimeout(()=>document.getElementById('site-name').focus(),100);
+}
+function openEditSite(id){
+  const s=allSites.find(x=>x.id===id); if(!s)return;
+  document.getElementById('site-id').value=s.id;
+  document.getElementById('site-name').value=s.name;
+  document.getElementById('site-desc').value=s.description||'';
+  document.getElementById('siteModalTitle').textContent='Edit Site';
+  document.getElementById('site-delete-btn').style.display='';
+  openModal('siteModal');
+}
+async function saveSite(){
+  const name=document.getElementById('site-name').value.trim();
+  if(!name){toast('Site name is required','warn');return;}
+  const id=document.getElementById('site-id').value;
+  const payload={name,description:document.getElementById('site-desc').value.trim()};
+  let res;
+  if(id){
+    res=await fetch('/api/location/'+id,{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify(payload)}).then(r=>r.json());
+  } else {
+    res=await api('/api/locations',payload);
+  }
+  if(res.ok){toast(id?'Site updated ✓':'Site added ✓','ok');closeModal('siteModal');loadSites();}
+  else toast(res.msg||'Error','err');
+}
+async function deleteSite(){
+  const id=document.getElementById('site-id').value;
+  const name=document.getElementById('site-name').value;
+  if(!confirm(`Delete site "${name}"? Items will have their site cleared but won't be deleted.`))return;
+  const res=await fetch('/api/location/'+id,{method:'DELETE',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken}}).then(r=>r.json());
+  if(res.ok){toast('Site deleted','warn');closeModal('siteModal');loadSites();}
+  else toast(res.msg||'Error','err');
+}
+{% endif %}
+
+loadSites();
+</script>
+{% endblock %}

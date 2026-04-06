@@ -12,6 +12,7 @@ from app.helpers import (login_required, perm_required, admin_required,
                          validate_password, api_rate_limit,
                          _item_missing_fields, sync_item_task,
                          _parse_date_range, _date_filter_sql,
+                         location_filter_sql,
                          ALL_PERMISSIONS, PERM_KEYS,
                          ADMIN_DEFAULT_PERMS, WORKER_DEFAULT_PERMS)
 
@@ -375,6 +376,8 @@ def api_items():
         s = f"%{search}%"
         args += [s]*10 + [id_search]
         sql += cond
+    loc_sql, loc_args = location_filter_sql("i")
+    sql += loc_sql; args += loc_args
     if cat_id:  sql += " AND i.category_id=?"; args.append(cat_id)
     if prod_id: sql += " AND i.product_id=?";  args.append(prod_id)
     if loc_id:  sql += " AND i.location_id=?"; args.append(loc_id)
@@ -552,7 +555,59 @@ def api_checkin():
 @bp.route("/api/locations")
 @login_required
 def api_get_locations():
-    return jsonify([dict(r) for r in query("SELECT * FROM locations ORDER BY name")])
+    rows = query("""
+        SELECT l.*,
+               COUNT(i.id) as item_count,
+               SUM(CASE WHEN i.checked_out=0 AND i.sold=0 THEN 1 ELSE 0 END) as available_count
+        FROM locations l
+        LEFT JOIN items i ON i.location_id=l.id AND i.active=1
+        GROUP BY l.id ORDER BY l.name
+    """)
+    return jsonify([dict(r) for r in rows])
+
+
+@bp.route("/api/location/<int:loc_id>/items")
+@login_required
+def api_location_items(loc_id):
+    """All active items at a specific site."""
+    loc = query("SELECT * FROM locations WHERE id=?", [loc_id], one=True)
+    if not loc:
+        return jsonify({"ok": False, "msg": "Location not found"}), 404
+    items = query("""
+        SELECT i.*, c.name as category, c.color,
+               p.name as product_name, co.name as company_name
+        FROM items i
+        LEFT JOIN categories c ON c.id=i.category_id
+        LEFT JOIN products p   ON p.id=i.product_id
+        LEFT JOIN companies co ON co.id=i.company_id
+        WHERE i.location_id=? AND i.active=1
+        ORDER BY i.name
+    """, [loc_id])
+    return jsonify({"location": dict(loc), "items": [dict(r) for r in items]})
+
+
+@bp.route("/api/user/<int:uid>/locations", methods=["GET"])
+@login_required
+@admin_required
+def api_get_user_locations(uid):
+    rows = query("SELECT location_id FROM user_locations WHERE user_id=?", [uid])
+    return jsonify([r["location_id"] for r in rows])
+
+
+@bp.route("/api/user/<int:uid>/locations", methods=["POST"])
+@login_required
+@admin_required
+def api_set_user_locations(uid):
+    """Replace the user's site assignments. Send location_ids: [] for unrestricted."""
+    user = query("SELECT id FROM users WHERE id=?", [uid], one=True)
+    if not user:
+        return jsonify({"ok": False, "msg": "User not found"}), 404
+    loc_ids = request.json.get("location_ids", []) if request.json else []
+    execute("DELETE FROM user_locations WHERE user_id=?", [uid])
+    for lid in loc_ids:
+        execute("INSERT OR IGNORE INTO user_locations (user_id, location_id) VALUES (?,?)", [uid, lid])
+    log_action("USER_SITES_UPDATE", detail=f"user_id={uid} sites={loc_ids}")
+    return jsonify({"ok": True})
 
 @bp.route("/api/locations", methods=["POST"])
 @login_required
@@ -569,11 +624,28 @@ def api_add_location():
     except Exception:
         return jsonify({"ok": False, "msg": "Location name already exists"})
 
+@bp.route("/api/location/<int:loc_id>", methods=["PUT"])
+@login_required
+@admin_required
+def api_edit_location(loc_id):
+    d = request.json or {}
+    name = (d.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "msg": "Name required"})
+    try:
+        execute("UPDATE locations SET name=?, description=? WHERE id=?",
+                [name, d.get("description", ""), loc_id])
+        return jsonify({"ok": True})
+    except Exception:
+        return jsonify({"ok": False, "msg": "Location name already exists"})
+
+
 @bp.route("/api/location/<int:loc_id>", methods=["DELETE"])
 @login_required
 @admin_required
 def api_delete_location(loc_id):
     execute("UPDATE items SET location_id=NULL WHERE location_id=?", [loc_id])
+    execute("DELETE FROM user_locations WHERE location_id=?", [loc_id])
     execute("DELETE FROM locations WHERE id=?", [loc_id])
     return jsonify({"ok": True})
 

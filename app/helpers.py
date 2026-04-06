@@ -161,6 +161,25 @@ def get_user_perms(user_id=None, role=None, perm_str=None):
     stored = set(perm_str.split(",")) if perm_str else set()
     return stored & set(PERM_KEYS)
 
+def get_user_location_ids(user_id: int, role: str) -> list:
+    """Return list of location IDs the user is allowed to see.
+    Empty list means no restriction (see all). Admins always see all."""
+    if role == "admin":
+        return []
+    rows = query("SELECT location_id FROM user_locations WHERE user_id=?", [user_id])
+    return [r["location_id"] for r in rows]
+
+
+def location_filter_sql(alias: str = "i") -> tuple:
+    """Return (sql_fragment, args) to filter items by the current user's sites.
+    Returns ('', []) if no restriction applies."""
+    loc_ids = session.get("location_ids") or []
+    if not loc_ids:
+        return "", []
+    placeholders = ",".join("?" * len(loc_ids))
+    return f" AND {alias}.location_id IN ({placeholders})", list(loc_ids)
+
+
 def has_perm(perm):
     role = session.get("role") or getattr(g, "api_user_role", None)
     if role == "admin":

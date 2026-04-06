@@ -104,6 +104,28 @@ def checked_out_page():
         categories=query("SELECT * FROM categories ORDER BY name"))
 
 
+@bp.route("/sites")
+@login_required
+def sites_page():
+    return render_template("sites.html")
+
+
+@bp.route("/sites/<int:loc_id>")
+@login_required
+def site_detail_page(loc_id):
+    from app.helpers import location_filter_sql
+    loc = query("SELECT * FROM locations WHERE id=?", [loc_id], one=True)
+    if not loc:
+        from flask import abort
+        abort(404)
+    # Enforce site access for restricted users
+    loc_ids = session.get("location_ids") or []
+    if loc_ids and loc_id not in loc_ids:
+        from flask import abort
+        abort(403)
+    return render_template("site_detail.html", location=dict(loc))
+
+
 @bp.route("/low-stock")
 @login_required
 def low_stock_page():

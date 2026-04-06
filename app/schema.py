@@ -337,6 +337,11 @@ def _init_db_conn(db):
             uploaded_by TEXT,
             created_at  TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS user_locations (
+            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+            PRIMARY KEY (user_id, location_id)
+        );
         CREATE TABLE IF NOT EXISTS audit_log (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             ts           TEXT NOT NULL,

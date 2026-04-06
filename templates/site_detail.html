@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ location.name }} · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <a href="/sites" style="color:#94a3b8;font-size:13px;margin-right:6px">← Sites</a>
+  <span class="topbar-title">{{ location.name }}</span>
+  {% if location.description %}
+  <span class="topbar-sub">{{ location.description }}</span>
+  {% endif %}
+  <div class="topbar-right">
+    <input id="siteSearch" class="input" style="width:220px" placeholder="Search items…" oninput="filterItems()">
+    <select class="select" id="statusFilter" onchange="filterItems()" style="width:130px">
+      <option value="">All items</option>
+      <option value="in">Available</option>
+      <option value="out">Checked out</option>
+    </select>
+  </div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:22px 24px">
+  <!-- Stats row -->
+  <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap" id="site-stats"></div>
+
+  <!-- Items table -->
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Category</th>
+          <th>Serial / SKU</th>
+          <th>Shelf</th>
+          <th>Status</th>
+          <th>Checked Out By</th>
+        </tr>
+      </thead>
+      <tbody id="items-tbody">
+        <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:40px">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="item-count" style="font-size:12px;color:#94a3b8;margin-top:8px"></div>
+</div>
+
+<script>
+let allItems=[], locationData={};
+const LOC_ID={{ location.id }};
+
+async function loadSite(){
+  const data=await fetch('/api/location/'+LOC_ID+'/items').then(r=>r.json());
+  locationData=data.location;
+  allItems=data.items||[];
+  renderStats();
+  filterItems();
+}
+
+function renderStats(){
+  const total=allItems.length;
+  const avail=allItems.filter(i=>!i.checked_out&&!i.sold).length;
+  const out=allItems.filter(i=>i.checked_out).length;
+  const sold=allItems.filter(i=>i.sold).length;
+  document.getElementById('site-stats').innerHTML=[
+    {label:'Total Items',val:total,color:'#0f172a'},
+    {label:'Available',val:avail,color:'#15803d'},
+    {label:'Checked Out',val:out,color:'#d97706'},
+    {label:'Sold',val:sold,color:'#64748b'},
+  ].map(s=>`<div class="stat" style="min-width:120px">
+    <div class="stat-n" style="color:${s.color}">${s.val}</div>
+    <div class="stat-l">${s.label}</div>
+  </div>`).join('');
+}
+
+function filterItems(){
+  const q=(document.getElementById('siteSearch').value||'').toLowerCase();
+  const status=document.getElementById('statusFilter').value;
+  let items=allItems;
+  if(status==='in')  items=items.filter(i=>!i.checked_out&&!i.sold);
+  if(status==='out') items=items.filter(i=>i.checked_out);
+  if(q) items=items.filter(i=>[i.name,i.serial,i.sku,i.internal_sku,i.product_name,i.category].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)));
+  renderItems(items);
+}
+
+function renderItems(items){
+  const tbody=document.getElementById('items-tbody');
+  if(!items.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:40px">No items match</td></tr>';
+    document.getElementById('item-count').textContent='';
+    return;
+  }
+  tbody.innerHTML=items.map(i=>{
+    const badge=i.checked_out
+      ?`<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;border:1px solid #fde68a">OUT</span>`
+      :i.sold
+      ?`<span style="background:#f1f5f9;color:#64748b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;border:1px solid #e2e8f0">SOLD</span>`
+      :`<span style="background:#f0fdf4;color:#15803d;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;border:1px solid #bbf7d0">IN</span>`;
+    const serial=i.serial||i.sku||i.internal_sku||'—';
+    return `<tr onclick="window.location='/?item=${i.id}'" style="cursor:pointer">
+      <td>
+        <div style="font-weight:600">${i.name||'—'}</div>
+        ${i.product_name?`<div style="font-size:11px;color:#94a3b8">${i.product_name}</div>`:''}
+      </td>
+      <td>${i.category?`<span class="tag" style="background:${i.color}18;color:${i.color}">${i.category}</span>`:'—'}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:12px">${serial}</td>
+      <td style="color:#64748b;font-size:13px">${i.shelf||'—'}</td>
+      <td>${badge}</td>
+      <td style="font-size:12px;color:#64748b">${i.checked_out_by||'—'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('item-count').textContent=items.length+' item'+(items.length!==1?'s':'');
+}
+
+loadSite();
+</script>
+{% endblock %}

@@ -40,6 +40,7 @@
         <span style="font-size:11px;color:#94a3b8;margin-right:4px" id="permtoggle-{{ u.id }}">▸ Permissions</span>
         {% endif %}
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openResetPw({{ u.id }},'{{ u.username }}')">Reset PW</button>
+        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openSiteAccess({{ u.id }},'{{ u.username }}')">Sites</button>
         {% if u.id != current_user_id %}
         <button class="btn btn-secondary btn-sm" style="color:#b45309;border-color:#fcd34d" onclick="event.stopPropagation();forceLogout({{ u.id }},'{{ u.username }}')">Force Logout</button>
         {% endif %}
@@ -254,6 +255,27 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('resetPwModal')">Cancel</button>
       <button class="btn btn-primary" onclick="confirmResetPw()">Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- SITE ACCESS MODAL -->
+<div class="overlay" id="siteAccessModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <div class="modal-title">Site Access — <span id="siteAccessUsername"></span></div>
+      <button class="modal-close" onclick="closeModal('siteAccessModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:#475569;margin-bottom:14px">
+        Check the sites this user can see. Leave all unchecked for <strong>unrestricted access</strong> (sees everything).
+      </div>
+      <input type="hidden" id="siteAccessUserId">
+      <div id="siteAccessList" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('siteAccessModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSiteAccess()">Save</button>
     </div>
   </div>
 </div>
@@ -615,6 +637,45 @@ async function applySector() {
 }
 
 loadSector();
+
+// ── Site access ──────────────────────────────────────────────────────────────
+let _allSites=[], _siteAccessUserId=null;
+async function openSiteAccess(uid, username){
+  _siteAccessUserId=uid;
+  document.getElementById('siteAccessUserId').value=uid;
+  document.getElementById('siteAccessUsername').textContent=username;
+  const listEl=document.getElementById('siteAccessList');
+  listEl.innerHTML='<div style="color:#94a3b8;font-size:13px">Loading…</div>';
+  openModal('siteAccessModal');
+  // Load sites + current assignments in parallel
+  const [sites, assigned]=await Promise.all([
+    fetch('/api/locations').then(r=>r.json()),
+    fetch('/api/user/'+uid+'/locations').then(r=>r.json())
+  ]);
+  _allSites=sites;
+  if(!sites.length){
+    listEl.innerHTML='<div style="color:#94a3b8;font-size:13px">No sites have been created yet. <a href="/sites" style="color:#0f172a">Add sites first →</a></div>';
+    return;
+  }
+  listEl.innerHTML=sites.map(s=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid #e5e3de;border-radius:8px;cursor:pointer">
+      <input type="checkbox" id="sitecheck-${s.id}" value="${s.id}" ${assigned.includes(s.id)?'checked':''} style="width:16px;height:16px">
+      <div>
+        <div style="font-weight:600;font-size:13px">${s.name}</div>
+        ${s.description?`<div style="font-size:11px;color:#94a3b8">${s.description}</div>`:''}
+        <div style="font-size:11px;color:#94a3b8">${s.item_count||0} items</div>
+      </div>
+    </label>`).join('');
+}
+async function saveSiteAccess(){
+  const uid=document.getElementById('siteAccessUserId').value;
+  const loc_ids=_allSites.filter(s=>document.getElementById('sitecheck-'+s.id)?.checked).map(s=>s.id);
+  const res=await fetch('/api/user/'+uid+'/locations',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify({location_ids:loc_ids})}).then(r=>r.json());
+  if(res.ok){
+    toast(loc_ids.length?`Access set to ${loc_ids.length} site(s) ✓`:'Unrestricted access set ✓','ok');
+    closeModal('siteAccessModal');
+  } else toast(res.msg||'Error','err');
+}
 </script>
 
 <!-- NEW API KEY MODAL -->
