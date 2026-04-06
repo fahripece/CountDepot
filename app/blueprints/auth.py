@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, session, redirect, url_for, g
+from flask import Blueprint, render_template, request, session, redirect, url_for, g, jsonify
 
 import secrets as _secrets
 
