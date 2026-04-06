@@ -117,12 +117,13 @@ def billing_checkout():
 
     pid = price_id_for(plan, period)
     if not pid:
-        return jsonify({"ok": False, "msg": f"Price not configured for {plan}/{period}. Add to .env."})
+        return jsonify({"ok": False, "msg": f"Stripe price ID not set for {plan}/{period}. "
+                        f"Add STRIPE_PRICE_{plan.upper()}_{period.upper()} to your server environment."})
 
     tenant = dict(_tenant_row(g.tenant_slug))
     cid    = _ensure_stripe_customer(tenant)
     if not cid:
-        return jsonify({"ok": False, "msg": "Could not create Stripe customer. Check STRIPE_SECRET_KEY."})
+        return jsonify({"ok": False, "msg": "Could not create Stripe customer. Check STRIPE_SECRET_KEY in your server environment."})
 
     domain  = Config.APP_DOMAIN
     base    = f"https://{g.tenant_slug}.{domain}"
@@ -132,7 +133,7 @@ def billing_checkout():
         cancel_url=f"{base}/billing")
 
     if not session_obj:
-        return jsonify({"ok": False, "msg": "Failed to create checkout session."})
+        return jsonify({"ok": False, "msg": "Stripe checkout session failed. Verify your STRIPE_SECRET_KEY and price IDs are correct and in live/test mode consistently."})
 
     return jsonify({"ok": True, "url": session_obj.url})
 

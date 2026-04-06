@@ -127,7 +127,9 @@ async function startCheckout(plan, period) {
   if (res.ok && res.url) {
     window.location.href = res.url;
   } else {
-    toast(res.msg || 'Error starting checkout', 'err');
+    const msg = res.msg || 'Error starting checkout';
+    // Show full message in an alert so nothing is cut off
+    alert('Checkout error:\n\n' + msg);
   }
 }
 </script>
