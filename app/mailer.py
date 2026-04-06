@@ -83,6 +83,25 @@ def send_welcome_email(to: str, name: str, slug: str, temp_password: str = None,
     return send_email(to, subject, html, text)
 
 
+def send_signup_verification_email(to: str, name: str, token: str) -> bool:
+    """Sent before a tenant is created — link goes to the bare domain /verify-signup/<token>."""
+    domain  = Config.APP_DOMAIN
+    url     = f"https://{domain}/verify-signup/{token}"
+    subject = "Verify your email to activate CountDepot"
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <h1 style="font-size:22px;font-weight:700;margin-bottom:6px">One more step</h1>
+  <p style="color:#64748b;margin-bottom:24px">Hi <strong>{name}</strong> — click below to verify your email and create your CountDepot workspace.</p>
+  <a href="{url}" style="display:inline-block;padding:12px 24px;background:#1d4ed8;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;font-size:14px">Verify email &amp; create workspace →</a>
+  <p style="margin-top:20px;font-size:12px;color:#64748b">This link expires in <strong>24 hours</strong>. Or paste into your browser:<br><span style="font-family:monospace;color:#1d4ed8">{url}</span></p>
+  <p style="margin-top:28px;font-size:11px;color:#94a3b8">If you didn't sign up for CountDepot, you can safely ignore this email.</p>
+</div>"""
+    text = (f"Verify your CountDepot email\n\n"
+            f"Hi {name},\n\nClick here to verify and create your workspace (expires 24h):\n{url}\n\n"
+            f"If you didn't sign up, ignore this email.\n")
+    return send_email(to, subject, html, text)
+
+
 def send_verification_email(to: str, slug: str, token: str) -> bool:
     """Standalone verification email — used when resending a verification link."""
     domain  = Config.APP_DOMAIN

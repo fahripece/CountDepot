@@ -64,6 +64,8 @@ def create_app():
                 or request.path == "/_health"
                 or request.path == "/_stripe/webhook"
                 or request.path.startswith("/signup")
+                or request.path.startswith("/verify-signup")
+                or request.path == "/resend-signup-verify"
                 or request.path == "/_cross-login"):
             return
 
@@ -124,7 +126,7 @@ def create_app():
         skip = ("/onboarding", "/login", "/logout", "/change-password",
                 "/forgot-password", "/reset-password", "/verify-email",
                 "/resend-verification", "/billing", "/static", "/signup",
-                "/auto-login")
+                "/verify-signup", "/resend-signup-verify", "/auto-login")
         if any(request.path.startswith(s) for s in skip):
             return
 

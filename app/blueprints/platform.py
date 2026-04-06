@@ -248,8 +248,13 @@ def tenant_new():
     return render_template("platform/tenant_new.html", error=error)
 
 
-def _bootstrap_tenant_db(slug, admin_password, admin_email=None):
-    """Create schema + seed default data for a brand-new tenant."""
+def _bootstrap_tenant_db(slug, admin_password, admin_email=None, pre_hashed_password=None):
+    """Create schema + seed default data for a brand-new tenant.
+
+    Either admin_password (plain text) or pre_hashed_password (already hashed) must be supplied.
+    pre_hashed_password is used by the email-verification signup flow where the hash was stored
+    in pending_signups before the tenant was created.
+    """
     import sqlite3
     from app.schema import _init_db_conn
 
@@ -275,16 +280,19 @@ def _bootstrap_tenant_db(slug, admin_password, admin_email=None):
             pass
 
     # Create admin user — email is the login identifier
+    pw_hash = pre_hashed_password if pre_hashed_password else hash_pw(admin_password)
     smtp_on = bool(Config.SMTP_HOST)
-    email_verified = 0 if (admin_email and smtp_on) else 1
+    # Mark email verified if: (a) coming from verify-signup flow, (b) no email, or (c) no SMTP
+    email_verified = 1 if (pre_hashed_password or not admin_email or not smtp_on) else 0
     db.execute(
         "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password)"
         " VALUES (?,?,?,?,?,?,1)",
-        [admin_email or "admin", hash_pw(admin_password), "admin", "",
+        [admin_email or "admin", pw_hash, "admin", "",
          admin_email, email_verified])
 
-    # Send verification email if SMTP is configured
-    if admin_email and smtp_on:
+    # If coming from the verify-signup flow (pre_hashed_password set), email is already
+    # verified — skip verification email. For platform-admin-created accounts send it.
+    if admin_email and not pre_hashed_password and smtp_on:
         user_id = db.execute("SELECT id FROM users WHERE email=?", [admin_email]).fetchone()[0]
         verify_token = secrets.token_urlsafe(32)
         token_expires = (datetime.utcnow() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")

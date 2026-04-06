@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verification failed · CountDepot</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#f8f7f4;min-height:100vh;padding:40px 24px;display:flex;align-items:center;justify-content:center}
+.wrap{max-width:440px;width:100%}
+.logo{font-size:13px;font-weight:700;color:#94a3b8;text-transform:uppercase;
+  letter-spacing:.8px;text-align:center;margin-bottom:32px}
+.card{background:#fff;border:1px solid #e5e3de;border-radius:12px;
+  padding:36px 32px;box-shadow:0 2px 8px rgba(0,0,0,.05);text-align:center}
+.icon{font-size:48px;margin-bottom:20px}
+h1{font-size:22px;font-weight:700;color:#0f172a;margin-bottom:10px}
+.reason{font-size:14px;color:#64748b;line-height:1.6;margin-bottom:28px}
+a.btn{display:inline-block;padding:11px 24px;background:#1d4ed8;color:#fff;border-radius:7px;
+  text-decoration:none;font-weight:600;font-size:14px}
+a.btn:hover{background:#1e40af}
+.back{margin-top:16px;font-size:13px;color:#94a3b8}
+.back a{color:#1d4ed8;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">CountDepot</div>
+  <div class="card">
+    <div class="icon">⚠️</div>
+    <h1>Verification failed</h1>
+    <p class="reason">{{ reason }}</p>
+    <a href="/signup" class="btn">Try signing up again →</a>
+    <p class="back">Already have an account? <a href="/login">Sign in</a></p>
+  </div>
+</div>
+</body>
+</html>
