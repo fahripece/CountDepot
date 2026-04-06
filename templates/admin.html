@@ -25,9 +25,11 @@
         <div>
           <div style="font-weight:600;font-size:14px">{{ u.username }}</div>
           <div style="font-size:11px;margin-top:2px;display:flex;align-items:center;gap:6px">
-            <span class="tag" style="font-size:10px;padding:1px 7px;background:{% if u.role=='admin' %}#eff6ff;color:#1d4ed8{% else %}#f0fdf4;color:#15803d{% endif %}">{{ u.role }}</span>
+            <span class="tag" style="font-size:10px;padding:1px 7px;background:{% if u.role=='admin' %}#eff6ff;color:#1d4ed8{% elif u.role=='viewer' %}#f5f3ff;color:#6d28d9{% else %}#f0fdf4;color:#15803d{% endif %}">{{ u.role }}</span>
             {% if u.role == 'admin' %}
               <span style="color:#94a3b8">Full access · all permissions</span>
+            {% elif u.role == 'viewer' %}
+              <span style="color:#94a3b8">Read-only · view inventory only</span>
             {% else %}
               {% set pcount = u.perm_set | length %}
               <span style="color:#475569" id="permcount-{{ u.id }}">{{ pcount }} permission{{ 's' if pcount != 1 else '' }} granted</span>
@@ -36,7 +38,7 @@
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
-        {% if u.role != 'admin' %}
+        {% if u.role == 'worker' %}
         <span style="font-size:11px;color:#94a3b8;margin-right:4px" id="permtoggle-{{ u.id }}">▸ Permissions</span>
         {% endif %}
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openResetPw({{ u.id }},'{{ u.username }}')">Reset PW</button>
@@ -48,7 +50,7 @@
       </div>
     </div>
 
-    {% if u.role != 'admin' %}
+    {% if u.role == 'worker' %}
     <div class="perm-panel" id="permpanel-{{ u.id }}" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
         <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.5px">Permissions for {{ u.username }}</div>
@@ -195,6 +197,7 @@
       <div class="field"><label class="label">Role</label>
         <select class="select" id="u-role" onchange="onNewUserRoleChange()">
           <option value="worker">Worker</option>
+          <option value="viewer">Viewer (read-only — inventory only)</option>
           <option value="admin">Admin (full access — all permissions)</option>
         </select>
       </div>
@@ -344,8 +347,9 @@ function setNewUserPreset(preset){
 }
 
 function onNewUserRoleChange(){
+  const role=document.getElementById('u-role').value;
   document.getElementById('new-user-perms').style.display=
-    document.getElementById('u-role').value==='admin'?'none':'block';
+    (role==='admin'||role==='viewer')?'none':'block';
 }
 
 function openAddUser(){

@@ -249,6 +249,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
         <span>All Items</span>
       </a>
+      {% if session.get('role') != 'viewer' %}
       <a href="/add-item" class="navlink {% if request.path == '/add-item' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
         <span>Add Item</span>
@@ -261,10 +262,12 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         <span>To Do</span>
       </a>
+      {% endif %}
       <a href="/sites" class="navlink {% if request.path.startswith('/sites') %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         <span>Sites</span>
       </a>
+      {% if session.get('role') != 'viewer' %}
       <a href="/low-stock" class="navlink {% if request.path == '/low-stock' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         <span>Low Stock</span>
@@ -278,7 +281,9 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         <span>Kits</span>
       </a>
+      {% endif %}
     </nav>
+    {% if session.get('role') != 'viewer' %}
     <div class="sb-section" style="margin-top:10px">Reporting</div>
     <nav class="nav">
       <a href="/report/financial" class="navlink {% if request.path == '/report/financial' or request.path == '/dashboard' %}active{% endif %}">
@@ -331,11 +336,12 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
       </a>
       {% endif %}
     </nav>
+    {% endif %}
     <div style="margin-top:auto;padding:10px 8px 8px;display:flex;flex-direction:column;gap:2px">
       <div style="padding:8px 12px;color:#475569;font-size:11px;font-family:'IBM Plex Mono',monospace;display:flex;align-items:center;gap:6px">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
         <span style="color:#94a3b8">{{ session.get('username','') }}</span>
-        {% if session.get('role') == 'admin' %}<span style="background:#1d4ed8;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">ADMIN</span>{% endif %}
+        {% if session.get('role') == 'admin' %}<span style="background:#1d4ed8;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">ADMIN</span>{% elif session.get('role') == 'viewer' %}<span style="background:#6d28d9;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">VIEWER</span>{% endif %}
       </div>
       <button class="navlink" id="darkToggle" onclick="toggleDark()" style="color:#94a3b8;font-size:12px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z"/></svg>

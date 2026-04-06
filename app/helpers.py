@@ -152,10 +152,13 @@ WORKER_DEFAULT_PERMS = {
     "view_inventory", "view_dashboard", "view_audit",
     "checkout_checkin", "write_items", "qty_adjust", "sell_items",
 }
+VIEWER_DEFAULT_PERMS = {"view_inventory"}
 
 def get_user_perms(user_id=None, role=None, perm_str=None):
     if role == "admin":
         return ADMIN_DEFAULT_PERMS
+    if role == "viewer":
+        return VIEWER_DEFAULT_PERMS
     if not perm_str:
         return WORKER_DEFAULT_PERMS
     stored = set(perm_str.split(",")) if perm_str else set()
