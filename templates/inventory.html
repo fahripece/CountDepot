@@ -93,7 +93,7 @@
     <option value="">All Tags</option>
   </select>
   <select id="locFilter" class="select" style="width:auto;min-width:130px" onchange="loadItems()">
-    <option value="">All Locations</option>
+    <option value="">All Sites</option>
   </select>
   <select id="sortFilter" class="select" style="width:auto;min-width:110px" onchange="loadItems()">
     <option value="name">Sort: Name</option>
@@ -655,7 +655,7 @@
         <input class="input" id="be-tags" placeholder="Leave blank to keep existing">
       </div>
       <div class="field">
-        <label class="label">Location</label>
+        <label class="label">Site</label>
         <select class="select" id="be-loc">
           <option value="">— Keep existing —</option>
         </select>
@@ -711,7 +711,7 @@ async function loadLocations(){
     const locs=await fetch('/api/locations').then(r=>r.json());
     const sel=document.getElementById('locFilter');
     const cur=sel.value;
-    sel.innerHTML='<option value="">All Locations</option>';
+    sel.innerHTML='<option value="">All Sites</option>';
     locs.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;if(String(l.id)===String(cur))o.selected=true;sel.appendChild(o);});
   }catch(e){}
 }
@@ -866,7 +866,7 @@ function showDetail(item){
   if(item.sale_price!=null){
     const p=item.profit; rows.push(['Sale Price',`$${parseFloat(item.sale_price).toFixed(2)}${p!=null?(p>=0?` <span style="color:#15803d">+$${p.toFixed(2)}</span>`:`<span style="color:#b91c1c">-$${Math.abs(p).toFixed(2)}</span>`):''}` ]);
   }
-  if(item.location_name) rows.push(['Location',`<span style="font-size:12px;background:#f0fdf4;color:#15803d;padding:1px 8px;border-radius:4px;border:1px solid #bbf7d0">${item.location_name}</span>`]);
+  if(item.location_name) rows.push(['Site',`<span style="font-size:12px;font-weight:600">${item.location_name}</span>`]);
   if(item.next_maintenance_date){
     const maintOver=item.maintenance_overdue;
     rows.push(['Next Maintenance',`<span style="${maintOver?'color:#b91c1c;font-weight:600':'color:#0f172a'}">${item.next_maintenance_date}${maintOver?' 🔧 OVERDUE':''}</span>`]);

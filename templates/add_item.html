@@ -135,7 +135,13 @@
             </div>
           </div>
           <div class="field">
-            <label class="label">Shelf Location</label>
+            <label class="label">Site</label>
+            <select class="select" id="fi-location">
+              <option value="">— No site —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label">Shelf / Bin</label>
             <input class="input" id="fi-shelf" placeholder="e.g. A3, Rack 2">
           </div>
         </div>
@@ -421,6 +427,7 @@ async function saveItem(){
     owner_company:document.getElementById('fi-owner').value||null,
     purchase_date:document.getElementById('fi-date').value,
     shelf:document.getElementById('fi-shelf').value.trim(),
+    location_id:document.getElementById('fi-location').value||null,
     qty:document.getElementById('fi-qty').value!==''?parseInt(document.getElementById('fi-qty').value):null,
     low_stock_threshold:0,
     notes:document.getElementById('fi-notes').value.trim(),
@@ -575,6 +582,15 @@ function skipScanConfirm(){
   // Allow skip but item will remain incomplete (missing scan confirmation is surfaced via is_incomplete)
   window.location.href='/';
 }
+
+// Populate site dropdown
+(async function(){
+  try{
+    const sites=await fetch('/api/locations').then(r=>r.json());
+    const sel=document.getElementById('fi-location');
+    sites.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;sel.appendChild(o);});
+  }catch(e){}
+})();
 
 // Auto-select product from URL param ?product_id=
 (function(){
