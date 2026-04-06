@@ -1757,6 +1757,13 @@ def api_alerts():
     return jsonify(get_low_stock_alerts())
 
 
+@bp.route("/api/smtp-status")
+@login_required
+def api_smtp_status():
+    from config import Config as _Cfg
+    return jsonify({"ok": bool(_Cfg.SMTP_HOST)})
+
+
 @bp.route("/api/audit")
 @login_required
 @perm_required("view_audit")
@@ -1810,13 +1817,18 @@ def api_get_settings():
     rows = query("SELECT key, value FROM settings")
     return jsonify({r["key"]: r["value"] for r in rows})
 
+ALLOWED_SETTINGS = {
+    "brand_name", "brand_color",
+    "low_stock_alerts_enabled", "low_stock_alert_email",
+}
+
 @bp.route("/api/settings", methods=["POST"])
 @login_required
 @admin_required
 def api_save_settings():
     d = request.json or {}
     for key, value in d.items():
-        if key not in ("brand_name", "brand_color"):
+        if key not in ALLOWED_SETTINGS:
             continue
         existing = query("SELECT key FROM settings WHERE key=?", [key], one=True)
         if existing:
@@ -1825,6 +1837,72 @@ def api_save_settings():
             execute("INSERT INTO settings (key,value) VALUES (?,?)", [key, value])
     log_action("SETTINGS_UPDATE", detail=str(d))
     return jsonify({"ok": True})
+
+
+@bp.route("/api/low-stock/send-report", methods=["POST"])
+@login_required
+@admin_required
+def api_send_low_stock_report():
+    """Send a low stock report email to the configured alert address."""
+    from app.mailer import send_email
+    from config import Config as _Cfg
+    from flask import g
+
+    if not _Cfg.SMTP_HOST:
+        return jsonify({"ok": False, "msg": "SMTP is not configured on this server."})
+
+    settings = {r["key"]: r["value"] for r in query("SELECT key,value FROM settings")}
+    alert_email = settings.get("low_stock_alert_email", "").strip()
+    if not alert_email:
+        return jsonify({"ok": False, "msg": "No alert email address set. Add one in the Low Stock Alerts settings."})
+
+    alerts = get_low_stock_alerts()
+    if not alerts:
+        return jsonify({"ok": False, "msg": "No products are currently at or below their minimum threshold."})
+
+    rows_html = "".join(
+        f"<tr style='border-bottom:1px solid #f0efec'>"
+        f"<td style='padding:10px 14px;font-weight:500'>{a['name']}</td>"
+        f"<td style='padding:10px 14px;font-family:monospace;color:#b91c1c;font-weight:700'>{a['available_count']}</td>"
+        f"<td style='padding:10px 14px;font-family:monospace'>{a['low_stock_threshold']}</td>"
+        f"<td style='padding:10px 14px;font-family:monospace;color:#b91c1c'>{max(0, a['low_stock_threshold'] - a['available_count'])}</td>"
+        f"</tr>"
+        for a in alerts
+    )
+    slug = getattr(g, "tenant_slug", "")
+    domain = _Cfg.APP_DOMAIN
+    link = f"https://{slug}.{domain}/low-stock"
+
+    html = f"""
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:#0f172a;margin-bottom:4px">Low Stock Alert</h2>
+      <p style="color:#64748b;margin-top:0">{len(alerts)} product{'s' if len(alerts)!=1 else ''} at or below minimum threshold</p>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #e5e3de;border-radius:8px;overflow:hidden">
+        <thead>
+          <tr style="background:#f8f7f5">
+            <th style="padding:10px 14px;text-align:left;font-size:12px;color:#64748b;font-weight:600">Product</th>
+            <th style="padding:10px 14px;text-align:left;font-size:12px;color:#64748b;font-weight:600">Have</th>
+            <th style="padding:10px 14px;text-align:left;font-size:12px;color:#64748b;font-weight:600">Min</th>
+            <th style="padding:10px 14px;text-align:left;font-size:12px;color:#64748b;font-weight:600">Short</th>
+          </tr>
+        </thead>
+        <tbody>{rows_html}</tbody>
+      </table>
+      <div style="margin-top:20px">
+        <a href="{link}" style="background:#0f172a;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:500">View Low Stock →</a>
+      </div>
+      <p style="font-size:11px;color:#94a3b8;margin-top:24px">Sent from CountDepot · {slug}.{domain}</p>
+    </div>"""
+
+    plain = f"Low Stock Alert — {len(alerts)} product(s) below minimum.\n\n" + \
+            "\n".join(f"• {a['name']}: {a['available_count']} available (min {a['low_stock_threshold']})" for a in alerts) + \
+            f"\n\nView: {link}"
+
+    ok = send_email(alert_email, f"Low Stock Alert — {len(alerts)} product(s) need restocking", html, plain)
+    if ok:
+        log_action("LOW_STOCK_REPORT_SENT", detail=f"Sent to {alert_email}, {len(alerts)} items")
+        return jsonify({"ok": True, "msg": f"Report sent to {alert_email}"})
+    return jsonify({"ok": False, "msg": "Failed to send email. Check SMTP settings on the server."})
 
 
 # ── API Keys ──────────────────────────────────────────────────────────────────
