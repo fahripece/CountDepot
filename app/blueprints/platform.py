@@ -183,6 +183,72 @@ def logout():
     return redirect(url_for("platform.login"))
 
 
+# ── Stripe diagnostics ───────────────────────────────────────────────────────
+
+@bp.route("/stripe-check")
+@platform_login_required
+def stripe_check():
+    """Show Stripe config and do a live API test."""
+    sk = Config.STRIPE_SECRET_KEY or ""
+    rows = []
+    price_keys = [
+        "STRIPE_PRICE_STARTER_MONTHLY",
+        "STRIPE_PRICE_STARTER_YEARLY",
+        "STRIPE_PRICE_PRO_MONTHLY",
+        "STRIPE_PRICE_PRO_YEARLY",
+        "STRIPE_PRICE_ENTERPRISE_MONTHLY",
+        "STRIPE_PRICE_ENTERPRISE_YEARLY",
+    ]
+    price_ids = {k: getattr(Config, k, "") or "" for k in price_keys}
+
+    api_test = None
+    price_tests = {}
+    if sk:
+        try:
+            import stripe
+            stripe.api_key = sk
+            stripe.Account.retrieve()
+            api_test = "OK"
+        except Exception as e:
+            api_test = f"ERROR: {e}"
+
+        for k, pid in price_ids.items():
+            if not pid:
+                price_tests[k] = "NOT SET"
+                continue
+            try:
+                import stripe
+                stripe.api_key = sk
+                stripe.Price.retrieve(pid)
+                price_tests[k] = "OK"
+            except Exception as e:
+                price_tests[k] = f"ERROR: {e}"
+
+    sk_display = (sk[:12] + "..." + sk[-4:]) if len(sk) > 16 else (sk or "NOT SET")
+    pk = Config.STRIPE_PUBLISHABLE_KEY or ""
+    pk_display = (pk[:12] + "..." + pk[-4:]) if len(pk) > 16 else (pk or "NOT SET")
+
+    rows_html = ""
+    for k, pid in price_ids.items():
+        pid_display = (pid[:16] + "..." + pid[-6:]) if len(pid) > 22 else (pid or "NOT SET")
+        result = price_tests.get(k, "—")
+        color = "#15803d" if result == "OK" else ("#b91c1c" if result.startswith("ERROR") else "#92400e")
+        rows_html += f"<tr><td style='padding:6px 12px;font-family:monospace'>{k}</td><td style='padding:6px 12px;font-family:monospace'>{pid_display}</td><td style='padding:6px 12px;color:{color};font-weight:600'>{result}</td></tr>"
+
+    api_color = "#15803d" if api_test == "OK" else "#b91c1c"
+    html = f"""<!DOCTYPE html><html><body style='font-family:sans-serif;padding:40px;max-width:900px;margin:0 auto'>
+<h2>Stripe Configuration Check</h2>
+<table style='border-collapse:collapse;width:100%;margin-bottom:24px'>
+<tr style='background:#f1f5f9'><th style='padding:8px 12px;text-align:left'>Key</th><th style='padding:8px 12px;text-align:left'>Value</th><th style='padding:8px 12px;text-align:left'>Status</th></tr>
+<tr><td style='padding:6px 12px;font-family:monospace'>STRIPE_SECRET_KEY</td><td style='padding:6px 12px;font-family:monospace'>{sk_display}</td><td style='padding:6px 12px;color:{api_color};font-weight:600'>{api_test or ('NOT SET' if not sk else '—')}</td></tr>
+<tr><td style='padding:6px 12px;font-family:monospace'>STRIPE_PUBLISHABLE_KEY</td><td style='padding:6px 12px;font-family:monospace'>{pk_display}</td><td style='padding:6px 12px'>—</td></tr>
+{rows_html}
+</table>
+<a href='/_platform/' style='color:#0f172a'>← Back to dashboard</a>
+</body></html>"""
+    return html
+
+
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @bp.route("/")
