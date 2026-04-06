@@ -63,13 +63,13 @@
 <style>
 .kanban{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;min-height:400px}
 .kanban-col{background:#f8f8f6;border-radius:10px;display:flex;flex-direction:column;min-height:200px}
-.kanban-hdr{padding:12px 14px;font-size:13px;font-weight:700;border-top:3px solid;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:8px}
+.kanban-hdr{padding:12px 14px;font-size:13px;font-weight:700;border-top:3px solid;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:8px;color:inherit}
 .kanban-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .kanban-cnt{font-size:11px;font-weight:500;color:#94a3b8;margin-left:auto}
 .kanban-body{flex:1;padding:8px 10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
 .task-card{background:#fff;border:1px solid #e5e3de;border-radius:8px;padding:10px 12px;cursor:pointer;transition:box-shadow .15s}
 .task-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08)}
-.task-title{font-size:13px;font-weight:600;line-height:1.4}
+.task-title{font-size:13px;font-weight:600;line-height:1.4;color:inherit}
 .task-meta{font-size:11px;color:#94a3b8;margin-top:4px;display:flex;align-items:center;gap:8px}
 .urg-high{border-left:3px solid #b91c1c}
 .urg-medium{border-left:3px solid #d97706}
@@ -78,6 +78,14 @@
 .task-actions{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
 .task-actions button{font-size:10px;padding:2px 8px}
 @media(max-width:900px){.kanban{grid-template-columns:1fr}}
+
+/* Dark mode */
+body.dark .kanban-col{background:#162032}
+body.dark .kanban-hdr{color:#e2e8f0}
+body.dark .task-card{background:#1e293b;border-color:#334155;color:#e2e8f0}
+body.dark .task-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.3)}
+body.dark .item-task{background:#1a2a3e}
+body.dark .task-title{color:#e2e8f0}
 </style>
 <script>
 let allTasks=[];
@@ -133,8 +141,8 @@ function renderCard(t){
   // Item-linked tasks can't be manually marked Done — only the system closes them when item is complete
   if(t.status!=='done'&&!isItemTask) moves.push(`<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();moveTask(${t.id},'done')">✓ Done</button>`);
   // No delete button for anyone — tasks must be completed not deleted
-  const itemLink=isItemTask?`<a href="/?item=${t.item_id}" onclick="event.stopPropagation()" class="btn btn-secondary btn-sm" style="font-size:10px;background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe">→ View Item #${t.item_id}</a>`:'';
-  const systemBadge=isItemTask?`<span style="font-size:9px;font-weight:700;background:#f0f7ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;margin-left:4px">AUTO</span>`:'';
+  const itemLink=isItemTask?`<a href="/?item=${t.item_id}" onclick="event.stopPropagation()" class="btn btn-secondary btn-sm" style="font-size:10px">→ View Item #${t.item_id}</a>`:'';
+  const systemBadge=isItemTask?`<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:4px;opacity:.7">AUTO</span>`:'';
   return `<div class="task-card urg-${t.urgency}${isItemTask?' item-task':''}" onclick="${isItemTask?'':'editTask('+t.id+')'}">
     <div class="task-title">${t.title}${systemBadge}</div>
     ${t.notes?`<div style="font-size:11px;color:#666;margin-top:3px;line-height:1.4">${t.notes.substring(0,80)}${t.notes.length>80?'…':''}</div>`:''}
