@@ -113,6 +113,7 @@ def _save_item(d, iid=None):
         purchased_from        = d.get("purchased_from") or None,
         sale_state            = d.get("sale_state") or None,
         depreciation_rate     = float(d["depreciation_rate"]) if d.get("depreciation_rate") not in (None, "") else None,
+        tags                  = ",".join(t.strip() for t in str(d.get("tags") or "").split(",") if t.strip()),
     )
     if iid:
         cols = ", ".join(f"{k}=?" for k in fields)
@@ -345,6 +346,8 @@ def api_items():
     no_paginate = request.args.get("hide_out", "1") == "0"
 
     loc_id   = request.args.get("loc", "")
+    tag      = request.args.get("tag", "").strip()
+    cond_f   = request.args.get("cond", "").strip()
     base_where = """FROM items i
              LEFT JOIN categories c  ON c.id=i.category_id
              LEFT JOIN products p    ON p.id=i.product_id
@@ -375,6 +378,8 @@ def api_items():
     if cat_id:  sql += " AND i.category_id=?"; args.append(cat_id)
     if prod_id: sql += " AND i.product_id=?";  args.append(prod_id)
     if loc_id:  sql += " AND i.location_id=?"; args.append(loc_id)
+    if cond_f:  sql += " AND i.condition=?";   args.append(cond_f)
+    if tag:     sql += " AND (',' || i.tags || ',') LIKE ?"; args.append(f"%,{tag},%")
     if status == "out":
         sql += " AND i.checked_out=1"
     elif status == "in":
@@ -895,6 +900,259 @@ def api_item_delete():
             execute("DELETE FROM tasks WHERE item_id=?", [iid])
             log_action("ITEM_DELETE", iid, item["name"], "Deleted")
     return jsonify({"ok": True, "deleted": len(ids)})
+
+
+# ── Bulk operations ───────────────────────────────────────────────────────────
+
+@bp.route("/api/items/bulk-checkout", methods=["POST"])
+@login_required
+@perm_required("checkout_checkin")
+def api_bulk_checkout():
+    d    = request.json
+    ids  = [int(i) for i in (d.get("ids") or [])]
+    who  = d.get("who", "").strip()
+    job  = d.get("job_ref", "").strip()
+    ret  = d.get("expected_return_date") or None
+    if not ids:  return jsonify({"ok": False, "msg": "No items selected"})
+    if not who:  return jsonify({"ok": False, "msg": "Checked-out-to is required"})
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    done, skipped = 0, 0
+    for iid in ids:
+        item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+        if not item or item["checked_out"] or item["qty"] is not None or item["sold"]:
+            skipped += 1; continue
+        execute("UPDATE items SET checked_out=1, checkout_by=?, checkout_date=?, job_ref=?, expected_return_date=? WHERE id=?",
+                [who, now, job or None, ret, iid])
+        execute("INSERT INTO checkout_log (item_id,item_name,checked_out_by,job_ref,checkout_date,created_at) VALUES (?,?,?,?,?,?)",
+                [iid, item["name"], who, job or None, now[:10], now])
+        log_action("CHECKOUT", iid, item["name"], f"To: {who}{' | Job: '+job if job else ''}")
+        done += 1
+    return jsonify({"ok": True, "done": done, "skipped": skipped})
+
+
+@bp.route("/api/items/bulk-checkin", methods=["POST"])
+@login_required
+@perm_required("checkout_checkin")
+def api_bulk_checkin():
+    d    = request.json
+    ids  = [int(i) for i in (d.get("ids") or [])]
+    note = d.get("checkin_note", "").strip() or None
+    if not ids: return jsonify({"ok": False, "msg": "No items selected"})
+    now  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user = session.get("username", "")
+    done, skipped = 0, 0
+    for iid in ids:
+        item = query("SELECT * FROM items WHERE id=? AND active=1 AND checked_out=1", [iid], one=True)
+        if not item: skipped += 1; continue
+        checkout_dt = item["checkout_date"] or now
+        try:
+            dur = round((datetime.now() - datetime.strptime(checkout_dt[:16], "%Y-%m-%d %H:%M")).total_seconds() / 3600, 2)
+        except Exception:
+            dur = None
+        execute("UPDATE items SET checked_out=0, checkout_by=NULL, checkout_date=NULL, job_ref=NULL, expected_return_date=NULL WHERE id=?", [iid])
+        execute("""UPDATE checkout_log SET checkin_date=?, checkin_note=?, checkin_by=?, duration_hours=?
+                   WHERE item_id=? AND checkin_date IS NULL""",
+                [now[:10], note, user, dur, iid])
+        log_action("CHECKIN", iid, item["name"], f"Note: {note}" if note else "")
+        done += 1
+    return jsonify({"ok": True, "done": done, "skipped": skipped})
+
+
+@bp.route("/api/items/bulk-edit", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_bulk_edit():
+    d   = request.json
+    ids = [int(i) for i in (d.get("ids") or [])]
+    if not ids: return jsonify({"ok": False, "msg": "No items selected"})
+    updates, args = [], []
+    if d.get("condition") not in (None, ""):
+        updates.append("condition=?"); args.append(d["condition"])
+    if d.get("shelf") not in (None, ""):
+        updates.append("shelf=?"); args.append(d["shelf"])
+    if d.get("location_id") not in (None, ""):
+        updates.append("location_id=?"); args.append(int(d["location_id"]) if d["location_id"] else None)
+    if d.get("tags") is not None:
+        cleaned = ",".join(t.strip() for t in str(d["tags"]).split(",") if t.strip())
+        updates.append("tags=?"); args.append(cleaned)
+    if not updates: return jsonify({"ok": False, "msg": "Nothing to update"})
+    placeholders = ",".join("?" for _ in ids)
+    execute(f"UPDATE items SET {', '.join(updates)} WHERE id IN ({placeholders}) AND active=1",
+            args + ids)
+    for iid in ids:
+        item = query("SELECT name FROM items WHERE id=?", [iid], one=True)
+        if item: log_action("ITEM_EDIT", iid, item["name"], f"Bulk edit: {', '.join(updates)}")
+    return jsonify({"ok": True, "updated": len(ids)})
+
+
+# ── Clone item ────────────────────────────────────────────────────────────────
+
+@bp.route("/api/item/<int:iid>/clone", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_item_clone(iid):
+    allowed, limit_msg = _check_item_limit()
+    if not allowed: return jsonify({"ok": False, "msg": limit_msg})
+    item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+    if not item: return jsonify({"ok": False, "msg": "Item not found"})
+    d = dict(item)
+    # Clear identity fields that must be unique
+    d.pop("id", None); d.pop("serial", None); d.pop("sku", None)
+    d.pop("internal_sku", None); d.pop("created_at", None)
+    d["checked_out"] = 0; d["checkout_by"] = None; d["checkout_date"] = None
+    d["job_ref"] = None; d["sold"] = 0; d["sold_date"] = None
+    d["expected_return_date"] = None; d["kit_id"] = None
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    d["created_at"] = now
+    cols = ", ".join(d.keys())
+    placeholders = ", ".join("?" for _ in d)
+    new_id = execute(f"INSERT INTO items ({cols}) VALUES ({placeholders})", list(d.values()))
+    _ensure_internal_sku(new_id, d.get("category_id"))
+    log_action("ITEM_ADD", new_id, item["name"], f"Cloned from #{iid}")
+    return jsonify({"ok": True, "id": new_id})
+
+
+# ── Tags autocomplete ─────────────────────────────────────────────────────────
+
+@bp.route("/api/tags")
+@login_required
+def api_tags():
+    rows = query("SELECT tags FROM items WHERE active=1 AND tags != ''")
+    tag_set = set()
+    for r in rows:
+        for t in (r["tags"] or "").split(","):
+            t = t.strip()
+            if t: tag_set.add(t)
+    return jsonify(sorted(tag_set))
+
+
+# ── Kits ──────────────────────────────────────────────────────────────────────
+
+@bp.route("/api/kits", methods=["GET"])
+@login_required
+def api_kits():
+    kits = query("""SELECT k.*, COUNT(i.id) as item_count,
+                          SUM(CASE WHEN i.checked_out=0 THEN 1 ELSE 0 END) as available_count
+                   FROM kits k LEFT JOIN items i ON i.kit_id=k.id AND i.active=1
+                   GROUP BY k.id ORDER BY k.name""")
+    return jsonify([dict(r) for r in kits])
+
+
+@bp.route("/api/kits", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_kit_create():
+    d    = request.json
+    name = d.get("name", "").strip()
+    if not name: return jsonify({"ok": False, "msg": "Name required"})
+    now  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    kid  = execute("INSERT INTO kits (name,description,created_by,created_at) VALUES (?,?,?,?)",
+                   [name, d.get("description", "") or None, session.get("username"), now])
+    return jsonify({"ok": True, "id": kid, "name": name})
+
+
+@bp.route("/api/kit/<int:kid>", methods=["PUT"])
+@login_required
+@perm_required("write_items")
+def api_kit_update(kid):
+    d = request.json
+    name = d.get("name", "").strip()
+    if not name: return jsonify({"ok": False, "msg": "Name required"})
+    execute("UPDATE kits SET name=?, description=? WHERE id=?",
+            [name, d.get("description", "") or None, kid])
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/kit/<int:kid>", methods=["DELETE"])
+@login_required
+@perm_required("write_items")
+def api_kit_delete(kid):
+    execute("UPDATE items SET kit_id=NULL WHERE kit_id=?", [kid])
+    execute("DELETE FROM kits WHERE id=?", [kid])
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/kit/<int:kid>/items", methods=["GET"])
+@login_required
+def api_kit_items(kid):
+    kit = query("SELECT * FROM kits WHERE id=?", [kid], one=True)
+    if not kit: return jsonify({"ok": False, "msg": "Kit not found"}), 404
+    items = query("""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
+                            i.condition, i.checked_out, i.checkout_by,
+                            i.shelf, c.name as category, c.color
+                     FROM items i LEFT JOIN categories c ON c.id=i.category_id
+                     WHERE i.kit_id=? AND i.active=1 ORDER BY i.name""", [kid])
+    return jsonify({"ok": True, "kit": dict(kit), "items": [dict(r) for r in items]})
+
+
+@bp.route("/api/kit/<int:kid>/item/<int:iid>", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_kit_add_item(kid, iid):
+    kit  = query("SELECT id,name FROM kits WHERE id=?", [kid], one=True)
+    item = query("SELECT id,name FROM items WHERE id=? AND active=1", [iid], one=True)
+    if not kit or not item: return jsonify({"ok": False, "msg": "Not found"}), 404
+    execute("UPDATE items SET kit_id=? WHERE id=?", [kid, iid])
+    log_action("ITEM_EDIT", iid, item["name"], f"Added to kit: {kit['name']}")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/kit/<int:kid>/item/<int:iid>", methods=["DELETE"])
+@login_required
+@perm_required("write_items")
+def api_kit_remove_item(kid, iid):
+    item = query("SELECT name FROM items WHERE id=?", [iid], one=True)
+    execute("UPDATE items SET kit_id=NULL WHERE id=? AND kit_id=?", [iid, kid])
+    if item: log_action("ITEM_EDIT", iid, item["name"], "Removed from kit")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/kit/<int:kid>/checkout", methods=["POST"])
+@login_required
+@perm_required("checkout_checkin")
+def api_kit_checkout(kid):
+    d   = request.json
+    who = d.get("who", "").strip()
+    job = d.get("job_ref", "").strip()
+    ret = d.get("expected_return_date") or None
+    if not who: return jsonify({"ok": False, "msg": "Checked-out-to is required"})
+    kit = query("SELECT name FROM kits WHERE id=?", [kid], one=True)
+    if not kit: return jsonify({"ok": False, "msg": "Kit not found"}), 404
+    items = query("SELECT * FROM items WHERE kit_id=? AND active=1 AND checked_out=0 AND qty IS NULL AND sold=0", [kid])
+    now   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    done  = 0
+    for item in items:
+        execute("UPDATE items SET checked_out=1, checkout_by=?, checkout_date=?, job_ref=?, expected_return_date=? WHERE id=?",
+                [who, now, job or None, ret, item["id"]])
+        execute("INSERT INTO checkout_log (item_id,item_name,checked_out_by,job_ref,checkout_date,created_at) VALUES (?,?,?,?,?,?)",
+                [item["id"], item["name"], who, job or None, now[:10], now])
+        log_action("CHECKOUT", item["id"], item["name"], f"Kit: {kit['name']} | To: {who}")
+        done += 1
+    return jsonify({"ok": True, "done": done})
+
+
+@bp.route("/api/kit/<int:kid>/checkin", methods=["POST"])
+@login_required
+@perm_required("checkout_checkin")
+def api_kit_checkin(kid):
+    note = (request.json or {}).get("checkin_note", "").strip() or None
+    kit  = query("SELECT name FROM kits WHERE id=?", [kid], one=True)
+    if not kit: return jsonify({"ok": False, "msg": "Kit not found"}), 404
+    items = query("SELECT * FROM items WHERE kit_id=? AND active=1 AND checked_out=1", [kid])
+    now   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user  = session.get("username", "")
+    done  = 0
+    for item in items:
+        try:
+            dur = round((datetime.now() - datetime.strptime((item["checkout_date"] or now)[:16], "%Y-%m-%d %H:%M")).total_seconds() / 3600, 2)
+        except Exception:
+            dur = None
+        execute("UPDATE items SET checked_out=0, checkout_by=NULL, checkout_date=NULL, job_ref=NULL, expected_return_date=NULL WHERE id=?", [item["id"]])
+        execute("UPDATE checkout_log SET checkin_date=?, checkin_note=?, checkin_by=?, duration_hours=? WHERE item_id=? AND checkin_date IS NULL",
+                [now[:10], note, user, dur, item["id"]])
+        log_action("CHECKIN", item["id"], item["name"], f"Kit: {kit['name']}")
+        done += 1
+    return jsonify({"ok": True, "done": done})
 
 
 @bp.route("/api/item/modifications")

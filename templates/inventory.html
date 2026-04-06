@@ -81,6 +81,17 @@
     <option value="incomplete">⚠ Incomplete</option>
     <option value="maintenance">🔧 Maintenance Due</option>
   </select>
+  <select id="condFilter" class="select" style="width:auto;min-width:120px" onchange="loadItems()">
+    <option value="">All Conditions</option>
+    <option value="New">New</option>
+    <option value="Used-VG">Used — Very Good</option>
+    <option value="Used-Good">Used — Good</option>
+    <option value="Used">Used</option>
+    <option value="For Parts">For Parts</option>
+  </select>
+  <select id="tagFilter" class="select" style="width:auto;min-width:110px" onchange="loadItems()">
+    <option value="">All Tags</option>
+  </select>
   <select id="locFilter" class="select" style="width:auto;min-width:130px" onchange="loadItems()">
     <option value="">All Locations</option>
   </select>
@@ -243,6 +254,9 @@
               <option value="Used">Used</option>
               <option value="For Parts">For Parts</option>
             </select>
+          </div>
+          <div class="field"><label class="label">Tags <span style="font-weight:400;font-size:10px;color:#94a3b8">comma-separated</span></label>
+            <input class="input" id="fi-tags" placeholder="e.g. warehouse-a, client-abc, urgent">
           </div>
         </div>
 
@@ -586,6 +600,74 @@
   </div>
 </div>
 
+<!-- ══ BULK ACTION BAR ══ -->
+<div id="bulkBar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;border-radius:12px;padding:10px 16px;gap:8px;align-items:center;z-index:800;box-shadow:0 8px 32px rgba(0,0,0,0.35);font-size:13px;min-width:480px">
+  <span id="bulkCount" style="font-weight:600;min-width:80px"></span>
+  <button class="btn btn-sm" style="background:#1e40af;color:#fff;border:none" onclick="openBulkCheckout()">📤 Checkout</button>
+  <button class="btn btn-sm" style="background:#15803d;color:#fff;border:none" onclick="bulkCheckin()">📥 Check In</button>
+  <button class="btn btn-sm" style="background:#374151;color:#fff;border:none" onclick="openBulkEdit()">✏️ Edit Fields</button>
+  <button class="btn btn-sm" style="background:#374151;color:#fff;border:none" onclick="printSelectedLabels()">🏷 Print Labels</button>
+  <button class="btn btn-sm" style="background:#991b1b;color:#fff;border:none" onclick="massDelete()">🗑 Delete</button>
+  <button style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:0 4px;margin-left:4px" onclick="selectedIds.clear();updateSelectionUI();document.querySelectorAll('.row-cb').forEach(c=>c.checked=false);document.getElementById('selectAll').checked=false" title="Clear selection">✕</button>
+</div>
+
+<!-- ══ BULK CHECKOUT MODAL ══ -->
+<div class="overlay" id="bulkCheckoutModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">📤 Bulk Check Out</div><button class="modal-close" onclick="closeModal('bulkCheckoutModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:10px 12px;margin-bottom:14px;font-size:12.5px;color:#1e40af">
+        Checking out <strong id="bco-count"></strong> selected items. Already-checked-out and qty-tracked items will be skipped.
+      </div>
+      <div class="field"><label class="label">Tech Name / Initials *</label><input class="input" id="bco-who" placeholder="e.g. JD or John Doe"></div>
+      <div class="field"><label class="label">Job Reference / Customer</label><input class="input" id="bco-jobref" placeholder="Optional"></div>
+      <div class="field"><label class="label">Expected Return Date <span style="font-weight:400;font-size:10px;color:#94a3b8">(optional)</span></label><input class="input" id="bco-return" type="date"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('bulkCheckoutModal')">Cancel</button>
+      <button class="btn btn-danger" id="bcoBtn" onclick="confirmBulkCheckout()">📤 Check Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BULK EDIT MODAL ══ -->
+<div class="overlay" id="bulkEditModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">✏️ Bulk Edit Fields</div><button class="modal-close" onclick="closeModal('bulkEditModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#fef9ec;border:1px solid #fde68a;border-radius:7px;padding:10px 12px;margin-bottom:14px;font-size:12.5px;color:#92400e">
+        Only filled-in fields will be updated. Leave blank to keep existing values.
+      </div>
+      <div class="field">
+        <label class="label">Condition</label>
+        <select class="select" id="be-condition">
+          <option value="">— Keep existing —</option>
+          <option value="New">New</option>
+          <option value="Used-VG">Used — Very Good</option>
+          <option value="Used-Good">Used — Good</option>
+          <option value="Used">Used</option>
+          <option value="For Parts">For Parts</option>
+        </select>
+      </div>
+      <div class="field"><label class="label">Shelf Location</label><input class="input" id="be-shelf" placeholder="Leave blank to keep existing"></div>
+      <div class="field">
+        <label class="label">Tags <span style="font-weight:400;font-size:10px;color:#94a3b8">comma-separated — replaces existing tags</span></label>
+        <input class="input" id="be-tags" placeholder="Leave blank to keep existing">
+      </div>
+      <div class="field">
+        <label class="label">Location</label>
+        <select class="select" id="be-loc">
+          <option value="">— Keep existing —</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('bulkEditModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmBulkEdit()">Apply Changes</button>
+    </div>
+  </div>
+</div>
+
 <div id="labelPrintArea" style="display:none"></div>
 
 <style>
@@ -633,7 +715,16 @@ async function loadLocations(){
     locs.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;if(String(l.id)===String(cur))o.selected=true;sel.appendChild(o);});
   }catch(e){}
 }
-loadLocations();
+async function loadTagsFilter(){
+  try{
+    const tags=await fetch('/api/tags').then(r=>r.json());
+    const sel=document.getElementById('tagFilter');
+    const cur=sel.value;
+    sel.innerHTML='<option value="">All Tags</option>';
+    tags.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;if(t===cur)o.selected=true;sel.appendChild(o);});
+  }catch(e){}
+}
+loadLocations(); loadTagsFilter();
 
 async function loadItemsPage(page){
   currentPage=page;
@@ -642,7 +733,9 @@ async function loadItemsPage(page){
   const status=document.getElementById('statusFilter').value;
   const sort=document.getElementById('sortFilter').value;
   const loc=document.getElementById('locFilter').value;
-  const params=new URLSearchParams({q,cat,status,sort,loc,page,per_page:PER_PAGE});
+  const cond=document.getElementById('condFilter').value;
+  const tag=document.getElementById('tagFilter').value;
+  const params=new URLSearchParams({q,cat,status,sort,loc,cond,tag,page,per_page:PER_PAGE});
   const data=await fetch('/api/items?'+params).then(r=>r.json());
   const items=data.items||data;
   totalItems=data.total!=null?data.total:items.length;
@@ -692,7 +785,11 @@ function renderTable(items){
     const catPill=item.category?`<span class="tag" style="background:${item.color}18;color:${item.color}">${item.category}</span>`:'';
     const serialSku=item.serial?`<span class="mono" style="font-size:12px">${item.serial}</span>`:(item.sku?`<span class="mono" style="font-size:12px;color:#64748b">SKU: ${item.sku}</span>`:(item.internal_sku?`<span class="mono" style="font-size:12px;color:#94a3b8">${item.internal_sku}</span>`:'<span style="color:#ccc">—</span>'));
     const shelf=item.shelf?`<span class="shelf">${item.shelf}</span>`:'—';
-    const cond=item.condition?`<span style="font-size:11px;color:#64748b">${item.condition}</span>`:'';
+    const condColors={'New':'#1d4ed8','Used-VG':'#15803d','Used-Good':'#15803d','Used':'#64748b','For Parts':'#b45309'};
+    const condColor=condColors[item.condition]||'#64748b';
+    const cond=item.condition?`<span style="font-size:10px;font-weight:600;padding:1px 7px;border-radius:3px;background:${condColor}18;color:${condColor}">${item.condition}</span>`:'';
+    const tagChips=(item.tags||'').split(',').map(t=>t.trim()).filter(Boolean);
+    const tagsHtml=tagChips.length?`<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:2px">${tagChips.slice(0,3).map(t=>`<span style="font-size:10px;padding:1px 6px;background:#f1f5f9;color:#475569;border-radius:3px;cursor:pointer" onclick="event.stopPropagation();document.getElementById('tagFilter').value='${t}';loadItems()">${t}</span>`).join('')}${tagChips.length>3?`<span style="font-size:10px;color:#94a3b8">+${tagChips.length-3}</span>`:''}</div>`:'';
     let status='';
     if(item.qty!==null){
       const warn=item.is_low?' style="color:#b91c1c;font-weight:600"':'';
@@ -721,7 +818,7 @@ function renderTable(items){
       <td>${catPill}</td>
       <td>${serialSku}</td>
       <td>${shelf}</td>
-      <td>${cond}</td>
+      <td>${cond}${tagsHtml}</td>
       <td>${status}</td>
       <td>${cost}<br>${saleProfit}</td>
       <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();printLabel(${item.id})" title="Print label" style="padding:5px 7px;margin-right:4px">🏷</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button></td>
@@ -745,7 +842,9 @@ function showDetail(item){
   const rows=[];
   if(item.product_name) rows.push(['Product',`<span class="product-badge">📦 ${item.product_name}</span>`]);
   if(item.category) rows.push(['Category',item.category]);
-  if(item.condition) rows.push(['Condition',item.condition]);
+  if(item.condition){const cc={'New':'#1d4ed8','Used-VG':'#15803d','Used-Good':'#15803d','Used':'#64748b','For Parts':'#b45309'}[item.condition]||'#64748b';rows.push(['Condition',`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:${cc}18;color:${cc}">${item.condition}</span>`]);}
+  if(item.tags){const tc=(item.tags||'').split(',').map(t=>t.trim()).filter(Boolean);if(tc.length)rows.push(['Tags',tc.map(t=>`<span style="font-size:11px;padding:2px 8px;background:#f1f5f9;color:#475569;border-radius:4px;cursor:pointer;margin-right:3px" onclick="document.getElementById('tagFilter').value='${t}';closeDetail();loadItems()">${t}</span>`).join('')]);}
+  if(item.kit_id&&item.kit_name)rows.push(['Kit',`<span style="font-size:12px;padding:2px 8px;background:#ede9fe;color:#6d28d9;border-radius:4px">📦 ${item.kit_name}</span>`]);
   if(item.owner_company) rows.push(['Owner',item.owner_company]);
   if(item.purchased_from) rows.push(['Purchased From',item.purchased_from]);
   if(item.purchase_date) rows.push(['Purchased',item.purchase_date]);
@@ -803,6 +902,7 @@ function showDetail(item){
     acts=`<button class="btn btn-danger" onclick="closeDetail();openCheckout(${item.id})">📤 Check Out</button>`;
   }
   acts+=`<button class="btn btn-secondary" onclick="closeDetail();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button>`;
+  acts+=`<button class="btn btn-secondary" onclick="cloneItem(${item.id})" title="Clone this item (copy without serial/SKU)">⧉ Clone</button>`;
   acts+=`<button class="btn btn-secondary" onclick="closeDetail();openModify(${item.id})" title="Log a component change">🔧 Modify</button>`;
   acts+=`<button class="btn btn-secondary" onclick="printLabel(${item.id})" style="font-size:11px">🏷 Label</button>`;
   if(item.is_incomplete){
@@ -977,6 +1077,7 @@ function _clearItemForm(){
   document.getElementById('fi-product-step').style.display='none';
   document.getElementById('fi-owner').value='';
   document.getElementById('fi-condition').value='New';
+  document.getElementById('fi-tags').value='';
   document.getElementById('fi-tax-yes').checked=false;
   document.getElementById('fi-tax-no').checked=false;
   document.getElementById('fi-taxrate').value='';
@@ -1020,6 +1121,7 @@ function editItem(item){
     if(item.qty!==null) document.getElementById('fi-qty-row').style.display='';
     document.getElementById('fi-notes').value=item.notes||'';
     document.getElementById('fi-condition').value=item.condition||'New';
+    document.getElementById('fi-tags').value=item.tags||'';
     document.getElementById('fi-owner').value=item.owner_company||'';
     document.getElementById('fi-date').value=item.purchase_date||'';
     document.getElementById('fi-cost').value=item.cost_price!=null?item.cost_price:'';
@@ -1074,6 +1176,7 @@ async function saveItem(){
     sku:document.getElementById('fi-sku').value.trim(),
     category_id:parseInt(catId)||null,
     condition:document.getElementById('fi-condition').value,
+    tags:document.getElementById('fi-tags').value,
     owner_company:document.getElementById('fi-owner').value||null,
     purchase_date:document.getElementById('fi-date').value,
     shelf:document.getElementById('fi-shelf').value.trim(),
@@ -1380,8 +1483,68 @@ function doPrint(){const content=document.getElementById('labelPreview').innerHT
 // ── Selection / Mass ops ──
 function onRowCheck(cb){const id=parseInt(cb.dataset.id);if(cb.checked)selectedIds.add(id);else selectedIds.delete(id);updateSelectionUI();}
 function toggleSelectAll(checked){allItems.forEach(i=>{if(checked)selectedIds.add(i.id);else selectedIds.delete(i.id);});updateSelectionUI();document.querySelectorAll('.row-cb').forEach(cb=>{cb.checked=selectedIds.has(parseInt(cb.dataset.id));});}
-function updateSelectionUI(){const n=selectedIds.size;const btn=document.getElementById('massDeleteBtn');const pBtn=document.getElementById('massPrintBtn');if(btn){btn.style.display=n>0?'':'none';document.getElementById('selCount').textContent=n;}if(pBtn){pBtn.style.display=n>0?'':'none';document.getElementById('selCountPrint').textContent=n;}}
-async function massDelete(){const n=selectedIds.size;if(!n)return;if(!confirm(`Delete ${n} selected item${n===1?'':'s'}?`))return;const res=await api('/api/item/delete',{ids:[...selectedIds]});if(res.ok){toast(`Deleted ${res.deleted} item(s)`,'warn');selectedIds.clear();updateSelectionUI();closeDetail();loadItems();}else toast(res.msg||'Error','err');}
+function updateSelectionUI(){
+  const n=selectedIds.size;
+  // legacy topbar buttons
+  const btn=document.getElementById('massDeleteBtn');const pBtn=document.getElementById('massPrintBtn');
+  if(btn){btn.style.display='none';}if(pBtn){pBtn.style.display='none';}
+  // floating bulk bar
+  const bar=document.getElementById('bulkBar');
+  if(bar){bar.style.display=n>0?'flex':'none';document.getElementById('bulkCount').textContent=n+' selected';}
+}
+async function massDelete(){const n=selectedIds.size;if(!n)return;if(!confirm(`Delete ${n} selected item${n===1?'':'s'}? This cannot be undone.`))return;const res=await api('/api/item/delete',{ids:[...selectedIds]});if(res.ok){toast(`Deleted ${res.deleted} item(s)`,'warn');selectedIds.clear();updateSelectionUI();closeDetail();loadItems();}else toast(res.msg||'Error','err');}
+
+// Bulk checkout
+function openBulkCheckout(){if(!selectedIds.size){toast('Select items first','warn');return;}document.getElementById('bco-who').value='';document.getElementById('bco-jobref').value='';document.getElementById('bco-return').value='';const cEl=document.getElementById('bco-count');if(cEl)cEl.textContent=selectedIds.size+' item'+(selectedIds.size===1?'':'s');openModal('bulkCheckoutModal');}
+async function confirmBulkCheckout(){
+  const who=document.getElementById('bco-who').value.trim();
+  if(!who){toast('Name/initials required','warn');return;}
+  const btn=document.getElementById('bcoBtn');btn.disabled=true;btn.textContent='Working…';
+  const res=await api('/api/items/bulk-checkout',{ids:[...selectedIds],who,job_ref:document.getElementById('bco-jobref').value.trim(),expected_return_date:document.getElementById('bco-return').value||null});
+  btn.disabled=false;btn.textContent='Check Out';
+  if(res.ok){toast(`Checked out ${res.done} item(s)${res.skipped?' ('+res.skipped+' skipped)':''}`, 'ok');selectedIds.clear();updateSelectionUI();closeModal('bulkCheckoutModal');loadItems();}
+  else toast(res.msg||'Error','err');
+}
+async function bulkCheckin(){
+  const n=selectedIds.size;if(!n)return;
+  if(!confirm(`Check in ${n} selected item${n===1?'':'s'}?`))return;
+  const res=await api('/api/items/bulk-checkin',{ids:[...selectedIds]});
+  if(res.ok){toast(`Checked in ${res.done} item(s)${res.skipped?' ('+res.skipped+' skipped)':''}`, 'ok');selectedIds.clear();updateSelectionUI();loadItems();}
+  else toast(res.msg||'Error','err');
+}
+// Bulk edit
+function openBulkEdit(){
+  if(!selectedIds.size){toast('Select items first','warn');return;}
+  document.getElementById('be-condition').value='';
+  document.getElementById('be-shelf').value='';
+  document.getElementById('be-tags').value='';
+  document.getElementById('be-loc').value='';
+  // Populate location dropdown from locFilter options
+  const srcSel=document.getElementById('locFilter');
+  const dstSel=document.getElementById('be-loc');
+  dstSel.innerHTML='<option value="">— Keep existing —</option>';
+  Array.from(srcSel.options).slice(1).forEach(o=>{const opt=document.createElement('option');opt.value=o.value;opt.textContent=o.textContent;dstSel.appendChild(opt);});
+  openModal('bulkEditModal');
+}
+async function confirmBulkEdit(){
+  const d={ids:[...selectedIds]};
+  const cond=document.getElementById('be-condition').value;
+  const shelf=document.getElementById('be-shelf').value.trim();
+  const tags=document.getElementById('be-tags').value.trim();
+  const loc=document.getElementById('be-loc').value;
+  if(cond)d.condition=cond;if(shelf)d.shelf=shelf;if(tags!=='')d.tags=tags;if(loc)d.location_id=loc;
+  if(Object.keys(d).length<=1){toast('Enter at least one field to update','warn');return;}
+  const res=await api('/api/items/bulk-edit',d);
+  if(res.ok){toast(`Updated ${res.updated} item(s)`,'ok');selectedIds.clear();updateSelectionUI();closeModal('bulkEditModal');loadItems();loadTagsFilter();}
+  else toast(res.msg||'Error','err');
+}
+// Clone
+async function cloneItem(id){
+  if(!confirm('Clone this item? A copy will be created without serial/SKU. You can edit it next.'))return;
+  const res=await api('/api/item/'+id+'/clone',{});
+  if(res.ok){toast('Cloned — opening new item…','ok');closeDetail();await loadItems();const newItem=allItems.find(i=>i.id===res.id);if(newItem)editItem(newItem);}
+  else toast(res.msg||'Error','err');
+}
 
 function closeImportModal(){
   closeModal('importModal');

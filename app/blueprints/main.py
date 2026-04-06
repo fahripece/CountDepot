@@ -206,6 +206,13 @@ def report_locations():
     return render_template("report_locations.html")
 
 
+@bp.route("/kits")
+@login_required
+@perm_required("view_inventory")
+def kits_page():
+    return render_template("kits.html")
+
+
 # ── Low stock API (lives here because it's tightly coupled to the page) ───────
 
 @bp.route("/api/low-stock")

@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}Kits · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Kits &amp; Bundles</span>
+  <span class="topbar-sub" id="kitCount"></span>
+  <div class="topbar-right">
+    <button class="btn btn-primary btn-sm" onclick="openAddKit()">+ New Kit</button>
+  </div>
+</div>
+
+<div style="padding:20px 22px;flex:1;overflow-y:auto">
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px" id="kitsGrid">
+  <div style="color:#94a3b8;text-align:center;padding:40px;grid-column:1/-1">Loading…</div>
+</div>
+
+</div>
+
+<!-- ══ ADD / EDIT KIT MODAL ══ -->
+<div class="overlay" id="kitModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <div class="modal-title" id="kitModalTitle">New Kit</div>
+      <button class="modal-close" onclick="closeModal('kitModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editKitId">
+      <div class="field"><label class="label">Kit Name *</label><input class="input" id="kit-name" placeholder="e.g. Field Technician Kit A"></div>
+      <div class="field"><label class="label">Description</label><textarea class="input" id="kit-desc" rows="2" placeholder="Optional notes about what this kit contains"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('kitModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveKit()">Save Kit</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ KIT DETAIL / MANAGE ITEMS MODAL ══ -->
+<div class="overlay" id="kitDetailModal">
+  <div class="modal" style="width:700px;max-height:88vh">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="kd-name"></div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:2px" id="kd-desc"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('kitDetailModal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:16px 20px">
+      <!-- Actions -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn btn-danger btn-sm" onclick="kitCheckout()" id="kd-checkout-btn">📤 Checkout All</button>
+        <button class="btn btn-success btn-sm" onclick="kitCheckin()" id="kd-checkin-btn">📥 Check In All</button>
+        <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="openEditKit()">Edit Kit</button>
+        <button class="btn btn-secondary btn-sm" style="color:#b91c1c" onclick="deleteKit()">🗑 Delete Kit</button>
+      </div>
+
+      <!-- Items in kit -->
+      <div class="section-hdr" style="margin-top:0">Items in this Kit</div>
+      <div id="kd-items-list" style="margin-bottom:16px"></div>
+
+      <!-- Add item to kit -->
+      <div style="border:1px solid #e5e3de;border-radius:8px;padding:12px">
+        <div style="font-size:11px;font-weight:600;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Add Item to Kit</div>
+        <div style="display:flex;gap:6px">
+          <input class="input" id="kd-add-search" placeholder="Search items by name, serial, SKU…" oninput="searchKitItems()" style="flex:1">
+          <button class="btn btn-secondary btn-sm" onclick="searchKitItems()">Search</button>
+        </div>
+        <div id="kd-search-results" style="margin-top:8px;max-height:180px;overflow-y:auto"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('kitDetailModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ KIT CHECKOUT MODAL ══ -->
+<div class="overlay" id="kitCheckoutModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">📤 Kit Checkout</div><button class="modal-close" onclick="closeModal('kitCheckoutModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#f8f8f7;border-radius:7px;padding:10px 12px;margin-bottom:14px;font-size:12.5px;color:#475569" id="kco-kit-name"></div>
+      <div class="field"><label class="label">Tech Name / Initials *</label><input class="input" id="kco-who"></div>
+      <div class="field"><label class="label">Job Reference / Customer</label><input class="input" id="kco-jobref"></div>
+      <div class="field"><label class="label">Expected Return Date</label><input class="input" id="kco-return" type="date"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('kitCheckoutModal')">Cancel</button>
+      <button class="btn btn-danger" id="kcoBtn" onclick="confirmKitCheckout()">📤 Check Out Kit</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.kit-card{background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;transition:box-shadow .15s}
+.kit-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.08)}
+.kit-stat{font-size:12px;color:#64748b;display:flex;align-items:center;gap:4px}
+.kit-stat strong{color:#0f172a}
+</style>
+<script>
+let kits=[], currentKitId=null;
+
+async function loadKits(){
+  const data=await fetch('/api/kits').then(r=>r.json());
+  kits=data;
+  document.getElementById('kitCount').textContent=kits.length+' kit'+(kits.length===1?'':'s');
+  const grid=document.getElementById('kitsGrid');
+  if(!kits.length){grid.innerHTML='<div style="color:#94a3b8;text-align:center;padding:40px;grid-column:1/-1">No kits yet. Create one to bundle items together.</div>';return;}
+  grid.innerHTML=kits.map(k=>{
+    const avail=k.available_count||0;const total=k.item_count||0;const out=total-avail;
+    const pct=total?Math.round(avail/total*100):100;
+    const statusColor=out>0?'#b45309':'#15803d';
+    const statusText=out>0?`${out} out`:total===0?'Empty':'All in';
+    return `<div class="kit-card" onclick="openKitDetail(${k.id})" style="cursor:pointer">
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:14px">${escHtml(k.name)}</div>
+          ${k.description?`<div style="font-size:12px;color:#64748b;margin-top:2px">${escHtml(k.description)}</div>`:''}
+        </div>
+        <span style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:5px;background:${statusColor}18;color:${statusColor};white-space:nowrap">${statusText}</span>
+      </div>
+      <div style="display:flex;gap:12px">
+        <div class="kit-stat"><strong>${total}</strong> items</div>
+        <div class="kit-stat"><strong>${avail}</strong> available</div>
+        ${k.created_by?`<div class="kit-stat">by ${escHtml(k.created_by)}</div>`:''}
+      </div>
+      ${total>0?`<div style="height:4px;background:#f0efec;border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${out>0?'#f59e0b':'#22c55e'};border-radius:2px;transition:width .3s"></div></div>`:''}
+      <div style="display:flex;gap:6px;margin-top:4px" onclick="event.stopPropagation()">
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openKitDetail(${k.id})">Manage</button>
+        <button class="btn btn-danger btn-sm" style="flex:1" onclick="event.stopPropagation();quickKitCheckout(${k.id})">📤 Checkout</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openAddKit(){
+  document.getElementById('editKitId').value='';
+  document.getElementById('kit-name').value='';
+  document.getElementById('kit-desc').value='';
+  document.getElementById('kitModalTitle').textContent='New Kit';
+  openModal('kitModal');
+  setTimeout(()=>document.getElementById('kit-name').focus(),100);
+}
+
+async function saveKit(){
+  const name=document.getElementById('kit-name').value.trim();
+  if(!name){toast('Kit name is required','warn');return;}
+  const id=document.getElementById('editKitId').value;
+  const res=await api(id?'/api/kit/'+id:'/api/kits',{name,description:document.getElementById('kit-desc').value.trim()},id?'PUT':'POST');
+  if(res.ok){toast(id?'Kit updated ✓':'Kit created ✓','ok');closeModal('kitModal');loadKits();if(id&&currentKitId===parseInt(id))loadKitDetail(currentKitId);}
+  else toast(res.msg||'Error','err');
+}
+
+async function openKitDetail(kitId){
+  currentKitId=kitId;
+  await loadKitDetail(kitId);
+  openModal('kitDetailModal');
+}
+
+async function loadKitDetail(kitId){
+  const kit=kits.find(k=>k.id===kitId)||{name:'Kit',description:''};
+  document.getElementById('kd-name').textContent=kit.name||'Kit #'+kitId;
+  document.getElementById('kd-desc').textContent=kit.description||'';
+  document.getElementById('kd-add-search').value='';
+  document.getElementById('kd-search-results').innerHTML='';
+  await loadKitItems(kitId);
+}
+
+async function loadKitItems(kitId){
+  const data=await fetch('/api/kit/'+kitId+'/items').then(r=>r.json());
+  const items=data.items||data;
+  const list=document.getElementById('kd-items-list');
+  if(!items.length){list.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px 0">No items in this kit yet.</div>';return;}
+  list.innerHTML=items.map(i=>{
+    const statusColor=i.checked_out?'#b45309':'#15803d';
+    const statusText=i.checked_out?`Out — ${i.checkout_by||'?'}`:'Available';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0efec">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:500">${escHtml(i.name)}</div>
+        <div style="font-size:11px;color:#94a3b8">${[i.manufacturer,i.model].filter(Boolean).join(' · ')||''}${i.serial?' · SN: '+i.serial:''}${i.shelf?' · '+i.shelf:''}</div>
+      </div>
+      <span style="font-size:11px;font-weight:600;padding:1px 8px;border-radius:4px;background:${statusColor}18;color:${statusColor}">${statusText}</span>
+      <button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 8px;color:#b91c1c" onclick="removeFromKit(${i.id})">Remove</button>
+    </div>`;
+  }).join('');
+}
+
+async function removeFromKit(itemId){
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  const res=await fetch('/api/kit/'+currentKitId+'/item/'+itemId,{method:'DELETE',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken}}).then(r=>r.json());
+  if(res.ok){toast('Removed from kit','warn');loadKitItems(currentKitId);loadKits();}
+  else toast(res.msg||'Error','err');
+}
+
+async function searchKitItems(){
+  const q=document.getElementById('kd-add-search').value.trim();
+  if(!q){document.getElementById('kd-search-results').innerHTML='';return;}
+  const data=await fetch('/api/items?q='+encodeURIComponent(q)+'&per_page=20').then(r=>r.json());
+  const items=(data.items||data).filter(i=>!i.checked_out&&!i.sold&&i.qty===null);
+  const res=document.getElementById('kd-search-results');
+  if(!items.length){res.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px">No available items found.</div>';return;}
+  res.innerHTML=items.map(i=>`<div style="display:flex;align-items:center;gap:8px;padding:7px;border-bottom:1px solid #f0efec">
+    <div style="flex:1;font-size:12.5px">
+      <span style="font-weight:500">${escHtml(i.name)}</span>
+      <span style="color:#94a3b8;font-size:11px"> — ${i.category||''}${i.serial?' · SN: '+i.serial:''}${i.shelf?' · '+i.shelf:''}</span>
+    </div>
+    <button class="btn btn-secondary btn-sm" style="font-size:10px" onclick="addToKit(${i.id})">+ Add</button>
+  </div>`).join('');
+}
+
+async function addToKit(itemId){
+  const res=await api('/api/kit/'+currentKitId+'/item/'+itemId,{},'POST');
+  if(res.ok){toast('Added to kit ✓','ok');loadKitItems(currentKitId);loadKits();}
+  else toast(res.msg||'Error','err');
+}
+
+function openEditKit(){
+  const kit=kits.find(k=>k.id===currentKitId);
+  if(!kit)return;
+  document.getElementById('editKitId').value=kit.id;
+  document.getElementById('kit-name').value=kit.name;
+  document.getElementById('kit-desc').value=kit.description||'';
+  document.getElementById('kitModalTitle').textContent='Edit Kit';
+  openModal('kitModal');
+}
+
+async function deleteKit(){
+  const kit=kits.find(k=>k.id===currentKitId);
+  if(!kit||!confirm(`Delete kit "${kit.name}"? Items will not be deleted.`))return;
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  const res=await fetch('/api/kit/'+currentKitId,{method:'DELETE',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken}}).then(r=>r.json());
+  if(res.ok){toast('Kit deleted','warn');closeModal('kitDetailModal');loadKits();}
+  else toast(res.msg||'Error','err');
+}
+
+function kitCheckout(){
+  const kit=kits.find(k=>k.id===currentKitId);if(!kit)return;
+  document.getElementById('kco-kit-name').textContent='Kit: '+kit.name;
+  document.getElementById('kco-who').value='';document.getElementById('kco-jobref').value='';document.getElementById('kco-return').value='';
+  openModal('kitCheckoutModal');
+  setTimeout(()=>document.getElementById('kco-who').focus(),100);
+}
+
+function quickKitCheckout(kitId){
+  currentKitId=kitId;
+  const kit=kits.find(k=>k.id===kitId);if(!kit)return;
+  document.getElementById('kco-kit-name').textContent='Kit: '+kit.name;
+  document.getElementById('kco-who').value='';document.getElementById('kco-jobref').value='';document.getElementById('kco-return').value='';
+  openModal('kitCheckoutModal');
+  setTimeout(()=>document.getElementById('kco-who').focus(),100);
+}
+
+async function confirmKitCheckout(){
+  const who=document.getElementById('kco-who').value.trim();
+  if(!who){toast('Name/initials required','warn');return;}
+  const btn=document.getElementById('kcoBtn');btn.disabled=true;btn.textContent='Checking out…';
+  const res=await api('/api/kit/'+currentKitId+'/checkout',{who,job_ref:document.getElementById('kco-jobref').value.trim(),expected_return_date:document.getElementById('kco-return').value||null});
+  btn.disabled=false;btn.textContent='📤 Check Out Kit';
+  if(res.ok){toast(`Checked out ${res.done} item(s)${res.skipped?' ('+res.skipped+' skipped)':''}`, 'ok');closeModal('kitCheckoutModal');loadKits();if(document.getElementById('kitDetailModal').classList.contains('open'))loadKitItems(currentKitId);}
+  else toast(res.msg||'Error','err');
+}
+
+async function kitCheckin(){
+  if(!confirm('Check in all items in this kit?'))return;
+  const res=await api('/api/kit/'+currentKitId+'/checkin',{});
+  if(res.ok){toast(`Checked in ${res.done} item(s)${res.skipped?' ('+res.skipped+' skipped)':''}`, 'ok');loadKits();loadKitItems(currentKitId);}
+  else toast(res.msg||'Error','err');
+}
+
+async function api(url, data, method){
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  const m=method||(data&&Object.keys(data).length>=0?'POST':'GET');
+  const r=await fetch(url,{method:m,headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:m!=='GET'?JSON.stringify(data):undefined});
+  return r.json();
+}
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+function toast(msg,type){
+  const t=document.createElement('div');
+  const c={ok:'#15803d',warn:'#92400e',err:'#b91c1c',info:'#1d4ed8'}[type]||'#0f172a';
+  t.style.cssText=`position:fixed;bottom:24px;right:24px;background:${c};color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2);animation:fadeInUp .2s`;
+  t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3200);
+}
+
+loadKits();
+</script>
+{% endblock %}

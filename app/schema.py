@@ -72,6 +72,10 @@ MIGRATIONS = [
     ("items", "location_id",           "INTEGER"),
     ("items", "depreciation_rate",     "REAL"),
 
+    # items — new inventory features
+    ("items", "tags",   "TEXT NOT NULL DEFAULT ''"),
+    ("items", "kit_id", "INTEGER"),
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
 ]
 
@@ -275,6 +279,13 @@ def _init_db_conn(db):
         CREATE TABLE IF NOT EXISTS settings (
             key   TEXT PRIMARY KEY,
             value TEXT
+        );
+        CREATE TABLE IF NOT EXISTS kits (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL,
+            description TEXT,
+            created_by  TEXT,
+            created_at  TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS api_keys (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
