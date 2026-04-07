@@ -801,6 +801,7 @@ function showDetail(item){
   const rows=[];
   if(item.product_name) rows.push(['Product',`<span class="product-badge">📦 ${item.product_name}</span>`]);
   if(item.category) rows.push(['Category',item.category]);
+  if(item.is_incomplete) rows.push(['⚠ Incomplete',`<span style="color:#92400e;font-size:12px">Missing: ${item.missing_fields.join(', ')}</span>`]);
   if(item.condition){const cc={'New':'#1d4ed8','Used-VG':'#15803d','Used-Good':'#15803d','Used':'#64748b','For Parts':'#b45309'}[item.condition]||'#64748b';rows.push(['Condition',`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:${cc}18;color:${cc}">${item.condition}</span>`]);}
   if(item.tags){const tc=(item.tags||'').split(',').map(t=>t.trim()).filter(Boolean);if(tc.length)rows.push(['Tags',tc.map(t=>`<span style="font-size:11px;padding:2px 8px;background:#f1f5f9;color:#475569;border-radius:4px;cursor:pointer;margin-right:3px" onclick="document.getElementById('tagFilter').value='${t}';closeDetail();loadItems()">${t}</span>`).join('')]);}
   if(item.kit_id&&item.kit_name)rows.push(['Kit',`<span style="font-size:12px;padding:2px 8px;background:#ede9fe;color:#6d28d9;border-radius:4px">📦 ${item.kit_name}</span>`]);
@@ -848,7 +849,6 @@ function showDetail(item){
     rows.push(['Depreciation',`${item.depreciation_rate}% /yr${curVal!=null?' · <strong>Current value: $'+curVal.toFixed(2)+'</strong>':''}`]);
   }
   if(item.notes) rows.push(['Notes',item.notes]);
-  if(item.is_incomplete) rows.push(['⚠ Incomplete',`<span style="color:#92400e;font-size:12px">Missing: ${item.missing_fields.join(', ')}</span>`]);
   document.getElementById('dp-fields').innerHTML=rows.map(([l,v])=>`<div class="dl-row"><div class="dl-l">${l}</div><div class="dl-v">${v}</div></div>`).join('');
   let acts='';
   if(item.sold){
