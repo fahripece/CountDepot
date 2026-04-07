@@ -72,6 +72,13 @@
       <!-- All fields (shown after product selected or skip) -->
       <div id="fi-step2" style="display:none">
 
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+          <label class="label" style="margin-bottom:6px">Site</label>
+          <select class="select" id="fi-location">
+            <option value="">— No site —</option>
+          </select>
+        </div>
+
         <div class="section-hdr" style="margin-top:0">Product Info</div>
         <div class="field"><label class="label">Item Name *</label><input class="input" id="fi-name" placeholder="e.g. Dell Latitude 5540"></div>
         <div class="field-row">
@@ -133,12 +140,6 @@
               <input class="input" id="fi-date" type="date" style="flex:1">
               <button class="btn btn-secondary btn-sm" onclick="document.getElementById('fi-date').value=new Date().toISOString().split('T')[0]">Today</button>
             </div>
-          </div>
-          <div class="field">
-            <label class="label">Site</label>
-            <select class="select" id="fi-location">
-              <option value="">— No site —</option>
-            </select>
           </div>
           <div class="field">
             <label class="label">Shelf / Bin</label>

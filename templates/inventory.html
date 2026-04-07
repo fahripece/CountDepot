@@ -137,14 +137,6 @@
     <div style="margin-top:10px" id="dp-status"></div>
   </div>
   <div class="detail-body"><div class="dl" id="dp-fields"></div>
-    <div id="dp-mod-section" style="display:none;margin-top:12px">
-      <div class="section-hdr" style="margin-top:0">🔧 Modification History</div>
-      <div id="dp-mod-history"></div>
-    </div>
-    <div id="dp-children-section" style="display:none;margin-top:12px">
-      <div class="section-hdr" style="margin-top:0">🔗 Removed Components (Linked Items)</div>
-      <div id="dp-children-list"></div>
-    </div>
     <div id="dp-notes-section" style="margin-top:12px">
       <div class="section-hdr" style="margin-top:0">📝 Notes</div>
       <div id="dp-notes-list" style="margin-bottom:10px"></div>
@@ -202,13 +194,21 @@
     <div class="modal-body" style="padding:16px 20px">
       <input type="hidden" id="editItemId">
 
-      <!-- ── Step 1: Category ── -->
-      <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:12px">
-        <label class="label" style="color:#1e40af;margin-bottom:6px">1. Pick a Category *</label>
-        <select class="select" id="fi-cat" onchange="onCatChange()" style="flex:1">
-          <option value="">— Select a category first —</option>
-          {% for cat in categories %}<option value="{{ cat.id }}" data-name="{{ cat.name }}">{{ cat.name }}</option>{% endfor %}
-        </select>
+      <!-- ── Step 1: Category + Site ── -->
+      <div style="display:flex;gap:10px;margin-bottom:12px">
+        <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;flex:1">
+          <label class="label" style="color:#1e40af;margin-bottom:6px">Category *</label>
+          <select class="select" id="fi-cat" onchange="onCatChange()">
+            <option value="">— Select a category —</option>
+            {% for cat in categories %}<option value="{{ cat.id }}" data-name="{{ cat.name }}">{{ cat.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;flex:1">
+          <label class="label" style="margin-bottom:6px">Site</label>
+          <select class="select" id="fi-location">
+            <option value="">— No site —</option>
+          </select>
+        </div>
       </div>
 
       <!-- ── Step 2: Product (optional — pre-fills fields) ── -->
@@ -292,12 +292,6 @@
           <div class="field">
             <label class="label">Shelf / Bin</label>
             <input class="input" id="fi-shelf">
-          </div>
-          <div class="field">
-            <label class="label">Site</label>
-            <select class="select" id="fi-location">
-              <option value="">— No site —</option>
-            </select>
           </div>
           <div class="field">
             <label class="label">Owner / Company</label>
@@ -436,51 +430,6 @@
 </div>
 
 <!-- ══ MODIFY ITEM MODAL ══ -->
-<div class="overlay" id="modifyModal">
-  <div class="modal">
-    <div class="modal-header"><div class="modal-title">🔧 Modify Item Component</div><button class="modal-close" onclick="closeModal('modifyModal')">✕</button></div>
-    <div class="modal-body">
-      <div style="background:#f8f8f7;border-radius:7px;padding:12px;margin-bottom:16px">
-        <div style="font-weight:600;font-size:13px" id="mod-item-name">—</div>
-        <div style="font-size:11.5px;color:#888;margin-top:4px" id="mod-item-specs">—</div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label class="label">Field Being Changed *</label>
-          <select class="select" id="mod-field" onchange="modFieldChanged()">
-            <option value="ram">RAM</option><option value="cpu">CPU</option><option value="storage">Storage</option>
-            <option value="condition">Condition</option><option value="notes">Notes</option>
-            <option value="cost_price">Cost Price</option><option value="sale_price">Sale Price</option>
-          </select>
-        </div>
-        <div class="field">
-          <label class="label">Old Value</label>
-          <input class="input" id="mod-old" placeholder="Previous value" readonly style="background:#f5f5f3;color:#888">
-        </div>
-      </div>
-      <div class="field"><label class="label">New Value *</label><input class="input" id="mod-new" placeholder="Updated value (e.g. 16GB DDR4)"></div>
-      <div class="field"><label class="label">Modification Notes</label><textarea class="input" id="mod-notes" rows="2"></textarea></div>
-      <div style="border:1px solid #e5e3de;border-radius:8px;padding:14px;margin-top:6px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-          <input type="checkbox" id="mod-spawn-cb" onchange="toggleSpawnForm()" style="width:15px;height:15px;cursor:pointer">
-          <label for="mod-spawn-cb" style="font-size:13px;font-weight:600;cursor:pointer">Create inventory item for removed component</label>
-        </div>
-        <div id="mod-spawn-form" style="display:none">
-          <div class="field"><label class="label">Component Item Name *</label><input class="input" id="spawn-name"></div>
-          <div class="field-row">
-            <div class="field"><label class="label">Condition</label><select class="select" id="spawn-cond"><option value="Used">Used</option><option value="Refurbished">Refurbished</option><option value="New">New</option></select></div>
-            <div class="field"><label class="label">Cost / Value</label><input class="input" id="spawn-cost" type="number" step="0.01"></div>
-          </div>
-          <div class="field"><label class="label">Shelf Location</label><input class="input" id="spawn-shelf"></div>
-        </div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modifyModal')">Cancel</button>
-      <button class="btn btn-primary" id="modBtn" onclick="confirmModify()">Save Modification</button>
-    </div>
-  </div>
-</div>
 
 <!-- ══ EBAY MODAL ══ -->
 <div class="overlay" id="ebayModal">
@@ -914,14 +863,11 @@ function showDetail(item){
   }
   acts+=`<button class="btn btn-secondary" onclick="closeDetail();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button>`;
   acts+=`<button class="btn btn-secondary" onclick="cloneItem(${item.id})" title="Clone this item (copy without serial/SKU)">⧉ Clone</button>`;
-  acts+=`<button class="btn btn-secondary" onclick="closeDetail();openModify(${item.id})" title="Log a component change">🔧 Modify</button>`;
   acts+=`<button class="btn btn-secondary" onclick="printLabel(${item.id})" style="font-size:11px">🏷 Label</button>`;
   if(item.is_incomplete){
     acts+=`<button class="btn btn-secondary" style="background:#fef3c7;color:#92400e;border-color:#fde68a;font-size:11px" onclick="openConfirmScan(${item.id})" title="Scan the label to confirm this item">🔍 Scan to Confirm</button>`;
   }
   document.getElementById('dp-actions').innerHTML=acts;
-  loadModHistory(item.id);
-  loadChildItems(item.id);
   loadNotes(item.id);
   loadReservations(item.id);
   loadPhotos(item.id);
@@ -1325,14 +1271,7 @@ function openQtyAdjust(id){const item=allItems.find(i=>i.id===id);if(!item)retur
 function setQtyAction(action){qtyAction=action;const labels={add:'Amount to Add',remove:'Amount to Use / Remove',set:'Set New Total Quantity'};document.getElementById('qty-action-label').textContent=labels[action];['add','remove','set'].forEach(a=>{document.getElementById(`qa-${a}-btn`).className='btn '+(a===action?'btn-primary':'btn-secondary')+' flex-1';document.getElementById(`qa-${a}-btn`).style.justifyContent='center';});}
 async function confirmQtyAdjust(){const amount=parseInt(document.getElementById('qty-amount').value);if(!amount||amount<0){toast('Enter a valid amount','warn');return}const res=await api('/api/qty_adjust',{id:pendingQtyId,action:qtyAction,amount,note:document.getElementById('qty-note').value.trim()});if(res.ok){toast('Quantity updated ✓','ok');closeModal('qtyModal');await loadItems();const u=allItems.find(i=>i.id===pendingQtyId);if(u)showDetail(u);}else toast(res.msg||'Error','err');}
 
-let pendingModifyId=null;
-function openModify(id){const item=allItems.find(i=>i.id===id);if(!item)return;pendingModifyId=id;document.getElementById('mod-item-name').textContent=item.name;const specs=[item.cpu&&('CPU: '+item.cpu),item.ram&&('RAM: '+item.ram),item.storage&&('Storage: '+item.storage)].filter(Boolean).join(' | ');document.getElementById('mod-item-specs').textContent=specs||'No hardware specs recorded';document.getElementById('mod-spawn-cb').checked=false;document.getElementById('mod-spawn-form').style.display='none';document.getElementById('mod-notes').value='';document.getElementById('mod-new').value='';document.getElementById('spawn-name').value='';document.getElementById('spawn-cost').value='';document.getElementById('spawn-shelf').value=item.shelf||'';modFieldChanged();openModal('modifyModal');}
-function modFieldChanged(){const field=document.getElementById('mod-field').value;const item=allItems.find(i=>i.id===pendingModifyId);if(!item)return;const val={ram:item.ram,cpu:item.cpu,storage:item.storage,condition:item.condition,notes:item.notes,cost_price:item.cost_price!=null?item.cost_price.toFixed(2):'',sale_price:item.sale_price!=null?item.sale_price.toFixed(2):''}[field]||'';document.getElementById('mod-old').value=val;document.getElementById('mod-new').value='';if(['ram','cpu','storage'].includes(field)&&val) document.getElementById('spawn-name').value=val+' (removed from '+item.name+')';}
-function toggleSpawnForm(){document.getElementById('mod-spawn-form').style.display=document.getElementById('mod-spawn-cb').checked?'':'none';}
-async function confirmModify(){const field=document.getElementById('mod-field').value;const newVal=document.getElementById('mod-new').value.trim();if(!newVal){toast('New value required','warn');return;}const btn=document.getElementById('modBtn');btn.disabled=true;btn.textContent='Saving…';const payload={item_id:pendingModifyId,field_changed:field,old_value:document.getElementById('mod-old').value,new_value:newVal,notes:document.getElementById('mod-notes').value.trim()};if(document.getElementById('mod-spawn-cb').checked&&document.getElementById('spawn-name').value.trim()) payload.spawn_item={name:document.getElementById('spawn-name').value.trim(),condition:document.getElementById('spawn-cond').value,cost_price:document.getElementById('spawn-cost').value||null,shelf:document.getElementById('spawn-shelf').value.trim()||null};const res=await api('/api/item/modify',payload);btn.disabled=false;btn.textContent='Save Modification';if(res.ok){toast('Modification saved'+(res.spawned_id?` — new item #${res.spawned_id} created`:''),'ok');closeModal('modifyModal');await loadItems();const u=allItems.find(i=>i.id===pendingModifyId);if(u)showDetail(u);}else toast(res.msg||'Error','err');}
 
-async function loadModHistory(itemId){const sec=document.getElementById('dp-mod-section');const hist=document.getElementById('dp-mod-history');try{const mods=await fetch('/api/item/modifications?item_id='+itemId).then(r=>r.json());if(mods.length===0){sec.style.display='none';return;}sec.style.display='';hist.innerHTML=mods.map(m=>`<div class="mod-hist-row"><div style="flex:1"><div style="font-weight:600;font-size:12.5px">${m.field_changed}: <span style="color:#b91c1c;text-decoration:line-through">${m.old_value||'—'}</span> → <span style="color:#15803d">${m.new_value||'—'}</span></div>${m.notes?`<div style="font-size:11.5px;color:#888;margin-top:2px">${m.notes}</div>`:''}${m.spawned_name?`<div style="margin-top:4px"><span class="lineage-link" onclick="jumpToItem(${m.spawned_item_id})">🔗 Spawned: ${m.spawned_name}</span></div>`:''}</div><div style="font-size:11px;color:#aaa;text-align:right;flex-shrink:0">${m.ts.substring(0,10)}<br>${m.modified_by}</div></div>`).join('');}catch(e){sec.style.display='none';}}
-async function loadChildItems(itemId){const sec=document.getElementById('dp-children-section');const list=document.getElementById('dp-children-list');try{const res=await fetch('/api/item/lineage?item_id='+itemId).then(r=>r.json());if(!res.ok||res.children.length===0){sec.style.display='none';return;}sec.style.display='';list.innerHTML=res.children.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f0efec"><span style="color:#1d4ed8;font-size:13px">↳</span><span class="lineage-link" onclick="jumpToItem(${c.id})" style="flex:1">${c.name} — ${c.condition||''}${c.shelf?' · '+c.shelf:''}</span></div>`).join('');}catch(e){sec.style.display='none';}}
 async function loadNotes(itemId){
   const list=document.getElementById('dp-notes-list');
   document.getElementById('dp-note-input').dataset.itemId=itemId;
