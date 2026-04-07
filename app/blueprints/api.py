@@ -10,9 +10,9 @@ from app.db import query, execute
 from app.helpers import (login_required, perm_required, admin_required,
                          log_action, get_low_stock_alerts, hash_pw, verify_pw,
                          validate_password, api_rate_limit,
-                         _item_missing_fields, sync_item_task,
+                         _item_missing_fields, sync_item_task, sync_maintenance_tasks,
                          _parse_date_range, _date_filter_sql,
-                         location_filter_sql,
+                         location_filter_sql, notify_low_stock_if_needed,
                          ALL_PERMISSIONS, PERM_KEYS,
                          ADMIN_DEFAULT_PERMS, WORKER_DEFAULT_PERMS)
 
@@ -481,6 +481,11 @@ def api_checkout():
     if not item: return jsonify({"ok": False, "msg": "Not found"})
     if item["sold"]:        return jsonify({"ok": False, "msg": "Item has been sold"})
     if item["checked_out"]: return jsonify({"ok": False, "msg": "Already checked out"})
+    if item.get("out_of_service"):
+        reason = item.get("out_of_service_reason") or "No reason given"
+        return jsonify({"ok": False, "msg": f"Item is out of service: {reason}"})
+    if item.get("recall_flag"):
+        return jsonify({"ok": False, "msg": "Item is under recall and cannot be checked out"})
     item_override   = item["require_scan_checkout"] if item["require_scan_checkout"] is not None else -1
     scan_required   = item_override if item_override != -1 else (item["product_scan_req"] or 0)
     if scan_required:
@@ -495,20 +500,22 @@ def api_checkout():
     now  = datetime.now().strftime("%m/%d/%y")
     now_iso = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     who  = d.get("who", "").strip() or session.get("username", "?")
+    dept = (d.get("dept") or "").strip() or None
     new_sale = d.get("update_sale_price")
     expected_return = d.get("expected_return_date") or None
     if new_sale is not None:
         execute("UPDATE items SET sale_price=? WHERE id=?", [new_sale, item["id"]])
-    execute("UPDATE items SET checked_out=1,checkout_date=?,checkout_by=?,job_ref=?,expected_return_date=? WHERE id=?",
-            [now, who, d.get("job_ref", ""), expected_return, item["id"]])
+    execute("UPDATE items SET checked_out=1,checkout_date=?,checkout_by=?,job_ref=?,expected_return_date=?,checkout_dept=? WHERE id=?",
+            [now, who, d.get("job_ref", ""), expected_return, dept, item["id"]])
     execute("""INSERT INTO checkout_log
-               (item_id,item_name,checked_out_by,job_ref,checkout_date,expected_return_date,created_at)
-               VALUES (?,?,?,?,?,?,?)""",
-            [item["id"], item["name"], who, d.get("job_ref",""), now, expected_return, now_iso])
+               (item_id,item_name,checked_out_by,job_ref,checkout_date,expected_return_date,checkout_dept,created_at)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            [item["id"], item["name"], who, d.get("job_ref",""), now, expected_return, dept, now_iso])
     log_action("CHECKOUT", item["id"], item["name"],
-               f"By: {who} | Job: {d.get('job_ref','')}" +
+               f"By: {who}" + (f" | Dept: {dept}" if dept else "") + f" | Job: {d.get('job_ref','')}" +
                (f" | Sale price → ${new_sale:.2f}" if new_sale is not None else ""),
                {"checked_out": 0}, {"checked_out": 1})
+    notify_low_stock_if_needed(item.get("product_id"))
     return jsonify({"ok": True})
 
 
@@ -544,7 +551,7 @@ def api_checkin():
         execute("""UPDATE checkout_log SET checkin_date=?,checkin_note=?,checkin_by=?,duration_hours=?
                    WHERE id=?""",
                 [now_iso, checkin_note, checkin_by, duration_h, log_row["id"]])
-    execute("UPDATE items SET checked_out=0,checkout_date=NULL,checkout_by=NULL,job_ref=NULL,expected_return_date=NULL WHERE id=?",
+    execute("UPDATE items SET checked_out=0,checkout_date=NULL,checkout_by=NULL,job_ref=NULL,expected_return_date=NULL,checkout_dept=NULL WHERE id=?",
             [item["id"]])
     log_action("CHECKIN", item["id"], item["name"],
                f"Returned. Was on: {item['job_ref'] or '-'}" + (f" | Note: {checkin_note}" if checkin_note else ""),
@@ -618,8 +625,9 @@ def api_add_location():
     if not name:
         return jsonify({"ok": False, "msg": "Name required"})
     try:
-        lid = execute("INSERT INTO locations (name,description,created_at) VALUES (?,?,?)",
-                      [name, d.get("description",""), datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+        lid = execute("INSERT INTO locations (name,description,email,created_at) VALUES (?,?,?,?)",
+                      [name, d.get("description",""), (d.get("email") or "").strip(),
+                       datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
         return jsonify({"ok": True, "id": lid, "name": name})
     except Exception:
         return jsonify({"ok": False, "msg": "Location name already exists"})
@@ -633,8 +641,8 @@ def api_edit_location(loc_id):
     if not name:
         return jsonify({"ok": False, "msg": "Name required"})
     try:
-        execute("UPDATE locations SET name=?, description=? WHERE id=?",
-                [name, d.get("description", ""), loc_id])
+        execute("UPDATE locations SET name=?, description=?, email=? WHERE id=?",
+                [name, d.get("description", ""), (d.get("email") or "").strip(), loc_id])
         return jsonify({"ok": True})
     except Exception:
         return jsonify({"ok": False, "msg": "Location name already exists"})
@@ -649,15 +657,64 @@ def api_delete_location(loc_id):
     execute("DELETE FROM locations WHERE id=?", [loc_id])
     return jsonify({"ok": True})
 
+
+@bp.route("/api/location/<int:loc_id>/assign-items", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_assign_items_to_location(loc_id):
+    """Bulk-assign a list of items to this site."""
+    loc = query("SELECT id, name FROM locations WHERE id=?", [loc_id], one=True)
+    if not loc:
+        return jsonify({"ok": False, "msg": "Site not found"}), 404
+    item_ids = (request.json or {}).get("item_ids", [])
+    if not item_ids:
+        return jsonify({"ok": False, "msg": "No items provided"})
+    for iid in item_ids:
+        execute("UPDATE items SET location_id=? WHERE id=? AND active=1", [loc_id, iid])
+        log_action("ITEM_SITE_ASSIGN", item_id=iid,
+                   detail=f"Assigned to site: {loc['name']}")
+    return jsonify({"ok": True, "assigned": len(item_ids)})
+
+
+@bp.route("/api/items/unassigned")
+@login_required
+def api_items_unassigned():
+    """Items with no site assigned — used by the Assign Items modal."""
+    rows = query("""
+        SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
+               c.name as category, c.color, p.name as product_name
+        FROM items i
+        LEFT JOIN categories c ON c.id=i.category_id
+        LEFT JOIN products p   ON p.id=i.product_id
+        WHERE i.location_id IS NULL AND i.active=1 AND i.sold=0
+        ORDER BY i.name
+    """)
+    return jsonify([dict(r) for r in rows])
+
+
+def _item_location_allowed(item_id):
+    """Return True if the current user is allowed to access this item's location."""
+    loc_ids = session.get("location_ids") or []
+    if not loc_ids:
+        return True
+    item = query("SELECT location_id FROM items WHERE id=? AND active=1", [item_id], one=True)
+    return item is not None and item["location_id"] in loc_ids
+
+
 @bp.route("/api/item/<int:item_id>/notes")
 @login_required
 def api_item_notes(item_id):
+    if not _item_location_allowed(item_id):
+        return jsonify([])
     rows = query("SELECT * FROM item_notes WHERE item_id=? ORDER BY id DESC", [item_id])
     return jsonify([dict(r) for r in rows])
 
 @bp.route("/api/item/<int:item_id>/note", methods=["POST"])
 @login_required
+@perm_required("write_items")
 def api_add_note(item_id):
+    if not _item_location_allowed(item_id):
+        return jsonify({"ok": False, "msg": "Item not found"}), 403
     note = (request.json or {}).get("note", "").strip()
     if not note:
         return jsonify({"ok": False, "msg": "Note is required"})
@@ -672,6 +729,8 @@ def api_add_note(item_id):
 @bp.route("/api/item/<int:item_id>/reservations")
 @login_required
 def api_item_reservations(item_id):
+    if not _item_location_allowed(item_id):
+        return jsonify([])
     rows = query("""SELECT * FROM item_reservations
                     WHERE item_id=? AND cancelled=0 ORDER BY reserved_from""", [item_id])
     return jsonify([dict(r) for r in rows])
@@ -679,7 +738,10 @@ def api_item_reservations(item_id):
 
 @bp.route("/api/item/<int:item_id>/reservation", methods=["POST"])
 @login_required
+@perm_required("checkout_checkin")
 def api_add_reservation(item_id):
+    if not _item_location_allowed(item_id):
+        return jsonify({"ok": False, "msg": "Item not found"}), 403
     d    = request.json or {}
     by   = (d.get("reserved_by") or "").strip()
     frm  = (d.get("reserved_from") or "").strip()
@@ -722,6 +784,8 @@ def api_cancel_reservation(res_id):
 @bp.route("/api/item/<int:item_id>/photos")
 @login_required
 def api_item_photos(item_id):
+    if not _item_location_allowed(item_id):
+        return jsonify([])
     rows = query("SELECT id,caption,uploaded_by,created_at FROM item_photos WHERE item_id=? ORDER BY id",
                  [item_id])
     return jsonify([dict(r) for r in rows])
@@ -752,8 +816,14 @@ def api_upload_photo(item_id):
 @bp.route("/api/photo/<int:photo_id>/data")
 @login_required
 def api_photo_data(photo_id):
-    row = query("SELECT data_url FROM item_photos WHERE id=?", [photo_id], one=True)
+    row = query("""SELECT ip.data_url, i.location_id
+                   FROM item_photos ip
+                   JOIN items i ON i.id = ip.item_id
+                   WHERE ip.id=?""", [photo_id], one=True)
     if not row:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    loc_ids = session.get("location_ids") or []
+    if loc_ids and row["location_id"] not in loc_ids:
         return jsonify({"ok": False, "msg": "Not found"}), 404
     return jsonify({"ok": True, "data_url": row["data_url"]})
 
@@ -852,16 +922,18 @@ def api_qty_adjust():
     note   = d.get("note", "")
     action = d.get("action")
     if action == "add":
-        nq = item["qty"] + amount
-        execute("UPDATE items SET qty=? WHERE id=?", [nq, item["id"]])
+        execute("UPDATE items SET qty=qty+? WHERE id=?", [amount, item["id"]])
+        nq = query("SELECT qty FROM items WHERE id=?", [item["id"]], one=True)["qty"]
         log_action("QTY_ADD", item["id"], item["name"], f"+{amount}. {note}. Total:{nq}", before, {"qty": nq})
     elif action == "remove":
-        no = (item["qty_out"] or 0) + amount
-        execute("UPDATE items SET qty_out=? WHERE id=?", [no, item["id"]])
-        log_action("QTY_REMOVE", item["id"], item["name"], f"-{amount}. {note}. Left:{item['qty']-no}", before, {"qty_out": no})
+        execute("UPDATE items SET qty_out=qty_out+? WHERE id=?", [amount, item["id"]])
+        u  = query("SELECT qty, qty_out FROM items WHERE id=?", [item["id"]], one=True)
+        log_action("QTY_REMOVE", item["id"], item["name"], f"-{amount}. {note}. Left:{u['qty']-(u['qty_out'] or 0)}", before, {"qty_out": u["qty_out"]})
+        notify_low_stock_if_needed(item.get("product_id"))
     elif action == "set":
         execute("UPDATE items SET qty=?,qty_out=0 WHERE id=?", [amount, item["id"]])
         log_action("QTY_SET", item["id"], item["name"], f"Set to {amount}. {note}", before, {"qty": amount})
+        notify_low_stock_if_needed(item.get("product_id"))
     u = query("SELECT qty,qty_out FROM items WHERE id=?", [item["id"]], one=True)
     return jsonify({"ok": True, "qty": u["qty"], "qty_out": u["qty_out"]})
 
@@ -874,6 +946,9 @@ def api_item_sell():
     item = query("SELECT * FROM items WHERE id=? AND active=1", [d["id"]], one=True)
     if not item:            return jsonify({"ok": False, "msg": "Not found"})
     if item["checked_out"]: return jsonify({"ok": False, "msg": "Item is currently checked out"})
+    loc_ids = session.get("location_ids") or []
+    if loc_ids and item["location_id"] not in loc_ids:
+        return jsonify({"ok": False, "msg": "Not found"})
     price   = float(d.get("price") or item["sale_price"] or 0)
     sold_to = d.get("sold_to", "").strip()
     now     = datetime.now().strftime("%Y-%m-%d")
@@ -883,7 +958,110 @@ def api_item_sell():
     log_action("ITEM_SOLD", item["id"], item["name"],
                f"Sold to: {sold_to or 'unknown'} | Price: ${price:.2f} | Profit: ${profit:.2f}",
                {"sold": 0}, {"sold": 1, "price": price})
+    notify_low_stock_if_needed(item.get("product_id"))
     return jsonify({"ok": True, "profit": profit})
+
+
+# ── Out of service ────────────────────────────────────────────────────────────
+
+@bp.route("/api/item/out-of-service", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_item_out_of_service():
+    d      = request.json or {}
+    iid    = d.get("id")
+    active = bool(d.get("active", True))   # True = mark OOS, False = clear
+    reason = (d.get("reason") or "").strip() or None
+    item   = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    loc_ids = session.get("location_ids") or []
+    if loc_ids and item["location_id"] not in loc_ids:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    execute("UPDATE items SET out_of_service=?, out_of_service_reason=? WHERE id=?",
+            [1 if active else 0, reason if active else None, iid])
+    if active:
+        log_action("OUT_OF_SERVICE", iid, item["name"], reason or "Marked out of service")
+    else:
+        log_action("RETURNED_TO_SERVICE", iid, item["name"], "Returned to service")
+    return jsonify({"ok": True})
+
+
+# ── Recall flag ───────────────────────────────────────────────────────────────
+
+@bp.route("/api/item/recall", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_item_recall():
+    d      = request.json or {}
+    iid    = d.get("id")
+    active = bool(d.get("active", True))
+    notes  = (d.get("notes") or "").strip() or None
+    item   = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    loc_ids = session.get("location_ids") or []
+    if loc_ids and item["location_id"] not in loc_ids:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    execute("UPDATE items SET recall_flag=?, recall_notes=? WHERE id=?",
+            [1 if active else 0, notes if active else None, iid])
+    if active:
+        log_action("RECALL_FLAGGED", iid, item["name"], notes or "Flagged under recall")
+    else:
+        log_action("RECALL_CLEARED", iid, item["name"], "Recall flag cleared")
+    return jsonify({"ok": True})
+
+
+# ── Service log ───────────────────────────────────────────────────────────────
+
+@bp.route("/api/item/<int:item_id>/service-log")
+@login_required
+def api_item_service_log(item_id):
+    if not _item_location_allowed(item_id):
+        return jsonify([])
+    rows = query("SELECT * FROM service_log WHERE item_id=? ORDER BY service_date DESC, id DESC",
+                 [item_id])
+    return jsonify([dict(r) for r in rows])
+
+
+@bp.route("/api/item/<int:item_id>/service-log", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_add_service_log(item_id):
+    if not _item_location_allowed(item_id):
+        return jsonify({"ok": False, "msg": "Item not found"}), 403
+    d            = request.json or {}
+    service_date = (d.get("service_date") or "").strip()
+    service_type = (d.get("service_type") or "").strip()
+    if not service_date or not service_type:
+        return jsonify({"ok": False, "msg": "service_date and service_type are required"})
+    now  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rid  = execute(
+        "INSERT INTO service_log (item_id,service_date,service_type,performed_by,provider,"
+        "notes,next_service_date,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        [item_id, service_date, service_type,
+         (d.get("performed_by") or "").strip() or None,
+         (d.get("provider") or "").strip() or None,
+         (d.get("notes") or "").strip() or None,
+         (d.get("next_service_date") or "").strip() or None,
+         session.get("username", "?"), now])
+    # If a next_service_date was given, write it into extra_fields and re-sync maintenance tasks
+    next_svc = (d.get("next_service_date") or "").strip()
+    if next_svc:
+        item = query("SELECT extra_fields FROM items WHERE id=?", [item_id], one=True)
+        if item:
+            try:
+                ef = json.loads(item["extra_fields"] or "{}")
+            except Exception:
+                ef = {}
+            ef["next_service"] = next_svc
+            execute("UPDATE items SET extra_fields=? WHERE id=?",
+                    [json.dumps(ef), item_id])
+            sync_maintenance_tasks(item_id)
+    log_action("SERVICE_LOG", item_id, None,
+               f"{service_type} on {service_date}" +
+               (f" by {d.get('performed_by')}" if d.get("performed_by") else ""))
+    return jsonify({"ok": True, "id": rid})
 
 
 @bp.route("/api/item/add", methods=["POST"])
@@ -911,7 +1089,11 @@ def api_item_add():
                 return jsonify({"ok": False, "msg": "Vendor SKU is required for this product",   "field": "sku"})
     serial = (d.get("serial") or "").strip()
     if serial:
-        dup = query("SELECT id,name FROM items WHERE serial=? AND active=1", [serial], one=True)
+        # Serial uniqueness is scoped to the same product — the same SN can exist on different products
+        if prod_id:
+            dup = query("SELECT id,name FROM items WHERE serial=? AND product_id=? AND active=1", [serial, prod_id], one=True)
+        else:
+            dup = query("SELECT id,name FROM items WHERE serial=? AND product_id IS NULL AND active=1", [serial], one=True)
         if dup: return jsonify({"ok": False, "msg": f"Duplicate serial — already on item #{dup['id']} ({dup['name']})"})
     sku = (d.get("sku") or "").strip()
     if sku:
@@ -923,6 +1105,7 @@ def api_item_add():
         saved = query("SELECT * FROM items WHERE id=?", [iid], one=True)
         if saved:
             sync_item_task(iid, d.get("name", ""), _item_missing_fields(dict(saved)))
+            sync_maintenance_tasks(iid)
         return jsonify({"ok": True, "id": iid})
     except Exception as e:
         return jsonify({"ok": False, "msg": f"Save failed: {str(e)}"})
@@ -942,7 +1125,12 @@ def api_item_edit():
         return jsonify({"ok": False, "msg": "Invalid category"})
     serial = (d.get("serial") or "").strip()
     if serial:
-        dup = query("SELECT id,name FROM items WHERE serial=? AND active=1 AND id!=?", [serial, d["id"]], one=True)
+        # Serial uniqueness scoped to same product
+        edit_prod_id = d.get("product_id") or item["product_id"]
+        if edit_prod_id:
+            dup = query("SELECT id,name FROM items WHERE serial=? AND product_id=? AND active=1 AND id!=?", [serial, edit_prod_id, d["id"]], one=True)
+        else:
+            dup = query("SELECT id,name FROM items WHERE serial=? AND product_id IS NULL AND active=1 AND id!=?", [serial, d["id"]], one=True)
         if dup: return jsonify({"ok": False, "msg": f"Duplicate serial — already on item #{dup['id']} ({dup['name']})"})
     sku = (d.get("sku") or "").strip()
     if sku:
@@ -954,6 +1142,7 @@ def api_item_edit():
         saved = query("SELECT * FROM items WHERE id=?", [d["id"]], one=True)
         if saved:
             sync_item_task(d["id"], d.get("name", ""), _item_missing_fields(dict(saved)))
+            sync_maintenance_tasks(d["id"])
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "msg": f"Save failed: {str(e)}"})
@@ -963,15 +1152,26 @@ def api_item_edit():
 @login_required
 @perm_required("delete_items")
 def api_item_delete():
-    d   = request.json
-    ids = d.get("ids") or ([d["id"]] if d.get("id") else [])
+    d           = request.json
+    ids         = d.get("ids") or ([d["id"]] if d.get("id") else [])
+    loc_ids     = session.get("location_ids") or []
+    deleted     = 0
+    product_ids = set()
     for iid in ids:
-        item = query("SELECT * FROM items WHERE id=?", [iid], one=True)
-        if item:
-            execute("UPDATE items SET active=0 WHERE id=?", [iid])
-            execute("DELETE FROM tasks WHERE item_id=?", [iid])
-            log_action("ITEM_DELETE", iid, item["name"], "Deleted")
-    return jsonify({"ok": True, "deleted": len(ids)})
+        item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+        if not item:
+            continue
+        if loc_ids and item["location_id"] not in loc_ids:
+            continue
+        execute("UPDATE items SET active=0 WHERE id=?", [iid])
+        execute("DELETE FROM tasks WHERE item_id=?", [iid])
+        log_action("ITEM_DELETE", iid, item["name"], "Deleted")
+        deleted += 1
+        if item.get("product_id"):
+            product_ids.add(item["product_id"])
+    for pid in product_ids:
+        notify_low_stock_if_needed(pid)
+    return jsonify({"ok": True, "deleted": deleted})
 
 
 # ── Bulk operations ───────────────────────────────────────────────────────────
@@ -988,17 +1188,27 @@ def api_bulk_checkout():
     if not ids:  return jsonify({"ok": False, "msg": "No items selected"})
     if not who:  return jsonify({"ok": False, "msg": "Checked-out-to is required"})
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    loc_ids = session.get("location_ids") or []
     done, skipped = 0, 0
+    product_ids = set()
     for iid in ids:
         item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
         if not item or item["checked_out"] or item["qty"] is not None or item["sold"]:
             skipped += 1; continue
-        execute("UPDATE items SET checked_out=1, checkout_by=?, checkout_date=?, job_ref=?, expected_return_date=? WHERE id=?",
+        if loc_ids and item["location_id"] not in loc_ids:
+            skipped += 1; continue
+        if item.get("out_of_service") or item.get("recall_flag"):
+            skipped += 1; continue
+        execute("UPDATE items SET checked_out=1, checkout_by=?, checkout_date=?, job_ref=?, expected_return_date=?, checkout_dept=NULL WHERE id=?",
                 [who, now, job or None, ret, iid])
         execute("INSERT INTO checkout_log (item_id,item_name,checked_out_by,job_ref,checkout_date,created_at) VALUES (?,?,?,?,?,?)",
                 [iid, item["name"], who, job or None, now[:10], now])
         log_action("CHECKOUT", iid, item["name"], f"To: {who}{' | Job: '+job if job else ''}")
         done += 1
+        if item.get("product_id"):
+            product_ids.add(item["product_id"])
+    for pid in product_ids:
+        notify_low_stock_if_needed(pid)
     return jsonify({"ok": True, "done": done, "skipped": skipped})
 
 
@@ -1010,18 +1220,24 @@ def api_bulk_checkin():
     ids  = [int(i) for i in (d.get("ids") or [])]
     note = d.get("checkin_note", "").strip() or None
     if not ids: return jsonify({"ok": False, "msg": "No items selected"})
-    now  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    user = session.get("username", "")
+    now     = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user    = session.get("username", "")
+    loc_ids = session.get("location_ids") or []
     done, skipped = 0, 0
     for iid in ids:
         item = query("SELECT * FROM items WHERE id=? AND active=1 AND checked_out=1", [iid], one=True)
         if not item: skipped += 1; continue
+        if loc_ids and item["location_id"] not in loc_ids:
+            skipped += 1; continue
         checkout_dt = item["checkout_date"] or now
-        try:
-            dur = round((datetime.now() - datetime.strptime(checkout_dt[:16], "%Y-%m-%d %H:%M")).total_seconds() / 3600, 2)
-        except Exception:
-            dur = None
-        execute("UPDATE items SET checked_out=0, checkout_by=NULL, checkout_date=NULL, job_ref=NULL, expected_return_date=NULL WHERE id=?", [iid])
+        dur = None
+        for fmt, width in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d %H:%M", 16), ("%m/%d/%y", 8)):
+            try:
+                dur = round((datetime.now() - datetime.strptime(checkout_dt[:width], fmt)).total_seconds() / 3600, 2)
+                break
+            except Exception:
+                pass
+        execute("UPDATE items SET checked_out=0, checkout_by=NULL, checkout_date=NULL, job_ref=NULL, expected_return_date=NULL, checkout_dept=NULL WHERE id=?", [iid])
         execute("""UPDATE checkout_log SET checkin_date=?, checkin_note=?, checkin_by=?, duration_hours=?
                    WHERE item_id=? AND checkin_date IS NULL""",
                 [now[:10], note, user, dur, iid])
@@ -1194,7 +1410,7 @@ def api_kit_checkout(kid):
     now   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     done  = 0
     for item in items:
-        execute("UPDATE items SET checked_out=1, checkout_by=?, checkout_date=?, job_ref=?, expected_return_date=? WHERE id=?",
+        execute("UPDATE items SET checked_out=1, checkout_by=?, checkout_date=?, job_ref=?, expected_return_date=?, checkout_dept=NULL WHERE id=?",
                 [who, now, job or None, ret, item["id"]])
         execute("INSERT INTO checkout_log (item_id,item_name,checked_out_by,job_ref,checkout_date,created_at) VALUES (?,?,?,?,?,?)",
                 [item["id"], item["name"], who, job or None, now[:10], now])
@@ -1219,7 +1435,7 @@ def api_kit_checkin(kid):
             dur = round((datetime.now() - datetime.strptime((item["checkout_date"] or now)[:16], "%Y-%m-%d %H:%M")).total_seconds() / 3600, 2)
         except Exception:
             dur = None
-        execute("UPDATE items SET checked_out=0, checkout_by=NULL, checkout_date=NULL, job_ref=NULL, expected_return_date=NULL WHERE id=?", [item["id"]])
+        execute("UPDATE items SET checked_out=0, checkout_by=NULL, checkout_date=NULL, job_ref=NULL, expected_return_date=NULL, checkout_dept=NULL WHERE id=?", [item["id"]])
         execute("UPDATE checkout_log SET checkin_date=?, checkin_note=?, checkin_by=?, duration_hours=? WHERE item_id=? AND checkin_date IS NULL",
                 [now[:10], note, user, dur, item["id"]])
         log_action("CHECKIN", item["id"], item["name"], f"Kit: {kit['name']}")
@@ -1248,6 +1464,9 @@ def api_item_modify():
     if not iid: return jsonify({"ok": False, "msg": "item_id required"})
     item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
     if not item: return jsonify({"ok": False, "msg": "Item not found"})
+    loc_ids = session.get("location_ids") or []
+    if loc_ids and item["location_id"] not in loc_ids:
+        return jsonify({"ok": False, "msg": "Item not found"})
     field   = d.get("field_changed", "").strip()
     old_val = d.get("old_value", "")
     new_val = d.get("new_value", "")
@@ -1657,6 +1876,7 @@ def api_task_delete():
 
 @bp.route("/api/contact/add", methods=["POST"])
 @login_required
+@perm_required("write_items")
 def api_contact_add():
     d    = request.json
     name = (d.get("name") or "").strip()
@@ -1669,6 +1889,7 @@ def api_contact_add():
 
 @bp.route("/api/contact/edit", methods=["POST"])
 @login_required
+@perm_required("write_items")
 def api_contact_edit():
     d = request.json
     execute("UPDATE contacts SET name=?,role=?,email=?,phone=?,notes=?,company_id=?,company_type=? WHERE id=?",
@@ -1680,6 +1901,7 @@ def api_contact_edit():
 
 @bp.route("/api/contact/delete", methods=["POST"])
 @login_required
+@perm_required("delete_items")
 def api_contact_delete():
     execute("UPDATE contacts SET active=0 WHERE id=?", [request.json["id"]])
     return jsonify({"ok": True})

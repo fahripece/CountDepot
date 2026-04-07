@@ -27,6 +27,7 @@
       <input type="hidden" id="site-id">
       <div class="field"><label class="label">Site Name *</label><input class="input" id="site-name" placeholder="e.g. Roslindale Hub"></div>
       <div class="field"><label class="label">Description</label><input class="input" id="site-desc" placeholder="Optional notes"></div>
+      <div class="field"><label class="label">Alert Email</label><input class="input" id="site-email" type="email" placeholder="e.g. warehouse@company.com — receives low-stock alerts"></div>
     </div>
     <div class="modal-footer" style="justify-content:space-between">
       <button class="btn btn-danger btn-sm" id="site-delete-btn" style="display:none" onclick="deleteSite()">Delete Site</button>
@@ -116,6 +117,7 @@ function openAddSite(){
   document.getElementById('site-id').value='';
   document.getElementById('site-name').value='';
   document.getElementById('site-desc').value='';
+  document.getElementById('site-email').value='';
   document.getElementById('siteModalTitle').textContent='Add Site';
   document.getElementById('site-delete-btn').style.display='none';
   openModal('siteModal');
@@ -126,6 +128,7 @@ function openEditSite(id){
   document.getElementById('site-id').value=s.id;
   document.getElementById('site-name').value=s.name;
   document.getElementById('site-desc').value=s.description||'';
+  document.getElementById('site-email').value=s.email||'';
   document.getElementById('siteModalTitle').textContent='Edit Site';
   document.getElementById('site-delete-btn').style.display='';
   openModal('siteModal');
@@ -134,7 +137,7 @@ async function saveSite(){
   const name=document.getElementById('site-name').value.trim();
   if(!name){toast('Site name is required','warn');return;}
   const id=document.getElementById('site-id').value;
-  const payload={name,description:document.getElementById('site-desc').value.trim()};
+  const payload={name,description:document.getElementById('site-desc').value.trim(),email:document.getElementById('site-email').value.trim()};
   let res;
   if(id){
     res=await fetch('/api/location/'+id,{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify(payload)}).then(r=>r.json());

@@ -583,12 +583,25 @@ function skipScanConfirm(){
   window.location.href='/';
 }
 
-// Populate site dropdown
+// Populate site dropdown and auto-select from ?location_id= param
 (async function(){
   try{
     const sites=await fetch('/api/locations').then(r=>r.json());
     const sel=document.getElementById('fi-location');
     sites.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;sel.appendChild(o);});
+    const locId=new URLSearchParams(window.location.search).get('location_id');
+    if(locId){
+      sel.value=locId;
+      if(sel.value){
+        sel.style.fontWeight='700';
+        sel.style.borderColor='#0f172a';
+        const field=sel.closest('.field');
+        if(field){
+          const lbl=field.querySelector('.label');
+          if(lbl) lbl.style.color='#0f172a';
+        }
+      }
+    }
   }catch(e){}
 })();
 

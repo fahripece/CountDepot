@@ -291,6 +291,61 @@ def get_low_stock_alerts():
             for r in rows]
 
 
+# ── Low stock notification ────────────────────────────────────────────────────
+
+def notify_low_stock_if_needed(product_id):
+    """Check if a product is below threshold and send an alert email if so.
+    Silently no-ops if SMTP is not configured, product has no threshold, or an
+    alert was already sent within the last 24 hours. Never raises."""
+    if not product_id:
+        return
+    from config import Config
+    if not Config.SMTP_HOST:
+        return
+    try:
+        product = query("""
+            SELECT p.id, p.name, p.low_stock_threshold, p.low_stock_last_alerted,
+                   COUNT(i.id) AS available_count
+            FROM products p
+            LEFT JOIN items i ON i.product_id = p.id
+                AND i.active = 1 AND i.sold = 0 AND i.checked_out = 0
+            WHERE p.id = ? AND p.active = 1 AND p.low_stock_threshold > 0
+            GROUP BY p.id
+            HAVING available_count <= p.low_stock_threshold
+        """, [product_id], one=True)
+        if not product:
+            return
+        last = product["low_stock_last_alerted"]
+        if last:
+            from datetime import timedelta
+            last_dt = datetime.strptime(last[:19], "%Y-%m-%d %H:%M:%S")
+            if datetime.utcnow() - last_dt < timedelta(hours=24):
+                return
+        # Prefer site-specific alert emails over global admin emails
+        site_rows = query("""
+            SELECT DISTINCT l.email
+            FROM items i
+            JOIN locations l ON l.id = i.location_id
+            WHERE i.product_id = ? AND i.active = 1
+              AND l.email IS NOT NULL AND l.email != ''
+        """, [product_id])
+        emails = [r["email"] for r in site_rows if r.get("email")]
+        if not emails:
+            admins = query(
+                "SELECT email FROM users WHERE role='admin' AND email IS NOT NULL AND email != ''")
+            emails = [r["email"] for r in admins if r.get("email")]
+        if not emails:
+            return
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        execute("UPDATE products SET low_stock_last_alerted=? WHERE id=?", [now, product_id])
+        from app.mailer import send_low_stock_alert
+        for email in emails:
+            send_low_stock_alert(email, product["name"],
+                                 product["available_count"], product["low_stock_threshold"])
+    except Exception:
+        pass  # never crash the request
+
+
 # ── Item completeness ─────────────────────────────────────────────────────────
 
 def _item_missing_fields(s):
@@ -304,6 +359,72 @@ def _item_missing_fields(s):
     if s.get("cost_price") is None: missing.append("cost")
     if not s.get("shelf"):          missing.append("shelf")
     return missing
+
+def sync_maintenance_tasks(item_id):
+    """Create, update, or close maintenance/calibration tasks based on dates in extra_fields.
+    Runs after any item save. Never raises."""
+    try:
+        item = query("SELECT name, extra_fields FROM items WHERE id=? AND active=1",
+                     [item_id], one=True)
+        if not item:
+            return
+        from datetime import date as _date, timedelta
+        today = _date.today()
+        warn_days = 30
+        try:
+            ef = json.loads(item["extra_fields"] or "{}")
+        except Exception:
+            ef = {}
+
+        checks = [
+            ("service",     ef.get("next_service"),    "Service due"),
+            ("calibration", ef.get("calibration_due"), "Calibration due"),
+        ]
+        now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        for task_key, date_str, label in checks:
+            existing = query(
+                "SELECT id, status FROM tasks WHERE item_id=? AND task_key=?",
+                [item_id, task_key], one=True)
+
+            if not date_str:
+                # No date set — close any open task
+                if existing and existing["status"] != "done":
+                    execute("UPDATE tasks SET status='done', updated_at=? WHERE id=?",
+                            [now_ts, existing["id"]])
+                continue
+
+            try:
+                due = _date.fromisoformat(date_str[:10])
+            except Exception:
+                continue
+
+            days_until = (due - today).days
+            if days_until < 0:
+                urgency = "high"
+                detail  = f"{label}: {item['name']} — OVERDUE since {date_str[:10]}"
+            elif days_until <= warn_days:
+                urgency = "high" if days_until <= 7 else "medium"
+                detail  = f"{label}: {item['name']} — due {date_str[:10]} ({days_until}d)"
+            else:
+                # Due date is far out — close any open task
+                if existing and existing["status"] != "done":
+                    execute("UPDATE tasks SET status='done', updated_at=? WHERE id=?",
+                            [now_ts, existing["id"]])
+                continue
+
+            if existing:
+                execute(
+                    "UPDATE tasks SET title=?, urgency=?, notes=?, status='todo', updated_at=? WHERE id=?",
+                    [detail, urgency, date_str[:10], now_ts, existing["id"]])
+            else:
+                execute(
+                    "INSERT INTO tasks (title,urgency,status,notes,created_by,created_at,item_id,task_key) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    [detail, urgency, "todo", date_str[:10], "system", now_ts, item_id, task_key])
+    except Exception:
+        pass
+
 
 def sync_item_task(item_id, item_name, missing_fields):
     existing = query("SELECT id, status FROM tasks WHERE item_id=?", [item_id], one=True)

@@ -43,7 +43,8 @@ MIGRATIONS = [
     ("products", "require_internal_sku", "INTEGER DEFAULT 1"),
     ("products", "require_sku_label",    "INTEGER DEFAULT 0"),
     ("products", "print_scan_label",     "INTEGER DEFAULT 0"),
-    ("products", "low_stock_threshold",  "INTEGER DEFAULT 0"),
+    ("products", "low_stock_threshold",    "INTEGER DEFAULT 0"),
+    ("products", "low_stock_last_alerted", "TEXT"),
 
     # items additions
     ("items", "extra_fields",    "TEXT DEFAULT '{}'"),
@@ -75,6 +76,24 @@ MIGRATIONS = [
     # items — new inventory features
     ("items", "tags",   "TEXT NOT NULL DEFAULT ''"),
     ("items", "kit_id", "INTEGER"),
+
+    # items — out-of-service + recall
+    ("items", "out_of_service",        "INTEGER NOT NULL DEFAULT 0"),
+    ("items", "out_of_service_reason", "TEXT"),
+    ("items", "recall_flag",           "INTEGER NOT NULL DEFAULT 0"),
+    ("items", "recall_notes",          "TEXT"),
+
+    # items — checkout department/ward
+    ("items", "checkout_dept", "TEXT"),
+
+    # checkout_log — department/ward
+    ("checkout_log", "checkout_dept", "TEXT"),
+
+    # tasks — key for maintenance-type tasks
+    ("tasks", "task_key", "TEXT"),
+
+    # locations — per-site alert email
+    ("locations", "email", "TEXT"),
 
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
 ]
@@ -337,6 +356,19 @@ def _init_db_conn(db):
             uploaded_by TEXT,
             created_at  TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS service_log (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id           INTEGER NOT NULL REFERENCES items(id),
+            service_date      TEXT NOT NULL,
+            service_type      TEXT NOT NULL,
+            performed_by      TEXT,
+            provider          TEXT,
+            notes             TEXT,
+            next_service_date TEXT,
+            created_by        TEXT,
+            created_at        TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_service_log_item ON service_log(item_id);
         CREATE TABLE IF NOT EXISTS user_locations (
             user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
@@ -390,8 +422,7 @@ def _init_db_conn(db):
 
     # ── Seed default data if tables are empty ──────────────────────────────────
     if not db.execute("SELECT COUNT(*) FROM companies").fetchone()[0]:
-        for co in ["Amazon", "B&H Photo", "CDW", "Adorama", "Newegg",
-                   "Insight", "Dell Technologies", "Other"]:
+        for co in ["Other"]:
             try:
                 db.execute("INSERT INTO companies (name) VALUES (?)", [co])
             except Exception:
@@ -436,10 +467,7 @@ def seed_tenant(slug):
         "INSERT INTO users (username,password,role,must_change_password) VALUES (?,?,?,1)",
         ["admin", hash_pw("admin123"), "admin"])
 
-    for name in ["CDW", "SHI", "Insight", "Zones", "PC Connection",
-                 "Provantage", "B&H Photo", "Newegg Business",
-                 "Amazon Business", "Staples Business",
-                 "TigerDirect", "Micro Center"]:
+    for name in ["Other"]:
         try:
             db.execute("INSERT INTO distributors (name) VALUES (?)", [name])
         except Exception:

@@ -8,12 +8,16 @@
   <span class="topbar-sub">{{ location.description }}</span>
   {% endif %}
   <div class="topbar-right">
-    <input id="siteSearch" class="input" style="width:220px" placeholder="Search items…" oninput="filterItems()">
+    <input id="siteSearch" class="input" style="width:200px" placeholder="Search items…" oninput="filterItems()">
     <select class="select" id="statusFilter" onchange="filterItems()" style="width:130px">
       <option value="">All items</option>
       <option value="in">Available</option>
       <option value="out">Checked out</option>
     </select>
+    {% if session.get('role') != 'viewer' %}
+    <button class="btn btn-secondary btn-sm" onclick="openAssignModal()">Assign Items</button>
+    <a href="/add-item?location_id={{ location.id }}" class="btn btn-primary btn-sm">+ Add Item</a>
+    {% endif %}
   </div>
 </div>
 
@@ -42,8 +46,36 @@
   <div id="item-count" style="font-size:12px;color:#94a3b8;margin-top:8px"></div>
 </div>
 
+{% if session.get('role') != 'viewer' %}
+<!-- ASSIGN ITEMS MODAL -->
+<div class="overlay" id="assignModal">
+  <div class="modal" style="max-width:600px;width:100%">
+    <div class="modal-header">
+      <div class="modal-title">Assign Items to {{ location.name }}</div>
+      <button class="modal-close" onclick="closeModal('assignModal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding-bottom:0">
+      <p style="font-size:13px;color:#64748b;margin-bottom:12px">Select items that have no site assigned and move them here.</p>
+      <input class="input" id="assignSearch" placeholder="Search unassigned items…" oninput="filterUnassigned()" style="margin-bottom:12px">
+      <div style="max-height:340px;overflow-y:auto;border:1px solid #e5e3de;border-radius:8px" id="assignList">
+        <div style="text-align:center;padding:32px;color:#94a3b8">Loading…</div>
+      </div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:8px" id="assignCount"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <span style="font-size:13px;color:#64748b" id="assignSelected">0 selected</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="closeModal('assignModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmAssign()">Assign to This Site</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <script>
 let allItems=[], locationData={};
+let unassignedItems=[], selectedIds=new Set();
 const LOC_ID={{ location.id }};
 
 async function loadSite(){
@@ -83,7 +115,7 @@ function filterItems(){
 function renderItems(items){
   const tbody=document.getElementById('items-tbody');
   if(!items.length){
-    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:40px">No items match</td></tr>';
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:40px">No items at this site yet — use "+ Add Item" or "Assign Items" to get started.</td></tr>';
     document.getElementById('item-count').textContent='';
     return;
   }
@@ -108,6 +140,70 @@ function renderItems(items){
   }).join('');
   document.getElementById('item-count').textContent=items.length+' item'+(items.length!==1?'s':'');
 }
+
+{% if session.get('role') != 'viewer' %}
+async function openAssignModal(){
+  selectedIds=new Set();
+  updateSelectedCount();
+  openModal('assignModal');
+  document.getElementById('assignSearch').value='';
+  document.getElementById('assignList').innerHTML='<div style="text-align:center;padding:32px;color:#94a3b8">Loading…</div>';
+  unassignedItems=await fetch('/api/items/unassigned').then(r=>r.json());
+  filterUnassigned();
+}
+
+function filterUnassigned(){
+  const q=(document.getElementById('assignSearch').value||'').toLowerCase();
+  const items=q?unassignedItems.filter(i=>[i.name,i.serial,i.sku,i.internal_sku,i.product_name,i.category].filter(Boolean).some(v=>String(v).toLowerCase().includes(q))):unassignedItems;
+  renderUnassigned(items);
+}
+
+function renderUnassigned(items){
+  const list=document.getElementById('assignList');
+  document.getElementById('assignCount').textContent=items.length+' unassigned item'+(items.length!==1?'s':'');
+  if(!items.length){
+    list.innerHTML='<div style="text-align:center;padding:32px;color:#94a3b8">No unassigned items found.</div>';
+    return;
+  }
+  list.innerHTML=items.map(i=>{
+    const serial=i.serial||i.sku||i.internal_sku||'';
+    const checked=selectedIds.has(i.id)?'checked':'';
+    return `<label style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid #f0efec;cursor:pointer;transition:background .1s" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
+      <input type="checkbox" value="${i.id}" ${checked} onchange="toggleItem(${i.id},this.checked)" style="width:15px;height:15px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px">${i.name||'—'}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:1px">${[i.product_name,serial].filter(Boolean).join(' · ')||'No product / serial'}</div>
+      </div>
+      ${i.category?`<span class="tag" style="background:${i.color}18;color:${i.color};font-size:10px">${i.category}</span>`:''}
+    </label>`;
+  }).join('');
+}
+
+function toggleItem(id, checked){
+  if(checked) selectedIds.add(id); else selectedIds.delete(id);
+  updateSelectedCount();
+}
+
+function updateSelectedCount(){
+  document.getElementById('assignSelected').textContent=selectedIds.size+' selected';
+}
+
+async function confirmAssign(){
+  if(!selectedIds.size){toast('Select at least one item','warn');return;}
+  const res=await fetch('/api/location/'+LOC_ID+'/assign-items',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body:JSON.stringify({item_ids:[...selectedIds]})
+  }).then(r=>r.json());
+  if(res.ok){
+    toast(`${res.assigned} item${res.assigned!==1?'s':''} assigned ✓`,'ok');
+    closeModal('assignModal');
+    loadSite();
+  } else {
+    toast(res.msg||'Error','err');
+  }
+}
+{% endif %}
 
 loadSite();
 </script>
