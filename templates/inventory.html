@@ -290,8 +290,14 @@
         </div>
         <div class="field-row">
           <div class="field">
-            <label class="label">Shelf Location</label>
+            <label class="label">Shelf / Bin</label>
             <input class="input" id="fi-shelf">
+          </div>
+          <div class="field">
+            <label class="label">Site</label>
+            <select class="select" id="fi-location">
+              <option value="">— No site —</option>
+            </select>
           </div>
           <div class="field">
             <label class="label">Owner / Company</label>
@@ -713,6 +719,11 @@ async function loadLocations(){
     const cur=sel.value;
     sel.innerHTML='<option value="">All Sites</option>';
     locs.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;if(String(l.id)===String(cur))o.selected=true;sel.appendChild(o);});
+    // Also populate the item edit form dropdown
+    const formSel=document.getElementById('fi-location');
+    const formCur=formSel.value;
+    formSel.innerHTML='<option value="">— No site —</option>';
+    locs.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;if(String(l.id)===String(formCur))o.selected=true;formSel.appendChild(o);});
   }catch(e){}
 }
 async function loadTagsFilter(){
@@ -1076,6 +1087,7 @@ function _clearItemForm(){
   document.getElementById('fi-product-info').style.display='none';
   document.getElementById('fi-product-step').style.display='none';
   document.getElementById('fi-owner').value='';
+  document.getElementById('fi-location').value='';
   document.getElementById('fi-condition').value='New';
   document.getElementById('fi-tags').value='';
   document.getElementById('fi-tax-yes').checked=false;
@@ -1117,6 +1129,7 @@ function editItem(item){
     document.getElementById('fi-serial').value=item.serial||'';
     document.getElementById('fi-sku').value=item.sku||'';
     document.getElementById('fi-shelf').value=item.shelf||'';
+    document.getElementById('fi-location').value=item.location_id||'';
     document.getElementById('fi-qty').value=item.qty!=null?item.qty:'';
     if(item.qty!==null) document.getElementById('fi-qty-row').style.display='';
     document.getElementById('fi-notes').value=item.notes||'';
@@ -1180,6 +1193,7 @@ async function saveItem(){
     owner_company:document.getElementById('fi-owner').value||null,
     purchase_date:document.getElementById('fi-date').value,
     shelf:document.getElementById('fi-shelf').value.trim(),
+    location_id:document.getElementById('fi-location').value||null,
     qty:document.getElementById('fi-qty').value!==''?parseInt(document.getElementById('fi-qty').value):null,
     low_stock_threshold:0,
     notes:document.getElementById('fi-notes').value.trim(),
