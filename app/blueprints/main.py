@@ -267,9 +267,15 @@ def api_low_stock():
     return jsonify(result)
 
 
-@bp.route("/invoice-import")
+@bp.route("/importer")
 @login_required
 @perm_required("import_export")
-def invoice_import_page():
+def importer_page():
     locations = query("SELECT id, name FROM locations ORDER BY name")
-    return render_template("invoice_import.html", locations=locations)
+    return render_template("importer.html", locations=locations)
+
+@bp.route("/invoice-import")
+@login_required
+def invoice_import_redirect():
+    from flask import redirect
+    return redirect("/importer")

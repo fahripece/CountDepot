@@ -1,0 +1,586 @@
+{% extends "base.html" %}
+{% block title %}Importer · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Importer</span>
+  <span class="topbar-sub" id="topbar-sub">Import inventory from a file</span>
+  <div class="topbar-right" id="topbar-actions">
+    <a href="/invoice-import/template" class="btn btn-secondary btn-sm" id="btn-inv-tmpl" style="display:none">↓ Invoice Template</a>
+    <a href="/importer/inventory-template" class="btn btn-secondary btn-sm" id="btn-gen-tmpl">↓ Download Template</a>
+  </div>
+</div>
+
+<!-- Mode tabs -->
+<div style="padding:0 24px;border-bottom:1px solid #e5e3de;background:#fff;display:flex;gap:0">
+  <button id="tab-inventory" onclick="switchMode('inventory')" style="padding:11px 20px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid #0f172a;color:#0f172a">
+    Inventory Import
+  </button>
+  <button id="tab-invoice" onclick="switchMode('invoice')" style="padding:11px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#64748b">
+    Invoice Import
+  </button>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:22px 24px;max-width:940px">
+
+<!-- ═══════════════════════ INVENTORY MODE ═══════════════════════ -->
+<div id="mode-inventory">
+
+  <!-- Step 1: Upload -->
+  <div id="gen-step-upload">
+    <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:24px;margin-bottom:16px">
+      <div style="font-weight:600;font-size:15px;margin-bottom:4px">Upload Your Spreadsheet</div>
+      <div style="font-size:13px;color:#64748b;margin-bottom:18px">
+        Upload any Excel (.xlsx) or CSV file — we auto-detect common column names.
+        No need to reformat. Download the <a href="/importer/inventory-template" style="color:#3b82f6">template</a> to see an example.
+      </div>
+
+      <!-- Site row -->
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">
+          Site / Warehouse
+          <span style="font-weight:400;color:#94a3b8">— if your file has a Site or Warehouse column, we'll detect it automatically</span>
+        </label>
+        <div id="gen-site-detected" style="display:none;margin-bottom:8px;padding:9px 12px;border-radius:6px;font-size:13px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e40af;display:flex;align-items:center;gap:8px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="gen-site-detected-text"></span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="gen-site-select" class="select" style="flex:1">
+            <option value="">— No site / auto-detect from file —</option>
+            {% for loc in locations %}
+            <option value="{{ loc.id }}">{{ loc.name }}</option>
+            {% endfor %}
+          </select>
+          <span id="gen-new-site-wrap" style="display:none;display:flex;align-items:center;gap:6px;font-size:13px;color:#15803d;white-space:nowrap">
+            <input type="checkbox" id="gen-create-site" checked style="width:14px;height:14px">
+            <label for="gen-create-site">Create new site</label>
+          </span>
+        </div>
+      </div>
+
+      <div style="margin-bottom:18px">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Notes <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+        <input id="gen-notes" class="input" placeholder="e.g. Initial import from legacy spreadsheet" style="width:100%">
+      </div>
+
+      <label id="gen-drop-zone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed #cbd5e1;border-radius:8px;padding:36px 20px;cursor:pointer;transition:all .15s;background:#f8fafc" ondragover="event.preventDefault();this.style.borderColor='#3b82f6';this.style.background='#eff6ff'" ondragleave="this.style.borderColor='#cbd5e1';this.style.background='#f8fafc'" ondrop="genHandleDrop(event)">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div style="font-size:14px;color:#374151;font-weight:500">Drop file here or <span style="color:#3b82f6">browse</span></div>
+        <div style="font-size:12px;color:#94a3b8">.xlsx, .xls, or .csv — any column format</div>
+        <input id="gen-file-input" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="genHandleFile(this.files[0])">
+      </label>
+
+      <div id="gen-file-info" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;color:#15803d;align-items:center;gap:8px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span id="gen-file-name"></span>
+        <button onclick="genClearFile()" style="margin-left:auto;background:none;border:none;color:#64748b;cursor:pointer;font-size:11px">✕ Remove</button>
+      </div>
+
+      <div style="margin-top:16px;text-align:right">
+        <button class="btn btn-primary" onclick="genParseFile()" id="gen-parse-btn" disabled>Preview Import →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Preview -->
+  <div id="gen-step-preview" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <button class="btn btn-secondary btn-sm" onclick="genReset()">← Back</button>
+      <div style="font-weight:600;font-size:15px">Review &amp; Confirm</div>
+    </div>
+
+    <!-- Detected columns -->
+    <div id="gen-col-map-wrap" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px">
+      <div style="font-weight:600;color:#15803d;margin-bottom:6px">Columns detected in your file:</div>
+      <div id="gen-col-map-list" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <div id="gen-undetected-wrap" style="display:none;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e">
+      <strong>Ignored columns</strong> (not mapped to any field): <span id="gen-undetected-list"></span>
+    </div>
+
+    <!-- Site confirm for preview -->
+    <div id="gen-preview-site-wrap" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:8px;border:1px solid #e5e3de;background:#fff;font-size:13px">
+      <div style="font-weight:600;margin-bottom:6px">Site assignment</div>
+      <div id="gen-preview-site-detail"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap" id="gen-preview-stats"></div>
+
+    <div class="table-wrap" style="margin-bottom:14px">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Qty / Serial</th>
+            <th>Cost</th>
+            <th>Site</th>
+            <th>Shelf</th>
+            <th>Exp / Lot</th>
+          </tr>
+        </thead>
+        <tbody id="gen-preview-tbody"></tbody>
+      </table>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:13px;color:#64748b" id="gen-confirm-summary"></div>
+      <button class="btn btn-primary" id="gen-commit-btn" onclick="genCommit()">Import Items</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Done -->
+  <div id="gen-step-done" style="display:none;text-align:center;padding:60px 20px">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="1.5" style="margin-bottom:12px"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 16 9"/></svg>
+    <div style="font-size:20px;font-weight:700;color:#0f172a;margin-bottom:6px" id="gen-done-title">Import complete</div>
+    <div style="font-size:14px;color:#64748b;margin-bottom:24px" id="gen-done-sub"></div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <a href="/" class="btn btn-secondary">Go to Inventory</a>
+      <button class="btn btn-primary" onclick="genReset()">Import Another</button>
+    </div>
+  </div>
+</div><!-- /mode-inventory -->
+
+
+<!-- ═══════════════════════ INVOICE MODE ═══════════════════════ -->
+<div id="mode-invoice" style="display:none">
+
+  <!-- Step 1: Upload -->
+  <div id="inv-step-upload">
+    <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:24px;margin-bottom:16px">
+      <div style="font-weight:600;font-size:15px;margin-bottom:4px">Upload Invoice File</div>
+      <div style="font-size:13px;color:#64748b;margin-bottom:18px">
+        Each row must have a <strong>Vendor SKU</strong> and <strong>Quantity</strong>.
+        Products must have their Vendor SKU configured in
+        <a href="/products" style="color:#3b82f6">Products</a> to match.
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Invoice / PO Reference</label>
+          <input id="inv-ref" class="input" placeholder="e.g. INV-763483" style="width:100%">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Vendor / Supplier Name</label>
+          <input id="inv-vendor" class="input" placeholder="e.g. Celebrate Vitamins" style="width:100%">
+        </div>
+      </div>
+
+      <!-- Site detection widget -->
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">
+          Site
+          <span style="font-weight:400;color:#94a3b8">— detected from Ship To / Location in the file, or select manually</span>
+        </label>
+        <div id="inv-site-detected" style="display:none;margin-bottom:8px;padding:9px 12px;border-radius:6px;font-size:13px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e40af;align-items:center;gap:8px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="inv-site-detected-text"></span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="inv-site-select" class="select" style="flex:1">
+            <option value="">— No site —</option>
+            {% for loc in locations %}
+            <option value="{{ loc.id }}">{{ loc.name }}</option>
+            {% endfor %}
+          </select>
+          <span id="inv-new-site-wrap" style="display:none;align-items:center;gap:6px;font-size:13px;color:#15803d;white-space:nowrap">
+            <input type="checkbox" id="inv-create-site" checked style="width:14px;height:14px">
+            <label for="inv-create-site">Create new site</label>
+          </span>
+        </div>
+      </div>
+
+      <div style="margin-bottom:18px">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Notes <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+        <input id="inv-notes" class="input" placeholder="e.g. Received 2026-04-07" style="width:100%">
+      </div>
+
+      <label id="inv-drop-zone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed #cbd5e1;border-radius:8px;padding:36px 20px;cursor:pointer;transition:all .15s;background:#f8fafc" ondragover="event.preventDefault();this.style.borderColor='#3b82f6';this.style.background='#eff6ff'" ondragleave="this.style.borderColor='#cbd5e1';this.style.background='#f8fafc'" ondrop="invHandleDrop(event)">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div style="font-size:14px;color:#374151;font-weight:500">Drop file here or <span style="color:#3b82f6">browse</span></div>
+        <div style="font-size:12px;color:#94a3b8">.xlsx or .csv</div>
+        <input id="inv-file-input" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="invHandleFile(this.files[0])">
+      </label>
+
+      <div id="inv-file-info" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;color:#15803d;align-items:center;gap:8px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span id="inv-file-name"></span>
+        <button onclick="invClearFile()" style="margin-left:auto;background:none;border:none;color:#64748b;cursor:pointer;font-size:11px">✕ Remove</button>
+      </div>
+
+      <div style="margin-top:16px;text-align:right">
+        <button class="btn btn-primary" onclick="invParseFile()" id="inv-parse-btn" disabled>Preview Import →</button>
+      </div>
+    </div>
+
+    <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:14px 16px;font-size:13px;color:#92400e">
+      <strong>Before your first invoice import:</strong> Set the <strong>Vendor SKU</strong> on each product in
+      <a href="/products" style="color:#92400e;text-decoration:underline">Products</a>.
+      Rows with no matching SKU are flagged and skipped.
+    </div>
+  </div>
+
+  <!-- Step 2: Preview -->
+  <div id="inv-step-preview" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <button class="btn btn-secondary btn-sm" onclick="invReset()">← Back</button>
+      <div style="font-weight:600;font-size:15px">Review &amp; Confirm</div>
+    </div>
+
+    <div id="inv-preview-site-wrap" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:8px;border:1px solid #e5e3de;background:#fff;font-size:13px">
+      <div style="font-weight:600;margin-bottom:4px">Site assignment</div>
+      <div id="inv-preview-site-detail"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap" id="inv-preview-stats"></div>
+
+    <div class="table-wrap" style="margin-bottom:16px">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:24px"></th>
+            <th>Vendor SKU</th>
+            <th>Description / Matched Product</th>
+            <th>Qty</th>
+            <th>Unit Price</th>
+            <th>Expiration</th>
+            <th>Lot #</th>
+          </tr>
+        </thead>
+        <tbody id="inv-preview-tbody"></tbody>
+      </table>
+    </div>
+
+    <div id="inv-unmatched-note" style="display:none;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;font-size:13px;color:#92400e;margin-bottom:14px">
+      <strong>Unmatched SKUs (skipped):</strong> <span id="inv-unmatched-list"></span><br>
+      <span style="font-size:12px">Set the Vendor SKU on the matching product in <a href="/products" style="color:#92400e;text-decoration:underline">Products</a>, then re-upload.</span>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:13px;color:#64748b" id="inv-confirm-summary"></div>
+      <button class="btn btn-primary" id="inv-commit-btn" onclick="invCommit()">Import Items</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Done -->
+  <div id="inv-step-done" style="display:none;text-align:center;padding:60px 20px">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="1.5" style="margin-bottom:12px"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 16 9"/></svg>
+    <div style="font-size:20px;font-weight:700;color:#0f172a;margin-bottom:6px" id="inv-done-title">Import complete</div>
+    <div style="font-size:14px;color:#64748b;margin-bottom:24px" id="inv-done-sub"></div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <a href="/" class="btn btn-secondary">Go to Inventory</a>
+      <button class="btn btn-primary" onclick="invReset()">Import Another</button>
+    </div>
+  </div>
+</div><!-- /mode-invoice -->
+
+</div><!-- /scroll area -->
+
+<script>
+// ── Mode switching ──────────────────────────────────────────────────────────────
+function switchMode(m){
+  const isInv = m === 'inventory';
+  document.getElementById('mode-inventory').style.display = isInv ? '' : 'none';
+  document.getElementById('mode-invoice').style.display  = isInv ? 'none' : '';
+  document.getElementById('tab-inventory').style.borderBottomColor = isInv ? '#0f172a' : 'transparent';
+  document.getElementById('tab-inventory').style.color = isInv ? '#0f172a' : '#64748b';
+  document.getElementById('tab-invoice').style.borderBottomColor  = isInv ? 'transparent' : '#0f172a';
+  document.getElementById('tab-invoice').style.color  = isInv ? '#64748b' : '#0f172a';
+  document.getElementById('btn-gen-tmpl').style.display = isInv ? '' : 'none';
+  document.getElementById('btn-inv-tmpl').style.display = isInv ? 'none' : '';
+  document.getElementById('topbar-sub').textContent = isInv
+    ? 'Import inventory from any spreadsheet — columns auto-detected'
+    : 'Import from an invoice — matched by Vendor SKU';
+}
+
+// ── Shared helpers ──────────────────────────────────────────────────────────────
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function applySiteSuggestion(suggestion, prefix){
+  if(!suggestion || !suggestion.value) return;
+  const detectedEl = document.getElementById(prefix+'-site-detected');
+  const detectedTxt = document.getElementById(prefix+'-site-detected-text');
+  const selectEl   = document.getElementById(prefix+'-site-select');
+  const newWrap    = document.getElementById(prefix+'-new-site-wrap');
+
+  detectedEl.style.display = 'flex';
+
+  if(suggestion.matched_id){
+    detectedTxt.textContent = 'Detected from file: ' + suggestion.value + ' → linked to existing site "' + suggestion.matched_name + '"';
+    selectEl.value = suggestion.matched_id;
+    newWrap.style.display = 'none';
+  } else {
+    detectedTxt.textContent = 'Detected from file: "' + suggestion.value + '" — not found in existing sites';
+    detectedTxt.parentElement.style.borderColor = '#fde68a';
+    detectedTxt.parentElement.style.background  = '#fefce8';
+    detectedTxt.parentElement.style.color       = '#92400e';
+    newWrap.style.display = 'flex';
+    // Store the value for commit
+    newWrap.dataset.siteName = suggestion.value;
+  }
+}
+
+function getSitePayload(prefix){
+  const selectEl  = document.getElementById(prefix+'-site-select');
+  const newWrap   = document.getElementById(prefix+'-new-site-wrap');
+  const createChk = document.getElementById(prefix+'-create-site');
+  const siteId    = selectEl.value || null;
+  const newName   = (newWrap.style.display !== 'none' && createChk && createChk.checked)
+                    ? newWrap.dataset.siteName : null;
+  return { site_id: siteId, new_site_name: newName };
+}
+
+function buildSitePreviewDetail(prefix){
+  const selectEl  = document.getElementById(prefix+'-site-select');
+  const newWrap   = document.getElementById(prefix+'-new-site-wrap');
+  const createChk = document.getElementById(prefix+'-create-site');
+  const opt       = selectEl.options[selectEl.selectedIndex];
+  const siteId    = selectEl.value;
+
+  if(siteId && opt){
+    return 'Items will be added to site: <strong>' + esc(opt.text) + '</strong>';
+  }
+  if(newWrap.style.display !== 'none' && createChk && createChk.checked && newWrap.dataset.siteName){
+    return 'A new site will be created: <strong>' + esc(newWrap.dataset.siteName) + '</strong>';
+  }
+  return 'No site assigned.';
+}
+
+// ══════════════════ INVENTORY MODE LOGIC ══════════════════════════════════════
+let _genFile = null, _genRows = [];
+
+document.getElementById('gen-drop-zone').addEventListener('click', ()=>document.getElementById('gen-file-input').click());
+function genHandleDrop(e){ e.preventDefault(); document.getElementById('gen-drop-zone').style.borderColor='#cbd5e1'; document.getElementById('gen-drop-zone').style.background='#f8fafc'; const f=e.dataTransfer.files[0]; if(f) genHandleFile(f); }
+function genHandleFile(f){
+  if(!f) return;
+  const ext = f.name.split('.').pop().toLowerCase();
+  if(!['xlsx','xls','csv'].includes(ext)){ toast('Upload a .xlsx or .csv file','warn'); return; }
+  _genFile = f;
+  document.getElementById('gen-file-name').textContent = f.name + ' (' + (f.size/1024).toFixed(1) + ' KB)';
+  document.getElementById('gen-file-info').style.display = 'flex';
+  document.getElementById('gen-parse-btn').disabled = false;
+}
+function genClearFile(){
+  _genFile = null;
+  document.getElementById('gen-file-info').style.display = 'none';
+  document.getElementById('gen-file-input').value = '';
+  document.getElementById('gen-parse-btn').disabled = true;
+}
+
+async function genParseFile(){
+  if(!_genFile){ toast('Select a file first','warn'); return; }
+  const btn = document.getElementById('gen-parse-btn');
+  btn.disabled = true; btn.textContent = 'Detecting columns…';
+  const fd = new FormData(); fd.append('file', _genFile);
+  try {
+    const res = await fetch('/api/inventory/parse',{method:'POST',headers:{'X-CSRF-Token':_csrfToken},body:fd}).then(r=>r.json());
+    if(!res.ok){ toast(res.msg||'Parse failed','err'); return; }
+    _genRows = res.rows;
+    genShowPreview(res);
+  } catch(e){ toast('Network error: '+e,'err'); }
+  finally { btn.disabled=false; btn.textContent='Preview Import →'; }
+}
+
+function genShowPreview(res){
+  document.getElementById('gen-step-upload').style.display = 'none';
+  document.getElementById('gen-step-preview').style.display = '';
+
+  // Column map display
+  const LABELS = {name:'Name',qty:'Qty',cost_price:'Cost',sale_price:'Sale Price',serial:'Serial',
+    sku:'Vendor SKU',category:'Category',shelf:'Shelf',expiration_date:'Exp Date',
+    lot_number:'Lot #',notes:'Notes',manufacturer:'Manufacturer',model:'Model',
+    description:'Description',purchase_date:'Purchase Date',po_number:'PO #'};
+  document.getElementById('gen-col-map-list').innerHTML =
+    Object.entries(res.col_map).map(([k,v])=>
+      `<span style="background:#dcfce7;color:#15803d;font-size:11px;padding:3px 8px;border-radius:4px;font-weight:600">${LABELS[k]||k} <span style="font-weight:400;color:#166534">← "${esc(v)}"</span></span>`
+    ).join('');
+
+  if(res.undetected && res.undetected.length){
+    document.getElementById('gen-undetected-wrap').style.display='';
+    document.getElementById('gen-undetected-list').textContent = res.undetected.join(', ');
+  }
+
+  // Site detection
+  if(res.site_suggestion){ applySiteSuggestion(res.site_suggestion, 'gen'); }
+  const siteWrap = document.getElementById('gen-preview-site-wrap');
+  siteWrap.style.display = '';
+  document.getElementById('gen-preview-site-detail').innerHTML = buildSitePreviewDetail('gen');
+
+  // Stats
+  const total = res.total;
+  const hasCat = res.rows.filter(r=>r.category_id).length;
+  document.getElementById('gen-preview-stats').innerHTML = [
+    {label:'Items to Import', val:total, color:'#0f172a'},
+    {label:'Category Matched', val:hasCat, color:'#15803d'},
+    {label:'No Category', val:total-hasCat, color:'#64748b'},
+  ].map(s=>`<div class="stat" style="min-width:110px"><div class="stat-n" style="color:${s.color}">${s.val}</div><div class="stat-l">${s.label}</div></div>`).join('');
+
+  // Table
+  document.getElementById('gen-preview-tbody').innerHTML = res.rows.slice(0,200).map(r=>{
+    const qtyCell = r.qty != null ? r.qty : (r.serial ? `<span style="font-family:monospace;font-size:11px">${esc(r.serial)}</span>` : '—');
+    const catBadge = r.category
+      ? (r.category_id ? `<span style="font-size:11px;color:#15803d">${esc(r.category)}</span>` : `<span style="font-size:11px;color:#d97706">${esc(r.category)} <em>(new)</em></span>`)
+      : '—';
+    const siteCell = r.site_value ? `<span style="font-size:11px;color:#3b82f6">${esc(r.site_value)}</span>` : '—';
+    const expLot = [r.expiration_date, r.lot_number].filter(Boolean).join(' / ') || '—';
+    return `<tr>
+      <td><div style="font-weight:600;font-size:13px">${esc(r.name)}</div>${r.manufacturer?`<div style="font-size:11px;color:#94a3b8">${esc(r.manufacturer)}</div>`:''}</td>
+      <td>${catBadge}</td>
+      <td style="font-weight:600">${typeof qtyCell==='number'?qtyCell:qtyCell}</td>
+      <td style="font-size:12px;color:#475569">${r.cost_price!=null?'$'+Number(r.cost_price).toFixed(2):'—'}</td>
+      <td>${siteCell}</td>
+      <td style="font-size:12px;color:#64748b">${esc(r.shelf||'—')}</td>
+      <td style="font-size:11px;color:#64748b;font-family:monospace">${esc(expLot)}</td>
+    </tr>`;
+  }).join('');
+  if(res.rows.length>200) document.getElementById('gen-preview-tbody').innerHTML += `<tr><td colspan="7" style="text-align:center;color:#94a3b8;font-size:12px">… and ${res.rows.length-200} more rows</td></tr>`;
+
+  document.getElementById('gen-confirm-summary').textContent = total + ' item' + (total!==1?'s':'') + ' will be created.';
+  document.getElementById('gen-commit-btn').disabled = total === 0;
+}
+
+async function genCommit(){
+  const btn = document.getElementById('gen-commit-btn');
+  btn.disabled=true; btn.textContent='Importing…';
+  const sp = getSitePayload('gen');
+  const payload = { rows: _genRows, notes: document.getElementById('gen-notes').value.trim(), ...sp };
+  try {
+    const res = await fetch('/api/inventory/commit',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify(payload)}).then(r=>r.json());
+    if(!res.ok){ toast(res.msg||'Import failed','err'); btn.disabled=false; btn.textContent='Import Items'; return; }
+    document.getElementById('gen-step-preview').style.display='none';
+    document.getElementById('gen-step-done').style.display='';
+    document.getElementById('gen-done-title').textContent = res.created + ' item'+(res.created!==1?'s':'')+' imported';
+    document.getElementById('gen-done-sub').textContent = res.created + ' inventory record'+(res.created!==1?'s':'')+' created successfully.';
+  } catch(e){ toast('Network error: '+e,'err'); btn.disabled=false; btn.textContent='Import Items'; }
+}
+
+function genReset(){
+  _genFile=null; _genRows=[];
+  document.getElementById('gen-file-input').value='';
+  document.getElementById('gen-file-info').style.display='none';
+  document.getElementById('gen-parse-btn').disabled=true;
+  document.getElementById('gen-site-detected').style.display='none';
+  document.getElementById('gen-new-site-wrap').style.display='none';
+  document.getElementById('gen-site-select').value='';
+  document.getElementById('gen-step-preview').style.display='none';
+  document.getElementById('gen-step-done').style.display='none';
+  document.getElementById('gen-step-upload').style.display='';
+}
+
+
+// ══════════════════ INVOICE MODE LOGIC ════════════════════════════════════════
+let _invFile = null, _invRows = [];
+
+document.getElementById('inv-drop-zone').addEventListener('click', ()=>document.getElementById('inv-file-input').click());
+function invHandleDrop(e){ e.preventDefault(); document.getElementById('inv-drop-zone').style.borderColor='#cbd5e1'; document.getElementById('inv-drop-zone').style.background='#f8fafc'; const f=e.dataTransfer.files[0]; if(f) invHandleFile(f); }
+function invHandleFile(f){
+  if(!f) return;
+  const ext = f.name.split('.').pop().toLowerCase();
+  if(!['xlsx','xls','csv'].includes(ext)){ toast('Upload a .xlsx or .csv file','warn'); return; }
+  _invFile = f;
+  document.getElementById('inv-file-name').textContent = f.name + ' (' + (f.size/1024).toFixed(1) + ' KB)';
+  document.getElementById('inv-file-info').style.display='flex';
+  document.getElementById('inv-parse-btn').disabled=false;
+}
+function invClearFile(){
+  _invFile=null;
+  document.getElementById('inv-file-info').style.display='none';
+  document.getElementById('inv-file-input').value='';
+  document.getElementById('inv-parse-btn').disabled=true;
+}
+
+async function invParseFile(){
+  if(!_invFile){ toast('Select a file first','warn'); return; }
+  const btn = document.getElementById('inv-parse-btn');
+  btn.disabled=true; btn.textContent='Parsing…';
+  const fd = new FormData(); fd.append('file', _invFile);
+  try {
+    const res = await fetch('/api/invoice/parse',{method:'POST',headers:{'X-CSRF-Token':_csrfToken},body:fd}).then(r=>r.json());
+    if(!res.ok){ toast(res.msg||'Parse failed','err'); return; }
+    _invRows = res.rows;
+    invShowPreview(res);
+  } catch(e){ toast('Network error: '+e,'err'); }
+  finally { btn.disabled=false; btn.textContent='Preview Import →'; }
+}
+
+function invShowPreview(res){
+  document.getElementById('inv-step-upload').style.display='none';
+  document.getElementById('inv-step-preview').style.display='';
+
+  if(res.site_suggestion){ applySiteSuggestion(res.site_suggestion, 'inv'); }
+  const siteWrap = document.getElementById('inv-preview-site-wrap');
+  siteWrap.style.display = '';
+  document.getElementById('inv-preview-site-detail').innerHTML = buildSitePreviewDetail('inv');
+
+  document.getElementById('inv-preview-stats').innerHTML = [
+    {label:'Total Rows', val:res.rows.length, color:'#0f172a'},
+    {label:'Will Import', val:res.matched, color:'#15803d'},
+    {label:'Skipped', val:res.unmatched, color:'#d97706'},
+  ].map(s=>`<div class="stat" style="min-width:110px"><div class="stat-n" style="color:${s.color}">${s.val}</div><div class="stat-l">${s.label}</div></div>`).join('');
+
+  document.getElementById('inv-preview-tbody').innerHTML = res.rows.map(r=>{
+    const ok = r.status==='matched';
+    const icon = ok
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`
+      : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+    const prod = ok
+      ? `<div style="font-weight:600;font-size:13px">${esc(r.product_name)}</div><div style="font-size:11px;color:#94a3b8">${esc(r.description||'')}</div>`
+      : `<div style="font-size:13px;color:#92400e">${esc(r.description||'—')}</div><div style="font-size:11px;color:#b45309">No matching product</div>`;
+    return `<tr style="${ok?'':'background:#fefce8'}">
+      <td style="text-align:center">${icon}</td>
+      <td style="font-family:monospace;font-size:12px">${esc(r.vendor_sku)}</td>
+      <td>${prod}</td>
+      <td style="font-weight:600">${r.qty}</td>
+      <td style="font-size:12px;color:#475569">${r.unit_price!=null?'$'+Number(r.unit_price).toFixed(2):'—'}</td>
+      <td style="font-size:12px;color:#475569">${esc(r.expiration_date||'—')}</td>
+      <td style="font-size:12px;font-family:monospace;color:#64748b">${esc(r.lot_number||'—')}</td>
+    </tr>`;
+  }).join('');
+
+  const unmatched = res.rows.filter(r=>r.status==='unmatched').map(r=>r.vendor_sku);
+  document.getElementById('inv-unmatched-note').style.display = unmatched.length ? '' : 'none';
+  document.getElementById('inv-unmatched-list').textContent = ' ' + unmatched.join(', ');
+
+  const btn = document.getElementById('inv-commit-btn');
+  btn.disabled = res.matched === 0;
+  document.getElementById('inv-confirm-summary').textContent = res.matched===0
+    ? 'No matched rows — nothing to import.'
+    : res.matched + ' item'+(res.matched!==1?'s':'')+' will be created'+(res.unmatched?' ('+res.unmatched+' skipped)':'')+'.';
+}
+
+async function invCommit(){
+  const btn = document.getElementById('inv-commit-btn');
+  btn.disabled=true; btn.textContent='Importing…';
+  const sp = getSitePayload('inv');
+  const payload = {
+    rows:      _invRows,
+    reference: document.getElementById('inv-ref').value.trim(),
+    vendor:    document.getElementById('inv-vendor').value.trim(),
+    notes:     document.getElementById('inv-notes').value.trim(),
+    ...sp
+  };
+  try {
+    const res = await fetch('/api/invoice/commit',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify(payload)}).then(r=>r.json());
+    if(!res.ok){ toast(res.msg||'Import failed','err'); btn.disabled=false; btn.textContent='Import Items'; return; }
+    document.getElementById('inv-step-preview').style.display='none';
+    document.getElementById('inv-step-done').style.display='';
+    const ref = document.getElementById('inv-ref').value.trim();
+    document.getElementById('inv-done-title').textContent = res.created + ' item'+(res.created!==1?'s':'')+' imported';
+    document.getElementById('inv-done-sub').textContent = (ref?'Invoice '+ref+' · ':'')+res.created+' record'+(res.created!==1?'s':'')+' created.';
+  } catch(e){ toast('Network error: '+e,'err'); btn.disabled=false; btn.textContent='Import Items'; }
+}
+
+function invReset(){
+  _invFile=null; _invRows=[];
+  document.getElementById('inv-file-input').value='';
+  document.getElementById('inv-file-info').style.display='none';
+  document.getElementById('inv-parse-btn').disabled=true;
+  document.getElementById('inv-site-detected').style.display='none';
+  document.getElementById('inv-new-site-wrap').style.display='none';
+  document.getElementById('inv-site-select').value='';
+  document.getElementById('inv-step-preview').style.display='none';
+  document.getElementById('inv-step-done').style.display='none';
+  document.getElementById('inv-step-upload').style.display='';
+}
+</script>
+{% endblock %}

@@ -2607,6 +2607,151 @@ def api_get_sector():
     })
 
 
+# ── Importer shared helpers ────────────────────────────────────────────────────
+
+def _resolve_site(site_id, new_site_name):
+    """Return a site_id: use an existing one or create a new location."""
+    if site_id not in (None, "", 0):
+        try:
+            return int(site_id)
+        except (ValueError, TypeError):
+            pass
+    if new_site_name and str(new_site_name).strip():
+        name = str(new_site_name).strip()
+        existing = query("SELECT id FROM locations WHERE LOWER(name)=LOWER(?)", [name], one=True)
+        if existing:
+            return existing["id"]
+        now = datetime.utcnow().isoformat()
+        return execute("INSERT INTO locations (name, created_at) VALUES (?, ?)", [name, now])
+    return None
+
+
+def _detect_site_in_rows(rows_raw):
+    """Scan column headers for a site/ship-to field and return a suggestion dict."""
+    site_keywords = ['ship to', 'shipto', 'site', 'warehouse', 'facility',
+                     'branch', 'store', 'office', 'plant', 'location']
+    site_col = None
+    for key in (rows_raw[0].keys() if rows_raw else []):
+        kl = key.lower().strip()
+        if any(kw in kl for kw in site_keywords):
+            site_col = key
+            break
+    if not site_col:
+        return None
+    values = [str(r.get(site_col, "") or "").strip() for r in rows_raw]
+    values = [v for v in values if v]
+    if not values:
+        return None
+    # Most common non-empty value
+    from collections import Counter
+    site_name = Counter(values).most_common(1)[0][0]
+    existing = query("SELECT id, name FROM locations WHERE LOWER(name)=LOWER(?)", [site_name], one=True)
+    return {
+        "value":        site_name,
+        "matched_id":   existing["id"]   if existing else None,
+        "matched_name": existing["name"] if existing else None,
+    }
+
+
+def _detect_columns(headers):
+    """Map original column headers to CountDepot field names.
+    Returns dict of {field_name → original_header}."""
+    # Ordered by priority — more specific patterns listed first
+    FIELD_PATTERNS = [
+        ("name",            ["item name", "product name", "name", "item", "product", "title"]),
+        ("qty",             ["on hand", "on_hand", "qty on hand", "qty", "quantity", "count", "stock", "units", "amount"]),
+        ("cost_price",      ["unit cost", "cost price", "purchase price", "buy price", "wholesale price",
+                             "wholesale", "unit price", "cost"]),
+        ("sale_price",      ["sale price", "retail price", "sell price", "selling price", "msrp", "retail"]),
+        ("serial",          ["serial number", "serial no", "serial #", "serial num", "serial", "sn", "s/n"]),
+        ("sku",             ["vendor sku", "vendor_sku", "part number", "part #", "part no",
+                             "item code", "barcode", "upc", "sku", "code"]),
+        ("category",        ["category", "cat", "class", "department", "dept", "type"]),
+        ("shelf",           ["shelf location", "bin location", "shelf", "bin", "aisle", "row", "storage"]),
+        ("site",            ["ship to", "shipto", "warehouse", "facility", "branch", "site",
+                             "store", "office", "plant", "location"]),
+        ("expiration_date", ["expiration date", "expiration", "exp date", "exp", "expiry",
+                             "best by", "use by", "expires", "best before"]),
+        ("lot_number",      ["lot number", "lot #", "lot no", "batch number", "batch no", "lot", "batch"]),
+        ("notes",           ["notes", "note", "comments", "comment", "remarks", "memo"]),
+        ("manufacturer",    ["manufacturer", "brand", "make", "mfr", "mfg", "vendor", "supplier"]),
+        ("model",           ["model number", "model #", "model no", "model name", "model"]),
+        ("description",     ["description", "desc", "details", "product description"]),
+        ("purchase_date",   ["purchase date", "received date", "date received", "date", "po date"]),
+        ("po_number",       ["po number", "po #", "po no", "purchase order", "order #", "p.o."]),
+    ]
+
+    col_map = {}   # field → original header
+    claimed = set()
+
+    for field, patterns in FIELD_PATTERNS:
+        # 1) Exact match (normalised)
+        for h in headers:
+            if h in claimed:
+                continue
+            if h.lower().strip() in patterns:
+                col_map[field] = h
+                claimed.add(h)
+                break
+        if field in col_map:
+            continue
+        # 2) Substring match
+        for h in headers:
+            if h in claimed:
+                continue
+            hn = h.lower().strip()
+            for p in patterns:
+                if p in hn or hn in p:
+                    col_map[field] = h
+                    claimed.add(h)
+                    break
+            if field in col_map:
+                break
+
+    return col_map
+
+
+def _norm_date_str(val):
+    """Normalise date string to YYYY-MM-DD."""
+    if not val:
+        return ""
+    val = str(val).strip()
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            from datetime import datetime as _dt
+            return _dt.strptime(val, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return val
+
+
+def _read_file_rows(f):
+    """Read an uploaded Excel or CSV file and return (headers, list-of-dicts).
+    Raises ValueError on bad format."""
+    filename = (f.filename or "").lower()
+    if filename.endswith(".csv"):
+        content = f.read().decode("utf-8-sig", errors="replace")
+        reader  = list(csv.DictReader(io.StringIO(content)))
+        headers = list(reader[0].keys()) if reader else []
+        return headers, reader
+    elif filename.endswith((".xlsx", ".xls")):
+        import openpyxl
+        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+        ws = wb.active
+        all_rows = list(ws.iter_rows(values_only=True))
+        if not all_rows:
+            raise ValueError("File is empty")
+        headers = [str(h or "").strip() for h in all_rows[0]]
+        rows = []
+        for row in all_rows[1:]:
+            if not any(c is not None for c in row):
+                continue
+            rows.append(dict(zip(headers, [str(c).strip() if c is not None else "" for c in row])))
+        return headers, rows
+    else:
+        raise ValueError("Unsupported file type. Upload .xlsx or .csv")
+
+
 # ── Invoice Import ─────────────────────────────────────────────────────────────
 
 @bp.route("/invoice-import/template")
@@ -2677,133 +2822,87 @@ def invoice_import_template():
 @login_required
 @perm_required("import_export")
 def api_invoice_parse():
-    """Parse an uploaded invoice file (Excel or CSV) and return a preview.
-
-    Matches rows to products by products.vendor_sku. Falls back to checking
-    existing items.sku to find a linked product_id.
-    Returns list of rows with status 'matched' or 'unmatched'.
-    """
+    """Parse an uploaded invoice file and return a preview.
+    Matches rows to products by vendor_sku. Detects ship-to/site column automatically."""
     f = request.files.get("file")
     if not f:
         return jsonify({"ok": False, "msg": "No file uploaded"})
-
-    filename = (f.filename or "").lower()
-    rows_raw = []
-
     try:
-        if filename.endswith(".csv"):
-            content = f.read().decode("utf-8-sig", errors="replace")
-            reader  = csv.DictReader(io.StringIO(content))
-            for row in reader:
-                rows_raw.append(row)
-        elif filename.endswith(".xlsx") or filename.endswith(".xls"):
-            import openpyxl
-            wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
-            ws = wb.active
-            all_rows = list(ws.iter_rows(values_only=True))
-            if not all_rows:
-                return jsonify({"ok": False, "msg": "File is empty"})
-            # Normalise header names
-            header = [str(h or "").strip().lower() for h in all_rows[0]]
-            for row in all_rows[1:]:
-                if not any(c is not None for c in row):
-                    continue
-                rows_raw.append(dict(zip(header, [str(c).strip() if c is not None else "" for c in row])))
-        else:
-            return jsonify({"ok": False, "msg": "Unsupported file type. Upload .xlsx or .csv"})
+        headers, rows_raw = _read_file_rows(f)
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)})
     except Exception as e:
         return jsonify({"ok": False, "msg": f"Could not read file: {e}"})
 
+    # Use shared column detection so invoice files with varied headers also work
+    col_map = _detect_columns(headers)
+
     # Build product lookup maps
-    # Primary: products.vendor_sku → product
     prod_by_vendor_sku = {}
     for p in query("SELECT id, name, vendor_sku FROM products WHERE active=1 AND vendor_sku IS NOT NULL AND vendor_sku != ''"):
         prod_by_vendor_sku[p["vendor_sku"].strip().lower()] = {"id": p["id"], "name": p["name"]}
-
-    # Fallback: items.sku → product_id (for items already in inventory)
     prod_by_item_sku = {}
     for r in query("""SELECT DISTINCT i.sku, i.product_id, p.name as product_name
                       FROM items i JOIN products p ON p.id=i.product_id
-                      WHERE i.sku IS NOT NULL AND i.sku != '' AND i.product_id IS NOT NULL
-                        AND p.active=1"""):
+                      WHERE i.sku IS NOT NULL AND i.sku != '' AND i.product_id IS NOT NULL AND p.active=1"""):
         prod_by_item_sku[r["sku"].strip().lower()] = {"id": r["product_id"], "name": r["product_name"]}
 
-    def _norm_col(row_dict, *candidates):
-        for k in candidates:
-            for key in row_dict:
-                if k in key:
-                    v = str(row_dict[key]).strip()
-                    if v and v.lower() not in ("none", "n/a", "—"):
-                        return v
-        return ""
-
-    def _norm_date(val):
-        """Normalize date string to YYYY-MM-DD. Accepts MM/DD/YYYY or YYYY-MM-DD."""
-        if not val:
+    def _get(row, field):
+        col = col_map.get(field)
+        if not col:
             return ""
-        val = val.strip()
-        for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y", "%d/%m/%Y"):
-            try:
-                from datetime import datetime as _dt
-                return _dt.strptime(val, fmt).strftime("%Y-%m-%d")
-            except ValueError:
-                continue
-        return val  # return as-is if unparseable
+        v = str(row.get(col) or "").strip()
+        return "" if v.lower() in ("none", "n/a", "—", "-") else v
 
     result_rows = []
     matched = unmatched = 0
 
     for row in rows_raw:
-        sku         = _norm_col(row, "vendor sku", "vendor_sku", "sku", "item code", "code", "part")
-        description = _norm_col(row, "description", "desc", "product", "name")
-        qty_raw     = _norm_col(row, "quantity", "qty", "cases", "count")
-        price_raw   = _norm_col(row, "unit price", "unit_price", "price", "cost", "wholesale")
-        exp_raw     = _norm_col(row, "expiration", "exp", "expire")
-        lot         = _norm_col(row, "lot", "batch", "lot number", "lot_number")
+        sku     = _get(row, "sku")
+        desc    = _get(row, "description") or _get(row, "name")
+        qty_raw = _get(row, "qty")
+        price_raw = _get(row, "cost_price")
+        exp_raw = _get(row, "expiration_date")
+        lot     = _get(row, "lot_number")
 
         if not sku:
             continue
-
         try:
             qty = int(float(qty_raw)) if qty_raw else None
         except (ValueError, TypeError):
             qty = None
         if not qty:
             continue
-
         try:
             unit_price = float(price_raw) if price_raw else None
         except (ValueError, TypeError):
             unit_price = None
 
-        exp_date = _norm_date(exp_raw)
-
-        # Match product
-        sku_key = sku.strip().lower()
+        sku_key = sku.lower()
         product = prod_by_vendor_sku.get(sku_key) or prod_by_item_sku.get(sku_key)
-
-        status = "matched" if product else "unmatched"
-        if product:
-            matched += 1
-        else:
-            unmatched += 1
+        status  = "matched" if product else "unmatched"
+        if product: matched += 1
+        else:       unmatched += 1
 
         result_rows.append({
-            "vendor_sku":       sku,
-            "description":      description,
-            "qty":              qty,
-            "unit_price":       unit_price,
-            "expiration_date":  exp_date,
-            "lot_number":       lot,
-            "product_id":       product["id"]   if product else None,
-            "product_name":     product["name"] if product else None,
-            "status":           status,
+            "vendor_sku":      sku,
+            "description":     desc,
+            "qty":             qty,
+            "unit_price":      unit_price,
+            "expiration_date": _norm_date_str(exp_raw),
+            "lot_number":      lot,
+            "product_id":      product["id"]   if product else None,
+            "product_name":    product["name"] if product else None,
+            "status":          status,
         })
 
     if not result_rows:
-        return jsonify({"ok": False, "msg": "No valid rows found. Make sure the file has Vendor SKU and Quantity columns."})
+        return jsonify({"ok": False, "msg": "No valid rows found. Check that the file has SKU and Quantity columns."})
 
-    return jsonify({"ok": True, "rows": result_rows, "matched": matched, "unmatched": unmatched})
+    site_suggestion = _detect_site_in_rows(rows_raw)
+    return jsonify({"ok": True, "rows": result_rows,
+                    "matched": matched, "unmatched": unmatched,
+                    "site_suggestion": site_suggestion})
 
 
 @bp.route("/api/invoice/commit", methods=["POST"])
@@ -2813,7 +2912,7 @@ def api_invoice_commit():
     """Commit a parsed invoice import. Creates qty-tracked items for matched rows."""
     d = request.json or {}
     rows    = d.get("rows", [])
-    site_id = int(d["site_id"]) if d.get("site_id") not in (None, "") else None
+    site_id = _resolve_site(d.get("site_id"), d.get("new_site_name"))
     ref     = (d.get("reference") or "").strip() or None
     vendor  = (d.get("vendor") or "").strip() or None
     notes   = (d.get("notes") or "").strip() or None
@@ -2874,3 +2973,230 @@ def api_invoice_commit():
             [ref, vendor, site_id, session.get("username"), now, len(created_ids), notes])
 
     return jsonify({"ok": True, "created": len(created_ids), "item_ids": created_ids})
+
+
+# ── Inventory Importer (general spreadsheet) ───────────────────────────────────
+
+@bp.route("/importer/inventory-template")
+@login_required
+@perm_required("import_export")
+def inventory_importer_template():
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        return "openpyxl not installed", 500
+    wb  = openpyxl.Workbook()
+    ws  = wb.active
+    ws.title = "Inventory"
+    headers = ["Name *", "Category", "Qty", "Serial Number",
+               "Vendor SKU", "Manufacturer", "Model",
+               "Cost Price ($)", "Sale Price ($)",
+               "Site / Warehouse", "Shelf / Bin",
+               "Expiration Date (MM/DD/YYYY)", "Lot Number",
+               "Purchase Date (YYYY-MM-DD)", "PO Number", "Notes"]
+    example = ["B-50 Complex", "Vitamins", "24", "",
+               "410100-NYBG", "Celebrate Vitamins", "",
+               "7.50", "14.95",
+               "Springfield Office", "Shelf A-3",
+               "12/31/2026", "LOT-ABC123",
+               "2026-04-07", "PO-2026-001", "Received from Celebrate Vitamins"]
+    hfill = PatternFill("solid", fgColor="0F172A")
+    hfont = Font(color="FFFFFF", bold=True, size=10)
+    rfill = PatternFill("solid", fgColor="F0F9FF")
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(row=1, column=col, value=h)
+        c.fill = hfill; c.font = hfont
+        c.alignment = Alignment(horizontal="center", wrap_text=True)
+        ws.column_dimensions[c.column_letter].width = max(14, len(h))
+    for col, v in enumerate(example, 1):
+        c = ws.cell(row=2, column=col, value=v)
+        c.fill = rfill; c.font = Font(size=10, italic=True, color="475569")
+    ws2 = wb.create_sheet("Instructions")
+    ws2.column_dimensions["A"].width = 70
+    instructions = [
+        ("CountDepot - Inventory Import Template", True),
+        ("", False),
+        ("Use this template to import your existing inventory from any spreadsheet.", True),
+        ("", False),
+        ("Tips:", True),
+        ("  - Only Name is required. All other columns are optional.", False),
+        ("  - Fill in Qty for bulk items. Leave blank for individual serial-tracked items.", False),
+        ("  - Site / Warehouse: if the name matches an existing site it will be linked.", False),
+        ("    If it is a new name, CountDepot will create that site automatically.", False),
+        ("  - Category must match an existing category name (case-insensitive).", False),
+        ("  - You do not need to use this exact template - any Excel with column headers works.", False),
+        ("    CountDepot auto-detects common column names like Qty, Serial Number, Cost, etc.", False),
+    ]
+    for row, (text, bold) in enumerate(instructions, 1):
+        c = ws2.cell(row=row, column=1, value=text)
+        c.font = Font(bold=bold, size=11 if bold else 10)
+    out = io.BytesIO()
+    wb.save(out); out.seek(0)
+    return send_file(out,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name="countdepot_inventory_template.xlsx")
+
+
+@bp.route("/api/inventory/parse", methods=["POST"])
+@login_required
+@perm_required("import_export")
+def api_inventory_parse():
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "msg": "No file uploaded"})
+    try:
+        headers, rows_raw = _read_file_rows(f)
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": "Could not read file: " + str(e)})
+
+    if not rows_raw:
+        return jsonify({"ok": False, "msg": "File has no data rows"})
+
+    col_map = _detect_columns(headers)
+
+    if "name" not in col_map:
+        return jsonify({"ok": False,
+                        "msg": "Could not find a Name/Item/Product column. "
+                               "Make sure your file has a header row with a column called Name, Item, or Product."})
+
+    cat_map = {r["name"].lower(): r["id"] for r in query("SELECT id, name FROM categories")}
+
+    def _get(row, field):
+        col = col_map.get(field)
+        if not col: return ""
+        v = str(row.get(col) or "").strip()
+        return "" if v.lower() in ("none", "n/a", "—", "-") else v
+
+    result_rows = []
+    for row in rows_raw:
+        name = _get(row, "name") or _get(row, "description")
+        if not name:
+            continue
+        qty_raw = _get(row, "qty")
+        try:
+            qty = int(float(qty_raw)) if qty_raw else None
+        except (ValueError, TypeError):
+            qty = None
+        try:
+            cost = float(_get(row, "cost_price")) if _get(row, "cost_price") else None
+        except (ValueError, TypeError):
+            cost = None
+        try:
+            sale = float(_get(row, "sale_price")) if _get(row, "sale_price") else None
+        except (ValueError, TypeError):
+            sale = None
+
+        cat_name = _get(row, "category")
+        cat_id   = cat_map.get(cat_name.lower()) if cat_name else None
+
+        result_rows.append({
+            "name":            name,
+            "qty":             qty,
+            "serial":          _get(row, "serial") or None,
+            "sku":             _get(row, "sku") or None,
+            "category":        cat_name or None,
+            "category_id":     cat_id,
+            "cat_matched":     bool(cat_id) if cat_name else None,
+            "shelf":           _get(row, "shelf") or None,
+            "site_value":      _get(row, "site") or None,
+            "cost_price":      cost,
+            "sale_price":      sale,
+            "expiration_date": _norm_date_str(_get(row, "expiration_date")),
+            "lot_number":      _get(row, "lot_number") or None,
+            "manufacturer":    _get(row, "manufacturer") or None,
+            "model":           _get(row, "model") or None,
+            "notes":           _get(row, "notes") or None,
+            "purchase_date":   _norm_date_str(_get(row, "purchase_date")),
+            "po_number":       _get(row, "po_number") or None,
+        })
+
+    if not result_rows:
+        return jsonify({"ok": False, "msg": "No valid rows found (all rows missing a name/item value)."})
+
+    detected_labels = {k: v for k, v in col_map.items() if k != "site"}
+    undetected = [h for h in headers if h not in col_map.values()]
+    site_suggestion = _detect_site_in_rows(rows_raw)
+
+    return jsonify({
+        "ok":              True,
+        "rows":            result_rows,
+        "total":           len(result_rows),
+        "col_map":         detected_labels,
+        "undetected":      undetected,
+        "site_suggestion": site_suggestion,
+    })
+
+
+@bp.route("/api/inventory/commit", methods=["POST"])
+@login_required
+@perm_required("import_export")
+def api_inventory_commit():
+    d = request.json or {}
+    rows         = d.get("rows", [])
+    site_id      = _resolve_site(d.get("site_id"), d.get("new_site_name"))
+    notes_global = (d.get("notes") or "").strip() or None
+
+    if not rows:
+        return jsonify({"ok": False, "msg": "No rows to import"})
+
+    now = datetime.utcnow().isoformat()
+    created_ids = []
+
+    for r in rows:
+        name = (r.get("name") or "").strip()
+        if not name:
+            continue
+
+        qty      = int(r["qty"]) if r.get("qty") not in (None, "") else None
+        serial   = r.get("serial") or None
+        sku      = r.get("sku") or None
+        cat_id   = r.get("category_id") or None
+        shelf    = r.get("shelf") or None
+        cost     = float(r["cost_price"]) if r.get("cost_price") not in (None, "") else None
+        sale     = float(r["sale_price"]) if r.get("sale_price") not in (None, "") else None
+        mfr      = r.get("manufacturer") or None
+        model    = r.get("model") or None
+        notes    = r.get("notes") or notes_global
+        pur_date = r.get("purchase_date") or None
+        po_num   = r.get("po_number") or None
+
+        # Per-row site: if the row had a site_value, resolve it (create if needed)
+        row_site_id = site_id
+        row_site = r.get("site_value")
+        if row_site and row_site.strip():
+            resolved = _resolve_site(None, row_site.strip())
+            if resolved:
+                row_site_id = resolved
+
+        extra = {}
+        if r.get("expiration_date"):
+            extra["expiration_date"] = r["expiration_date"]
+        if r.get("lot_number"):
+            extra["lot_number"] = r["lot_number"]
+
+        iid = execute("""
+            INSERT INTO items
+                (name, serial, sku, category_id, qty, cost_price, sale_price,
+                 manufacturer, model, shelf, location_id, notes, purchase_date,
+                 po_number, extra_fields, active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        """, [name, serial, sku, cat_id, qty, cost, sale,
+              mfr, model, shelf, row_site_id, notes, pur_date,
+              po_num, json.dumps(extra), now])
+
+        log_action("INVENTORY_IMPORT", iid, name,
+                   "Inventory import: qty={}, serial={}, sku={}".format(qty, serial, sku),
+                   None, {"qty": qty})
+        created_ids.append(iid)
+
+    if not created_ids:
+        return jsonify({"ok": False, "msg": "No items were created"})
+
+    execute("""INSERT INTO invoice_imports (reference, vendor, site_id, imported_by, imported_at, line_count, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            [None, None, site_id, session.get("username"), now, len(created_ids), notes_global])
+
+    return jsonify({"ok": True, "created": len(created_ids)})
