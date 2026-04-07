@@ -60,7 +60,9 @@
     </div>
     <div>
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Items</div>
-      <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace">∞ <span style="font-size:14px;color:var(--muted)">unlimited</span></div>
+      <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace">
+        {{ item_count }}{% if max_items %}<span style="font-size:14px;color:var(--muted)"> / {{ max_items }}</span>{% else %}<span style="font-size:14px;color:var(--muted)"> / ∞</span>{% endif %}
+      </div>
     </div>
     <div>
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Current Plan</div>

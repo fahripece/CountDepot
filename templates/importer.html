@@ -208,15 +208,11 @@
         <button onclick="invClearFile()" style="margin-left:auto;background:none;border:none;color:#64748b;cursor:pointer;font-size:11px">✕ Remove</button>
       </div>
 
+      <div id="inv-parse-error" style="display:none;margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:13px;color:#b91c1c"></div>
+
       <div style="margin-top:16px;text-align:right">
         <button class="btn btn-primary" onclick="invParseFile()" id="inv-parse-btn" disabled>Preview Import →</button>
       </div>
-    </div>
-
-    <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:14px 16px;font-size:13px;color:#92400e">
-      <strong>Before your first invoice import:</strong> Set the <strong>Vendor SKU</strong> on each product in
-      <a href="/products" style="color:#92400e;text-decoration:underline">Products</a>.
-      Rows with no matching SKU are flagged and skipped.
     </div>
   </div>
 
@@ -481,6 +477,7 @@ function invHandleFile(f){
   document.getElementById('inv-file-name').textContent = f.name + ' (' + (f.size/1024).toFixed(1) + ' KB)';
   document.getElementById('inv-file-info').style.display='flex';
   document.getElementById('inv-parse-btn').disabled=false;
+  document.getElementById('inv-parse-error').style.display='none';
 }
 function invClearFile(){
   _invFile=null;
@@ -492,12 +489,31 @@ function invClearFile(){
 async function invParseFile(){
   if(!_invFile){ toast('Select a file first','warn'); return; }
   const btn = document.getElementById('inv-parse-btn');
+  const errEl = document.getElementById('inv-parse-error');
+  errEl.style.display = 'none';
   btn.disabled=true; btn.textContent='Parsing…';
   const fd = new FormData(); fd.append('file', _invFile);
   try {
     const res = await fetch('/api/invoice/parse',{method:'POST',headers:{'X-CSRF-Token':_csrfToken},body:fd}).then(r=>r.json());
-    if(!res.ok){ toast(res.msg||'Parse failed','err'); return; }
+    if(!res.ok){
+      errEl.textContent = res.msg || 'Parse failed';
+      errEl.style.display = 'block';
+      return;
+    }
+    errEl.style.display = 'none';
     _invRows = res.rows;
+    // Auto-fill reference and vendor from PDF metadata if fields are empty
+    if(res.file_meta){
+      const m = res.file_meta;
+      const refEl = document.getElementById('inv-ref');
+      const venEl = document.getElementById('inv-vendor');
+      if(refEl && !refEl.value.trim()){
+        refEl.value = m.invoice_no || m.sales_order || m.customer_po || '';
+      }
+      if(venEl && !venEl.value.trim()){
+        venEl.value = m.vendor_name || '';
+      }
+    }
     invShowPreview(res);
   } catch(e){ toast('Network error: '+e,'err'); }
   finally { btn.disabled=false; btn.textContent='Preview Import →'; }

@@ -68,8 +68,13 @@ def _trial_days_remaining(tenant) -> int | None:
     trial_ends = tenant.get("trial_ends_at") if hasattr(tenant, "get") else tenant["trial_ends_at"]
     if not trial_ends:
         return None
-    delta = datetime.strptime(trial_ends, "%Y-%m-%d %H:%M:%S") - datetime.utcnow()
-    return max(0, delta.days)
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            delta = datetime.strptime(trial_ends[:len(fmt)], fmt) - datetime.utcnow()
+            return max(0, delta.days)
+        except ValueError:
+            continue
+    return None
 
 
 # ── Billing page ──────────────────────────────────────────────────────────────
@@ -86,16 +91,18 @@ def billing_page():
     current_plan = PLANS.get(plan_key, PLANS["starter"])
     stripe_ok    = bool(Config.STRIPE_SECRET_KEY)
 
-    # User usage
     from app.db import query
     user_count = query("SELECT COUNT(*) FROM users", one=True)[0]
+    item_count = query("SELECT COUNT(*) FROM items WHERE active=1 AND sold=0", one=True)[0]
     max_users  = current_plan["max_users"]
+    max_items  = current_plan["max_items"]
 
     return render_template("billing.html",
         tenant=tenant, status=status, plan_key=plan_key,
         current_plan=current_plan, trial_days=trial_days,
         plans=PLANS, plan_order=PLAN_ORDER,
         user_count=user_count, max_users=max_users,
+        item_count=item_count, max_items=max_items,
         stripe_ok=stripe_ok,
         stripe_pub_key=Config.STRIPE_PUBLISHABLE_KEY)
 
@@ -127,13 +134,13 @@ def billing_checkout():
 
     domain  = Config.APP_DOMAIN
     base    = f"https://{g.tenant_slug}.{domain}"
-    session_obj = create_checkout_session(
+    session_obj, err = create_checkout_session(
         cid, pid, g.tenant_slug,
         success_url=f"{base}/billing/success",
         cancel_url=f"{base}/billing")
 
     if not session_obj:
-        return jsonify({"ok": False, "msg": "Stripe checkout session failed. Verify your STRIPE_SECRET_KEY and price IDs are correct and in live/test mode consistently."})
+        return jsonify({"ok": False, "msg": f"Stripe error: {err}"})
 
     return jsonify({"ok": True, "url": session_obj.url})
 
@@ -168,6 +175,19 @@ def billing_portal():
     return redirect(portal.url)
 
 
+# ── Billing status (polled by success page) ───────────────────────────────────
+
+@bp.route("/api/billing/status")
+@login_required
+def billing_status():
+    tenant = dict(_tenant_row(g.tenant_slug))
+    return jsonify({
+        "status":     tenant.get("subscription_status", "trial"),
+        "plan":       tenant.get("plan", "starter"),
+        "trial_days": _trial_days_remaining(tenant),
+    })
+
+
 # ── Stripe webhook ────────────────────────────────────────────────────────────
 
 @bp.route("/_stripe/webhook", methods=["POST"])
@@ -200,25 +220,29 @@ def stripe_webhook():
 
 
 def _handle_checkout_complete(session_obj):
+    import logging
+    log = logging.getLogger(__name__)
     slug = session_obj.get("metadata", {}).get("slug")
     if not slug:
         return
     sub_id   = session_obj.get("subscription")
     price_id = None
+    plan_key = None
     # Retrieve subscription to get the price
     try:
         import stripe
         stripe.api_key = Config.STRIPE_SECRET_KEY
-        sub    = stripe.Subscription.retrieve(sub_id, expand=["items.data.price"])
+        sub      = stripe.Subscription.retrieve(sub_id, expand=["items.data.price"])
         price_id = sub["items"]["data"][0]["price"]["id"]
-    except Exception:
-        pass
-    plan_key, period = plan_for_price_id(price_id) if price_id else (None, None)
-    _update_tenant(slug,
-        subscription_status="active",
-        stripe_subscription_id=sub_id,
-        plan=plan_key or "starter",
-        trial_ends_at=None)
+        plan_key, _period = plan_for_price_id(price_id)
+    except Exception as e:
+        log.error(f"Stripe: could not retrieve subscription {sub_id} for {slug}: {e}")
+
+    updates = dict(subscription_status="active", stripe_subscription_id=sub_id, trial_ends_at=None)
+    if plan_key:
+        updates["plan"] = plan_key
+    # If plan lookup failed, leave the existing plan unchanged rather than downgrading to starter
+    _update_tenant(slug, **updates)
 
 
 def _handle_payment_succeeded(invoice):

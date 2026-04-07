@@ -88,6 +88,8 @@ def init_platform_db():
         db.execute("ALTER TABLE tenants ADD COLUMN stripe_customer_id TEXT")
     if "stripe_subscription_id" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN stripe_subscription_id TEXT")
+    if "owner_email" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN owner_email TEXT")
     db.commit()
     db.close()
 
@@ -102,14 +104,26 @@ def get_tenant_by_slug(slug):
     return row
 
 
-def create_tenant(slug, name, plan="standard"):
+def get_tenant_by_owner_email(email):
+    """Look up a tenant by owner email. Returns a Row or None."""
+    if not email:
+        return None
+    db = get_platform_db()
+    row = db.execute(
+        "SELECT * FROM tenants WHERE LOWER(owner_email) = LOWER(?)", [email]
+    ).fetchone()
+    db.close()
+    return row
+
+
+def create_tenant(slug, name, plan="standard", owner_email=None):
     """Create a new tenant and their data directory."""
     from datetime import datetime
     db = get_platform_db()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db.execute(
-        "INSERT INTO tenants (slug, name, plan, sector, onboarded, active, created_at) VALUES (?,?,?,'',0,1,?)",
-        [slug, name, plan, now]
+        "INSERT INTO tenants (slug, name, plan, sector, onboarded, active, created_at, owner_email) VALUES (?,?,?,'',0,1,?,?)",
+        [slug, name, plan, now, owner_email]
     )
     db.commit()
     db.close()

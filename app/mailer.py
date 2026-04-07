@@ -73,7 +73,7 @@ def send_welcome_email(to: str, name: str, slug: str, temp_password: str = None,
     </div>
     {f'<div style="margin-top:10px"><div style="font-size:11px;color:#94a3b8;margin-bottom:2px">TEMPORARY PASSWORD</div><strong style="font-family:monospace">{temp_password}</strong></div>' if temp_password else ''}
   </div>
-  <p style="font-size:13px;color:#64748b;margin-bottom:20px">After verifying your email, choose your business type to finish setup.</p>
+  {f'<p style="font-size:13px;color:#64748b;margin-bottom:20px">After verifying your email, choose your business type to finish setup.</p>' if verify_token else ''}
   <a href="{url}" style="display:inline-block;padding:12px 24px;background:#1d4ed8;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;font-size:14px">Go to my workspace →</a>
   <p style="margin-top:28px;font-size:11px;color:#94a3b8">If you didn't sign up for CountDepot, ignore this email.</p>
 </div>"""
@@ -134,6 +134,24 @@ def send_invite_email(to: str, slug: str, token: str, inviter: str = "Your admin
 </div>"""
     text = (f"You've been invited to CountDepot by {inviter}.\n\n"
             f"Set your password here: {url}\n\nLink expires in 72 hours.\n")
+    return send_email(to, subject, html, text)
+
+
+def send_low_stock_alert(to: str, product_name: str, available: int, threshold: int) -> bool:
+    subject = f"Low stock alert: {product_name}"
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <h2 style="font-size:18px;font-weight:700;margin-bottom:6px">Low stock alert</h2>
+  <p style="color:#64748b;margin-bottom:20px">A product has dropped to or below its low stock threshold.</p>
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:16px 20px;margin-bottom:20px">
+    <div style="font-size:13px;color:#991b1b;font-weight:600;margin-bottom:4px">{product_name}</div>
+    <div style="font-size:13px;color:#7f1d1d">Available: <strong>{available}</strong> &nbsp;/&nbsp; Threshold: <strong>{threshold}</strong></div>
+  </div>
+  <p style="font-size:12px;color:#94a3b8">You are receiving this because you are an admin on this CountDepot workspace. Alerts are sent at most once every 24 hours per product.</p>
+</div>"""
+    text = (f"Low stock alert: {product_name}\n\n"
+            f"Available: {available} / Threshold: {threshold}\n\n"
+            f"Log in to CountDepot to restock.")
     return send_email(to, subject, html, text)
 
 

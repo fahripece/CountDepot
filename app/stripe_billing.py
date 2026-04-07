@@ -97,6 +97,7 @@ def _stripe():
 
 def create_customer(email: str, name: str, slug: str):
     """Create a Stripe customer. Returns customer ID or None."""
+    import logging
     s = _stripe()
     if not s:
         return None
@@ -104,18 +105,21 @@ def create_customer(email: str, name: str, slug: str):
         c = s.Customer.create(email=email, name=name,
                               metadata={"slug": slug})
         return c.id
-    except Exception:
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Stripe create_customer error: {e}")
         return None
 
 
 def create_checkout_session(customer_id: str, price_id: str, slug: str,
                              success_url: str, cancel_url: str):
-    """Create a Stripe Checkout Session. Returns the session or None."""
+    """Create a Stripe Checkout Session. Returns (session, None) or (None, error_str)."""
+    import logging
+    log = logging.getLogger(__name__)
     s = _stripe()
     if not s:
-        return None
+        return None, "STRIPE_SECRET_KEY not set"
     try:
-        return s.checkout.Session.create(
+        session = s.checkout.Session.create(
             customer=customer_id,
             payment_method_types=["card"],
             line_items=[{"price": price_id, "quantity": 1}],
@@ -125,8 +129,10 @@ def create_checkout_session(customer_id: str, price_id: str, slug: str,
             allow_promotion_codes=True,
             metadata={"slug": slug},
         )
-    except Exception:
-        return None
+        return session, None
+    except Exception as e:
+        log.error(f"Stripe checkout error: {e}")
+        return None, str(e)
 
 
 def create_portal_session(customer_id: str, return_url: str):

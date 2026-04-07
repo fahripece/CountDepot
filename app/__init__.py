@@ -72,8 +72,6 @@ def create_app():
         # Bare domain (countdepot.com with no subdomain) → landing page
         host = request.host.split(":")[0]
         parts = host.split(".")
-        import logging
-        logging.getLogger(__name__).warning(f"DEBUG host={host} parts={parts} path={request.path}")
         is_bare_domain = (
             host not in ("localhost", "127.0.0.1")
             and len(parts) < 3

@@ -303,7 +303,7 @@ def tenant_new():
             error = "Admin password must be at least 8 characters."
         else:
             # 1. Register tenant in platform.db
-            create_tenant(slug, name, plan)
+            create_tenant(slug, name, plan, owner_email=admin_email or None)
 
             # 2. Bootstrap the tenant's inventory DB
             _bootstrap_tenant_db(slug, admin_pw, admin_email=admin_email)
@@ -336,10 +336,7 @@ def _bootstrap_tenant_db(slug, admin_password, admin_email=None, pre_hashed_pass
     _init_db_conn(db)
 
     # Seed distributors (not part of init_db — bootstrap-only)
-    for d_name in ["CDW", "SHI", "Insight", "Zones", "PC Connection",
-                   "Provantage", "B&H Photo", "Newegg Business",
-                   "Amazon Business", "Staples Business",
-                   "TigerDirect", "Micro Center"]:
+    for d_name in ["Other"]:
         try:
             db.execute("INSERT INTO distributors (name) VALUES (?)", [d_name])
         except Exception:

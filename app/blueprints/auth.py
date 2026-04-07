@@ -156,6 +156,14 @@ def verify_2fa():
     error = None
     if request.method == "POST":
         ip  = request.remote_addr or "unknown"
+        allowed, retry_in = check_rate_limit(ip, "2fa", max_attempts=5, window=300)
+        if not allowed:
+            session.pop("pending_2fa_user_id", None)
+            log_auth_event("RATE_LIMITED", username=str(uid), ip=ip,
+                           tenant=getattr(g, "tenant_slug", ""),
+                           detail="2FA rate limit hit")
+            return render_template("verify_2fa.html",
+                                   error=f"Too many attempts. Try again in {retry_in} seconds."), 429
         otp = request.form.get("otp", "").strip()
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         row = query("SELECT * FROM login_otp WHERE user_id=? AND used=0 AND expires_at > ? ORDER BY id DESC LIMIT 1",
@@ -247,6 +255,14 @@ def verify_email(token):
         "SELECT * FROM email_verification_tokens WHERE token=? AND used=0 AND expires_at > ?",
         [token, now], one=True)
     if not row:
+        # Check if this token was already used (e.g. link clicked twice or after resend)
+        used_row = query(
+            "SELECT u.email_verified FROM email_verification_tokens t "
+            "JOIN users u ON u.id=t.user_id WHERE t.token=?",
+            [token], one=True)
+        if used_row and used_row["email_verified"]:
+            # Already verified — treat as success so the user isn't confused
+            return render_template("verify_email.html", success=True)
         return render_template("verify_email.html", invalid=True)
     execute("UPDATE users SET email_verified=1 WHERE id=?", [row["user_id"]])
     execute("UPDATE email_verification_tokens SET used=1 WHERE id=?", [row["id"]])

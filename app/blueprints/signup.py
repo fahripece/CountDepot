@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, render_template, request, redirect, url_for
 
-from app.platform            import create_tenant, get_tenant_by_slug, get_platform_db
+from app.platform            import create_tenant, get_tenant_by_slug, get_tenant_by_owner_email, get_platform_db
 from app.blueprints.platform import _bootstrap_tenant_db
 from app.mailer              import send_signup_verification_email, send_welcome_email
 from app.helpers             import hash_pw
@@ -86,6 +86,8 @@ def signup():
             error = f"The subdomain '{slug}' is already taken. Please choose another."
         elif not email or "@" not in email:
             error = "A valid email address is required."
+        elif get_tenant_by_owner_email(email):
+            error = "An account already exists for that email address."
         elif len(password) < 8:
             error = "Password must be at least 8 characters."
         else:
@@ -141,6 +143,36 @@ def verify_signup(token):
 
     if not row:
         db.close()
+        # Check if there's a newer pending signup for the same email (form double-submitted)
+        # — in that case the token was replaced but not yet used, so guide them to check inbox.
+        # Also handle the case where the workspace was already created (link clicked twice).
+        # We can detect the latter by checking if any tenant with that email exists.
+        # For simplicity: show a helpful message with a "go to login" option if workspace exists,
+        # otherwise tell them to check for a newer email.
+        from app.platform import get_tenant_by_owner_email as _get_by_email
+        import os as _os
+        # Try to find tenant from email by scanning pending_signups for the token (already used)
+        db2 = get_platform_db()
+        used_row = db2.execute(
+            "SELECT * FROM pending_signups WHERE token=?", [token]
+        ).fetchone()
+        db2.close()
+        if used_row:
+            slug_hint = used_row["slug"]
+            email_hint = used_row["email"]
+            tenant_exists = get_tenant_by_slug(slug_hint)
+            if tenant_exists and _slug_belongs_to_email(slug_hint, email_hint):
+                # Workspace already created — this is a duplicate click
+                workspace_url = f"https://{slug_hint}.{Config.APP_DOMAIN}"
+                return render_template("signup_success.html",
+                                       name=used_row["name"],
+                                       slug=slug_hint,
+                                       domain=Config.APP_DOMAIN,
+                                       smtp_enabled=bool(Config.SMTP_HOST),
+                                       workspace_url=workspace_url)
+            # Token was replaced by a newer one (double form-submit) — guide them to inbox
+            return render_template("signup_verify_error.html",
+                                   reason="This link has been replaced. Check your inbox for the most recent verification email.")
         return render_template("signup_verify_error.html",
                                reason="This verification link has expired or already been used.")
 
@@ -182,7 +214,7 @@ def verify_signup(token):
     db.close()
 
     # Create tenant + DB
-    create_tenant(slug, name, "starter")
+    create_tenant(slug, name, "starter", owner_email=email)
     _bootstrap_tenant_db(slug, None, admin_email=email, pre_hashed_password=phash)
 
     # Clear must_change_password (they chose their own password)
