@@ -115,6 +115,7 @@ def _save_item(d, iid=None):
         sale_state            = d.get("sale_state") or None,
         depreciation_rate     = float(d["depreciation_rate"]) if d.get("depreciation_rate") not in (None, "") else None,
         tags                  = ",".join(t.strip() for t in str(d.get("tags") or "").split(",") if t.strip()),
+        location_id           = int(d["location_id"]) if d.get("location_id") not in (None, "") else None,
     )
     if iid:
         cols = ", ".join(f"{k}=?" for k in fields)
