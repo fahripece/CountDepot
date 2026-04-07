@@ -95,6 +95,9 @@ MIGRATIONS = [
     # locations — per-site alert email
     ("locations", "email", "TEXT"),
 
+    # products — vendor SKU for invoice import matching
+    ("products", "vendor_sku", "TEXT"),
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
 ]
 
@@ -159,6 +162,7 @@ def _init_db_conn(db):
             default_sale          REAL,
             low_stock_threshold   INTEGER DEFAULT 0,
             image_url             TEXT,
+            vendor_sku            TEXT,
             active                INTEGER DEFAULT 1,
             created_at            TEXT NOT NULL
         );
@@ -392,6 +396,16 @@ def _init_db_conn(db):
             id      INTEGER PRIMARY KEY,
             version INTEGER NOT NULL DEFAULT 0,
             applied_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS invoice_imports (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference   TEXT,
+            vendor      TEXT,
+            site_id     INTEGER REFERENCES locations(id),
+            imported_by TEXT,
+            imported_at TEXT NOT NULL,
+            line_count  INTEGER DEFAULT 0,
+            notes       TEXT
         );
     """)
 

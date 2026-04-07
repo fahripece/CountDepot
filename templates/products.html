@@ -52,6 +52,10 @@
           <div class="field"><label class="label">Manufacturer</label><input class="input" id="prod-mfr"></div>
           <div class="field"><label class="label">Model / Part #</label><input class="input mono" id="prod-model"></div>
         </div>
+        <div class="field">
+          <label class="label">Vendor SKU <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">— supplier's product code, used for invoice import matching</span></label>
+          <input class="input mono" id="prod-vendor-sku" placeholder="e.g. 410100-NYBG">
+        </div>
 
         <div class="section-hdr">Tracking Behavior</div>
         <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:16px">
@@ -205,7 +209,7 @@ async function loadProds(){
 }
 
 function _clearProdForm(){
-  ['prod-name','prod-mfr','prod-model','prod-cost','prod-sale','prod-desc','prod-threshold'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  ['prod-name','prod-mfr','prod-model','prod-vendor-sku','prod-cost','prod-sale','prod-desc','prod-threshold'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('prod-cat').value='';
   document.getElementById('prod-serial').checked=false;
   document.getElementById('prod-qty').checked=false;
@@ -267,6 +271,7 @@ function openEditProd(id){
     document.getElementById('prod-name').value=p.name||'';
     document.getElementById('prod-mfr').value=p.manufacturer||'';
     document.getElementById('prod-model').value=p.model||'';
+    document.getElementById('prod-vendor-sku').value=p.vendor_sku||'';
     document.getElementById('prod-cost').value=p.default_cost!=null?p.default_cost:'';
     document.getElementById('prod-sale').value=p.default_sale!=null?p.default_sale:'';
     document.getElementById('prod-desc').value=p.description||'';
@@ -321,6 +326,7 @@ async function saveProd(){
     name, category_id:parseInt(cat)||null,
     manufacturer:document.getElementById('prod-mfr').value.trim()||null,
     model:document.getElementById('prod-model').value.trim()||null,
+    vendor_sku:document.getElementById('prod-vendor-sku').value.trim()||null,
     default_cost:document.getElementById('prod-cost').value||null,
     default_sale:document.getElementById('prod-sale').value||null,
     description:document.getElementById('prod-desc').value.trim()||null,

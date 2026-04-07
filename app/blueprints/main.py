@@ -265,3 +265,11 @@ def api_low_stock():
         d["missing"] = max(0, thresh - avail)
         result.append(d)
     return jsonify(result)
+
+
+@bp.route("/invoice-import")
+@login_required
+@perm_required("import_export")
+def invoice_import_page():
+    locations = query("SELECT id, name FROM locations ORDER BY name")
+    return render_template("invoice_import.html", locations=locations)
