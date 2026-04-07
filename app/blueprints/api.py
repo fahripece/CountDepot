@@ -2712,11 +2712,17 @@ def _detect_columns(headers):
 
 
 def _norm_date_str(val):
-    """Normalise date string to YYYY-MM-DD."""
+    """Normalise date string or datetime object to YYYY-MM-DD."""
     if not val:
         return ""
+    # Handle Python datetime / date objects (from openpyxl)
+    if hasattr(val, "strftime"):
+        return val.strftime("%Y-%m-%d")
     val = str(val).strip()
-    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+    if not val:
+        return ""
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y", "%d/%m/%Y",
+                "%Y/%m/%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%y"):
         try:
             from datetime import datetime as _dt
             return _dt.strptime(val, fmt).strftime("%Y-%m-%d")
@@ -2725,31 +2731,142 @@ def _norm_date_str(val):
     return val
 
 
+def _cell_str(c):
+    """Convert an Excel cell value to a clean string. Handles dates, floats, etc."""
+    if c is None:
+        return ""
+    if hasattr(c, "strftime"):           # datetime / date object
+        return c.strftime("%Y-%m-%d")
+    return str(c).strip()
+
+
 def _read_file_rows(f):
-    """Read an uploaded Excel or CSV file and return (headers, list-of-dicts).
-    Raises ValueError on bad format."""
+    """Read an uploaded Excel, CSV, or PDF file. Returns (headers, list-of-dicts).
+    Raises ValueError with a user-readable message on bad/unsupported input."""
     filename = (f.filename or "").lower()
+
     if filename.endswith(".csv"):
         content = f.read().decode("utf-8-sig", errors="replace")
         reader  = list(csv.DictReader(io.StringIO(content)))
-        headers = list(reader[0].keys()) if reader else []
-        return headers, reader
+        if not reader:
+            raise ValueError("CSV file is empty or has no data rows")
+        headers = list(reader[0].keys())
+        return headers, [dict(r) for r in reader]
+
     elif filename.endswith((".xlsx", ".xls")):
         import openpyxl
         wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
         ws = wb.active
         all_rows = list(ws.iter_rows(values_only=True))
         if not all_rows:
-            raise ValueError("File is empty")
-        headers = [str(h or "").strip() for h in all_rows[0]]
+            raise ValueError("Excel file is empty")
+        # Use first non-empty row as header
+        header_row_idx = 0
+        for i, row in enumerate(all_rows):
+            if any(c is not None and str(c).strip() for c in row):
+                header_row_idx = i
+                break
+        headers = [str(h or "").strip() for h in all_rows[header_row_idx]]
+        # Deduplicate blank headers
+        seen = {}
+        clean_headers = []
+        for h in headers:
+            if not h:
+                h = "_col"
+            if h in seen:
+                seen[h] += 1
+                h = f"{h}_{seen[h]}"
+            else:
+                seen[h] = 0
+            clean_headers.append(h)
         rows = []
-        for row in all_rows[1:]:
-            if not any(c is not None for c in row):
+        for row in all_rows[header_row_idx + 1:]:
+            if not any(c is not None and str(c).strip() for c in row):
                 continue
-            rows.append(dict(zip(headers, [str(c).strip() if c is not None else "" for c in row])))
-        return headers, rows
+            rows.append(dict(zip(clean_headers, [_cell_str(c) for c in row])))
+        return clean_headers, rows
+
+    elif filename.endswith(".pdf"):
+        return _read_pdf_rows(f)
+
     else:
-        raise ValueError("Unsupported file type. Upload .xlsx or .csv")
+        raise ValueError("Unsupported file type. Upload .xlsx, .csv, or .pdf")
+
+
+def _read_pdf_rows(f):
+    """Extract tabular data from a PDF invoice using pdfplumber."""
+    try:
+        import pdfplumber
+    except ImportError:
+        raise ValueError(
+            "PDF parsing requires pdfplumber. "
+            "Ask your administrator to run: pip install pdfplumber"
+        )
+
+    content = f.read()
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        # Collect all tables across all pages
+        all_tables = []
+        for page in pdf.pages:
+            for table in (page.extract_tables() or []):
+                if table and len(table) > 1:
+                    all_tables.append(table)
+
+        if not all_tables:
+            # Fall back to raw text line parsing
+            text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+            return _parse_pdf_text_lines(text)
+
+        # Pick the table with the most data rows
+        best = max(all_tables, key=lambda t: len(t))
+        raw_headers = [str(h or "").strip() for h in best[0]]
+
+        # Deduplicate blank headers
+        seen = {}
+        headers = []
+        for h in raw_headers:
+            if not h:
+                h = "_col"
+            if h in seen:
+                seen[h] += 1
+                h = f"{h}_{seen[h]}"
+            else:
+                seen[h] = 0
+            headers.append(h)
+
+        rows = []
+        for row in best[1:]:
+            if not any(c and str(c).strip() for c in row):
+                continue
+            rows.append(dict(zip(headers, [str(c or "").strip() for c in row])))
+
+        return headers, rows
+
+
+def _parse_pdf_text_lines(text):
+    """Fallback: try to parse invoice line items from raw PDF text.
+    Looks for lines that start with an item-code-like pattern."""
+    import re
+    rows = []
+    # Match lines like: 410100-NYBG   B-50 Complex   24   12/31/2026   LOT123   7.50   180.00
+    pattern = re.compile(
+        r"^([\w\-]+)\s+"          # item code
+        r"(.+?)\s{2,}"            # description (2+ spaces as delimiter)
+        r"(\d+)\s+"               # qty
+        r"(\d{1,2}/\d{1,2}/\d{4})?\s*"  # optional exp date
+        r"([\w\-]+)?\s*"          # optional lot
+        r"\$?([\d,.]+)?",         # optional price
+        re.MULTILINE
+    )
+    headers = ["Vendor SKU", "Description", "Quantity", "Expiration Date", "Lot Number", "Unit Value"]
+    for m in pattern.finditer(text):
+        rows.append(dict(zip(headers, [g or "" for g in m.groups()])))
+    if not rows:
+        raise ValueError(
+            "Could not extract a table from this PDF. "
+            "Try exporting it as a CSV or Excel file instead."
+        )
+    return headers, rows
 
 
 # ── Invoice Import ─────────────────────────────────────────────────────────────
@@ -2824,6 +2941,13 @@ def invoice_import_template():
 def api_invoice_parse():
     """Parse an uploaded invoice file and return a preview.
     Matches rows to products by vendor_sku. Detects ship-to/site column automatically."""
+    try:
+        return _api_invoice_parse_inner()
+    except Exception as e:
+        return jsonify({"ok": False, "msg": "Unexpected error: " + str(e)})
+
+
+def _api_invoice_parse_inner():
     f = request.files.get("file")
     if not f:
         return jsonify({"ok": False, "msg": "No file uploaded"})
@@ -2832,7 +2956,7 @@ def api_invoice_parse():
     except ValueError as e:
         return jsonify({"ok": False, "msg": str(e)})
     except Exception as e:
-        return jsonify({"ok": False, "msg": f"Could not read file: {e}"})
+        return jsonify({"ok": False, "msg": "Could not read file: " + str(e)})
 
     # Use shared column detection so invoice files with varied headers also work
     col_map = _detect_columns(headers)
@@ -3042,6 +3166,13 @@ def inventory_importer_template():
 @login_required
 @perm_required("import_export")
 def api_inventory_parse():
+    try:
+        return _api_inventory_parse_inner()
+    except Exception as e:
+        return jsonify({"ok": False, "msg": "Unexpected error: " + str(e)})
+
+
+def _api_inventory_parse_inner():
     f = request.files.get("file")
     if not f:
         return jsonify({"ok": False, "msg": "No file uploaded"})

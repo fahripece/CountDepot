@@ -66,8 +66,8 @@
       <label id="gen-drop-zone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed #cbd5e1;border-radius:8px;padding:36px 20px;cursor:pointer;transition:all .15s;background:#f8fafc" ondragover="event.preventDefault();this.style.borderColor='#3b82f6';this.style.background='#eff6ff'" ondragleave="this.style.borderColor='#cbd5e1';this.style.background='#f8fafc'" ondrop="genHandleDrop(event)">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         <div style="font-size:14px;color:#374151;font-weight:500">Drop file here or <span style="color:#3b82f6">browse</span></div>
-        <div style="font-size:12px;color:#94a3b8">.xlsx, .xls, or .csv — any column format</div>
-        <input id="gen-file-input" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="genHandleFile(this.files[0])">
+        <div style="font-size:12px;color:#94a3b8">.xlsx, .csv, or .pdf — any column format</div>
+        <input id="gen-file-input" type="file" accept=".xlsx,.xls,.csv,.pdf" style="display:none" onchange="genHandleFile(this.files[0])">
       </label>
 
       <div id="gen-file-info" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;color:#15803d;align-items:center;gap:8px">
@@ -198,8 +198,8 @@
       <label id="inv-drop-zone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed #cbd5e1;border-radius:8px;padding:36px 20px;cursor:pointer;transition:all .15s;background:#f8fafc" ondragover="event.preventDefault();this.style.borderColor='#3b82f6';this.style.background='#eff6ff'" ondragleave="this.style.borderColor='#cbd5e1';this.style.background='#f8fafc'" ondrop="invHandleDrop(event)">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         <div style="font-size:14px;color:#374151;font-weight:500">Drop file here or <span style="color:#3b82f6">browse</span></div>
-        <div style="font-size:12px;color:#94a3b8">.xlsx or .csv</div>
-        <input id="inv-file-input" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="invHandleFile(this.files[0])">
+        <div style="font-size:12px;color:#94a3b8">.xlsx, .csv, or .pdf</div>
+        <input id="inv-file-input" type="file" accept=".xlsx,.xls,.csv,.pdf" style="display:none" onchange="invHandleFile(this.files[0])">
       </label>
 
       <div id="inv-file-info" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;color:#15803d;align-items:center;gap:8px">
@@ -354,7 +354,7 @@ function genHandleDrop(e){ e.preventDefault(); document.getElementById('gen-drop
 function genHandleFile(f){
   if(!f) return;
   const ext = f.name.split('.').pop().toLowerCase();
-  if(!['xlsx','xls','csv'].includes(ext)){ toast('Upload a .xlsx or .csv file','warn'); return; }
+  if(!['xlsx','xls','csv','pdf'].includes(ext)){ toast('Upload a .xlsx, .csv, or .pdf file','warn'); return; }
   _genFile = f;
   document.getElementById('gen-file-name').textContent = f.name + ' (' + (f.size/1024).toFixed(1) + ' KB)';
   document.getElementById('gen-file-info').style.display = 'flex';
@@ -476,7 +476,7 @@ function invHandleDrop(e){ e.preventDefault(); document.getElementById('inv-drop
 function invHandleFile(f){
   if(!f) return;
   const ext = f.name.split('.').pop().toLowerCase();
-  if(!['xlsx','xls','csv'].includes(ext)){ toast('Upload a .xlsx or .csv file','warn'); return; }
+  if(!['xlsx','xls','csv','pdf'].includes(ext)){ toast('Upload a .xlsx, .csv, or .pdf file','warn'); return; }
   _invFile = f;
   document.getElementById('inv-file-name').textContent = f.name + ' (' + (f.size/1024).toFixed(1) + ' KB)';
   document.getElementById('inv-file-info').style.display='flex';
