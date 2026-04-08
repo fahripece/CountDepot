@@ -356,7 +356,6 @@ function buildSitePreviewDetail(prefix){
 // ══════════════════ INVENTORY MODE LOGIC ══════════════════════════════════════
 let _genFile = null, _genRows = [];
 
-document.getElementById('gen-drop-zone').addEventListener('click', ()=>document.getElementById('gen-file-input').click());
 function genHandleDrop(e){ e.preventDefault(); document.getElementById('gen-drop-zone').style.borderColor='#cbd5e1'; document.getElementById('gen-drop-zone').style.background='#f8fafc'; const f=e.dataTransfer.files[0]; if(f) genHandleFile(f); }
 function genHandleFile(f){
   if(!f) return;
@@ -488,7 +487,6 @@ const INV_FIELDS = [
   { key: 'lot_number',      label: 'Lot Number',      required: false },
 ];
 
-document.getElementById('inv-drop-zone').addEventListener('click', ()=>document.getElementById('inv-file-input').click());
 function invHandleDrop(e){ e.preventDefault(); document.getElementById('inv-drop-zone').style.borderColor='#cbd5e1'; document.getElementById('inv-drop-zone').style.background='#f8fafc'; const f=e.dataTransfer.files[0]; if(f) invHandleFile(f); }
 
 function invHandleFile(f){
