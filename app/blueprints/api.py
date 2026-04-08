@@ -2947,17 +2947,16 @@ def _read_pdf_rows(f):
                 continue
 
             qty_x = col_x['qty']
-            sorted_cols = sorted(col_x.items(), key=lambda kv: kv[1])
-            col_bounds = [(x, sorted_cols[i+1][1] if i+1 < len(sorted_cols) else 9999, name)
-                          for i, (name, x) in enumerate(sorted_cols)]
+            non_item_cols = [(name, x) for name, x in col_x.items() if name != 'item']
 
             def word_col(w):
+                # Anything clearly left of the qty column = item/description
                 if w['x0'] < qty_x - 5:
                     return 'item'
-                for x_start, x_end, name in col_bounds:
-                    if x_start - 5 <= w['x0'] < x_end:
-                        return name
-                return None
+                # For all other words, assign to whichever column header is closest
+                if not non_item_cols:
+                    return None
+                return min(non_item_cols, key=lambda nc: abs(w['x0'] - nc[1]))[0]
 
             totals_y = None
             for y in sorted_ys:
