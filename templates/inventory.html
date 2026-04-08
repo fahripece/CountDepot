@@ -1444,7 +1444,28 @@ function updateSelectionUI(){
   const bar=document.getElementById('bulkBar');
   if(bar){bar.style.display=n>0?'flex':'none';document.getElementById('bulkCount').textContent=n+' selected';}
 }
-async function massDelete(){const n=selectedIds.size;if(!n)return;if(!confirm(`Delete ${n} selected item${n===1?'':'s'}? This cannot be undone.`))return;const res=await api('/api/item/delete',{ids:[...selectedIds]});if(res.ok){toast(`Deleted ${res.deleted} item(s)`,'warn');selectedIds.clear();updateSelectionUI();closeDetail();loadItems();}else toast(res.msg||'Error','err');}
+async function massDelete(){
+  const n=selectedIds.size;
+  if(!n)return;
+  if(!confirm(`Delete ${n} selected item${n===1?'':'s'}? This cannot be undone.`))return;
+  const ids=[...selectedIds];
+  console.log('[massDelete] sending ids:', ids);
+  let res;
+  try{
+    res=await api('/api/item/delete',{ids});
+    console.log('[massDelete] response:', res);
+  }catch(e){
+    console.error('[massDelete] fetch error:', e);
+    toast('Network error: '+e,'err');
+    return;
+  }
+  if(res.ok){
+    toast(`Deleted ${res.deleted} item(s)`,'warn');
+    selectedIds.clear();updateSelectionUI();closeDetail();loadItems();
+  }else{
+    toast(res.msg||'Delete failed','err');
+  }
+}
 
 // Bulk checkout
 function openBulkCheckout(){if(!selectedIds.size){toast('Select items first','warn');return;}document.getElementById('bco-who').value='';document.getElementById('bco-jobref').value='';document.getElementById('bco-return').value='';const cEl=document.getElementById('bco-count');if(cEl)cEl.textContent=selectedIds.size+' item'+(selectedIds.size===1?'':'s');openModal('bulkCheckoutModal');}
