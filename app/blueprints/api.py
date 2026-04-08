@@ -2659,6 +2659,7 @@ def _detect_columns(headers):
     # Ordered by priority — more specific patterns listed first
     FIELD_PATTERNS = [
         ("sku",             ["vendor sku", "vendor_sku", "vendor sku/description",
+                             "item sku", "product sku", "our sku", "internal sku", "sku #",
                              "part number", "part #", "part no", "part no.", "part num",
                              "item #", "item no", "item no.", "item number", "item code", "item id",
                              "product code", "product #", "product no", "prod #", "prod code",
@@ -2668,13 +2669,19 @@ def _detect_columns(headers):
                              "quantity ordered", "quantity shipped", "quantity received",
                              "on hand", "on_hand", "qty on hand", "qty", "quantity",
                              "units ordered", "units shipped", "units", "ordered", "shipped",
-                             "received", "count", "stock", "amount", "pcs", "pieces"]),
+                             "received", "stock", "amount", "pcs", "pieces"]),
         ("cost_price",      ["unit cost", "unit price", "unit value", "each", "price each",
                              "cost price", "purchase price", "buy price", "wholesale price",
                              "wholesale", "cost per unit", "cost"]),
-        ("sale_price",      ["sale price", "retail price", "sell price", "selling price", "msrp", "retail"]),
+        ("sale_price",      ["retail sale price", "sale price", "retail price", "sell price",
+                             "selling price", "msrp", "retail"]),
         ("serial",          ["serial number", "serial no", "serial #", "serial num", "serial", "sn", "s/n"]),
         ("name",            ["item name", "product name", "item description", "name", "product", "title"]),
+        ("flavor",          ["flavor", "flavour", "scent", "variety", "flavor/scent", "flavor / scent"]),
+        ("pill_count",      ["pill/bottle count", "pills/bottle", "pill count", "tablet count",
+                             "capsule count", "count per bottle", "pills per bottle",
+                             "tablets per bottle", "capsules per bottle", "count per unit",
+                             "pills per container", "serving count", "unit count"]),
         ("category",        ["category", "cat", "class", "department", "dept", "type"]),
         ("shelf",           ["shelf location", "bin location", "shelf", "bin", "aisle", "row", "storage"]),
         ("site",            ["ship to", "shipto", "warehouse", "facility", "branch", "site",
@@ -2787,6 +2794,9 @@ def _read_file_rows(f):
             'description', 'desc', 'product', 'model', 'manufacturer', 'brand',
             'notes', 'note', 'po number', 'po #', 'purchase date', 'date',
             'expiration', 'expiration date', 'exp date', 'lot', 'lot number', 'batch',
+            'flavor', 'flavour', 'variety', 'retail sale price', 'retail price',
+            'pill count', 'pill/bottle count', 'tablet count', 'capsule count',
+            'item sku', 'product sku', 'our sku', 'internal sku',
         }
         best_idx = 0
         best_score = -1
@@ -3529,6 +3539,8 @@ def _api_inventory_parse_inner():
             "sale_price":      sale,
             "expiration_date": _norm_date_str(_get(row, "expiration_date")),
             "lot_number":      _get(row, "lot_number") or None,
+            "flavor":          _get(row, "flavor") or None,
+            "pill_count":      _get(row, "pill_count") or None,
             "manufacturer":    _get(row, "manufacturer") or None,
             "model":           _get(row, "model") or None,
             "notes":           _get(row, "notes") or None,
@@ -3601,6 +3613,10 @@ def api_inventory_commit():
             extra["expiration_date"] = r["expiration_date"]
         if r.get("lot_number"):
             extra["lot_number"] = r["lot_number"]
+        if r.get("flavor"):
+            extra["flavor"] = r["flavor"]
+        if r.get("pill_count"):
+            extra["pill_count"] = r["pill_count"]
 
         iid = execute("""
             INSERT INTO items
