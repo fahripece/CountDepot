@@ -34,7 +34,7 @@ def close_db(e=None):
 
 def query(sql, args=(), one=False):
     cur = get_db().execute(sql, args)
-    rv = cur.fetchall()
+    rv = [dict(r) for r in cur.fetchall()]
     return (rv[0] if rv else None) if one else rv
 
 

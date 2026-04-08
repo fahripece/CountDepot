@@ -1449,16 +1449,7 @@ async function massDelete(){
   if(!n)return;
   if(!confirm(`Delete ${n} selected item${n===1?'':'s'}? This cannot be undone.`))return;
   const ids=[...selectedIds];
-  console.log('[massDelete] sending ids:', ids);
-  let res;
-  try{
-    res=await api('/api/item/delete',{ids});
-    console.log('[massDelete] response:', res);
-  }catch(e){
-    console.error('[massDelete] fetch error:', e);
-    toast('Network error: '+e,'err');
-    return;
-  }
+  const res=await api('/api/item/delete',{ids});
   if(res.ok){
     toast(`Deleted ${res.deleted} item(s)`,'warn');
     selectedIds.clear();updateSelectionUI();closeDetail();loadItems();
