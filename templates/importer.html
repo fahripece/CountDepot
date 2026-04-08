@@ -94,6 +94,9 @@
       <div style="font-weight:600;color:#15803d;margin-bottom:6px">Columns detected in your file:</div>
       <div id="gen-col-map-list" style="display:flex;flex-wrap:wrap;gap:6px"></div>
     </div>
+    <div id="gen-custom-fields-wrap" style="display:none;background:#faf5ff;border:1px solid #ddd6fe;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:#5b21b6">
+      <strong>New custom fields will be auto-created</strong> on matching categories: <span id="gen-custom-fields-list"></span>
+    </div>
     <div id="gen-undetected-wrap" style="display:none;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e">
       <strong>Ignored columns</strong> (not mapped to any field): <span id="gen-undetected-list"></span>
     </div>
@@ -354,7 +357,7 @@ function buildSitePreviewDetail(prefix){
 }
 
 // ══════════════════ INVENTORY MODE LOGIC ══════════════════════════════════════
-let _genFile = null, _genRows = [];
+let _genFile = null, _genRows = [], _genCustomFieldCandidates = [];
 
 function genHandleDrop(e){ e.preventDefault(); document.getElementById('gen-drop-zone').style.borderColor='#cbd5e1'; document.getElementById('gen-drop-zone').style.background='#f8fafc'; const f=e.dataTransfer.files[0]; if(f) genHandleFile(f); }
 function genHandleFile(f){
@@ -382,6 +385,7 @@ async function genParseFile(){
     const res = await fetch('/api/inventory/parse',{method:'POST',headers:{'X-CSRF-Token':_csrfToken},body:fd}).then(r=>r.json());
     if(!res.ok){ toast(res.msg||'Parse failed','err'); return; }
     _genRows = res.rows;
+    _genCustomFieldCandidates = res.custom_field_candidates || [];
     genShowPreview(res);
   } catch(e){ toast('Network error: '+e,'err'); }
   finally { btn.disabled=false; btn.textContent='Preview Import →'; }
@@ -395,15 +399,28 @@ function genShowPreview(res){
   const LABELS = {name:'Name',qty:'Qty',cost_price:'Cost',sale_price:'Sale Price',serial:'Serial',
     sku:'Vendor SKU',category:'Category',shelf:'Shelf',expiration_date:'Exp Date',
     lot_number:'Lot #',notes:'Notes',manufacturer:'Manufacturer',model:'Model',
-    description:'Description',purchase_date:'Purchase Date',po_number:'PO #'};
+    description:'Description',purchase_date:'Purchase Date',po_number:'PO #',
+    flavor:'Flavor',pill_count:'Pill/Bottle Count'};
   document.getElementById('gen-col-map-list').innerHTML =
     Object.entries(res.col_map).map(([k,v])=>
       `<span style="background:#dcfce7;color:#15803d;font-size:11px;padding:3px 8px;border-radius:4px;font-weight:600">${LABELS[k]||k} <span style="font-weight:400;color:#166534">← "${esc(v)}"</span></span>`
     ).join('');
 
+  // Custom field candidates — columns we'll auto-create as category fields
+  const cfWrap = document.getElementById('gen-custom-fields-wrap');
+  if(_genCustomFieldCandidates.length){
+    document.getElementById('gen-custom-fields-list').innerHTML =
+      _genCustomFieldCandidates.map(cf=>`<span style="background:#ede9fe;color:#5b21b6;font-size:11px;padding:3px 8px;border-radius:4px;font-weight:600">${esc(cf.label)}</span>`).join(' ');
+    cfWrap.style.display='';
+  } else {
+    cfWrap.style.display='none';
+  }
+
   if(res.undetected && res.undetected.length){
     document.getElementById('gen-undetected-wrap').style.display='';
     document.getElementById('gen-undetected-list').textContent = res.undetected.join(', ');
+  } else {
+    document.getElementById('gen-undetected-wrap').style.display='none';
   }
 
   // Site detection
@@ -449,7 +466,7 @@ async function genCommit(){
   const btn = document.getElementById('gen-commit-btn');
   btn.disabled=true; btn.textContent='Importing…';
   const sp = getSitePayload('gen');
-  const payload = { rows: _genRows, notes: document.getElementById('gen-notes').value.trim(), ...sp };
+  const payload = { rows: _genRows, notes: document.getElementById('gen-notes').value.trim(), custom_field_candidates: _genCustomFieldCandidates, ...sp };
   try {
     const res = await fetch('/api/inventory/commit',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify(payload)}).then(r=>r.json());
     if(!res.ok){ toast(res.msg||'Import failed','err'); btn.disabled=false; btn.textContent='Import Items'; return; }
@@ -461,7 +478,7 @@ async function genCommit(){
 }
 
 function genReset(){
-  _genFile=null; _genRows=[];
+  _genFile=null; _genRows=[]; _genCustomFieldCandidates=[];
   document.getElementById('gen-file-input').value='';
   document.getElementById('gen-file-info').style.display='none';
   document.getElementById('gen-parse-btn').disabled=true;

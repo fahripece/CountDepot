@@ -3503,6 +3503,20 @@ def _api_inventory_parse_inner():
         v = str(row.get(col) or "").strip()
         return "" if v.lower() in ("none", "n/a", "—", "-") else v
 
+    # Columns that didn't map to any standard field — potential custom fields
+    import re as _re
+    mapped_cols = set(col_map.values())
+    undetected = [h for h in headers if h not in mapped_cols]
+
+    # Only treat as custom field candidates if the column actually has data
+    def _col_key(label):
+        return _re.sub(r'[^a-z0-9]+', '_', label.lower().strip()).strip('_')
+
+    custom_field_candidates = []
+    for h in undetected:
+        if any(str(row.get(h) or '').strip() for row in rows_raw):
+            custom_field_candidates.append({"label": h, "key": _col_key(h)})
+
     result_rows = []
     for row in rows_raw:
         name = _get(row, "name") or _get(row, "description")
@@ -3525,6 +3539,13 @@ def _api_inventory_parse_inner():
         cat_name = _get(row, "category")
         cat_id   = cat_map.get(cat_name.lower()) if cat_name else None
 
+        # Collect values for any custom field columns
+        custom_vals = {}
+        for cf in custom_field_candidates:
+            v = str(row.get(cf["label"]) or '').strip()
+            if v and v.lower() not in ('none', 'n/a', '—', '-'):
+                custom_vals[cf["key"]] = v
+
         result_rows.append({
             "name":            name,
             "qty":             qty,
@@ -3546,23 +3567,24 @@ def _api_inventory_parse_inner():
             "notes":           _get(row, "notes") or None,
             "purchase_date":   _norm_date_str(_get(row, "purchase_date")),
             "po_number":       _get(row, "po_number") or None,
+            "custom_fields":   custom_vals,
         })
 
     if not result_rows:
         return jsonify({"ok": False, "msg": "No valid rows found (all rows missing a name/item value)."})
 
     detected_labels = {k: v for k, v in col_map.items() if k != "site"}
-    undetected = [h for h in headers if h not in col_map.values()]
     site_suggestion = _detect_site_in_rows(rows_raw)
     if not site_suggestion and file_meta.get("ship_to"):
         site_suggestion = file_meta["ship_to"]
 
     return jsonify({
-        "ok":              True,
-        "rows":            result_rows,
-        "total":           len(result_rows),
-        "col_map":         detected_labels,
-        "undetected":      undetected,
+        "ok":                     True,
+        "rows":                   result_rows,
+        "total":                  len(result_rows),
+        "col_map":                detected_labels,
+        "undetected":             [h for h in undetected if not any(cf["label"] == h for cf in custom_field_candidates)],
+        "custom_field_candidates": custom_field_candidates,
         "site_suggestion": site_suggestion,
     })
 
@@ -3581,6 +3603,27 @@ def api_inventory_commit():
 
     now = datetime.utcnow().isoformat()
     created_ids = []
+
+    # Auto-create category_fields for any custom field candidates
+    custom_field_candidates = d.get("custom_field_candidates", [])
+    if custom_field_candidates:
+        # Collect all distinct category_ids that appear in rows
+        category_ids = {r["category_id"] for r in rows if r.get("category_id")}
+        existing_keys = {}  # cat_id → set of field_keys already in DB
+        for cat_id in category_ids:
+            existing_keys[cat_id] = {
+                row["field_key"]
+                for row in query("SELECT field_key FROM category_fields WHERE category_id=?", [cat_id])
+            }
+        for cat_id in category_ids:
+            sort_base = query("SELECT COUNT(*) as c FROM category_fields WHERE category_id=?",
+                              [cat_id], one=True)["c"]
+            for i, cf in enumerate(custom_field_candidates):
+                if cf["key"] not in existing_keys.get(cat_id, set()):
+                    execute("""INSERT INTO category_fields
+                               (category_id, field_label, field_key, field_type, required, sort_order)
+                               VALUES (?, ?, ?, 'text', 0, ?)""",
+                            [cat_id, cf["label"], cf["key"], sort_base + i])
 
     for r in rows:
         name = (r.get("name") or "").strip()
@@ -3617,6 +3660,8 @@ def api_inventory_commit():
             extra["flavor"] = r["flavor"]
         if r.get("pill_count"):
             extra["pill_count"] = r["pill_count"]
+        # Merge in any auto-detected custom fields
+        extra.update(r.get("custom_fields") or {})
 
         iid = execute("""
             INSERT INTO items
