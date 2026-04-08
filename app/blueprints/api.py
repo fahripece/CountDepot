@@ -2772,12 +2772,36 @@ def _read_file_rows(f):
         all_rows = list(ws.iter_rows(values_only=True))
         if not all_rows:
             raise ValueError("Excel file is empty")
-        # Use first non-empty row as header
-        header_row_idx = 0
-        for i, row in enumerate(all_rows):
-            if any(c is not None and str(c).strip() for c in row):
-                header_row_idx = i
-                break
+        # Find the best header row in the first 20 rows.
+        # Score each row by how many cells match known column header keywords.
+        # Falls back to the row with the most non-empty cells if nothing scores.
+        HEADER_HINTS = {
+            'name', 'serial', 'serial number', 'serial no', 'serial #', 'sn', 's/n',
+            'sku', 'vendor sku', 'part number', 'part #', 'item #', 'item number',
+            'item code', 'product code', 'barcode', 'upc', 'code',
+            'qty', 'quantity', 'count', 'units', 'stock', 'amount',
+            'cost', 'cost price', 'unit cost', 'unit price', 'price',
+            'sale price', 'retail price',
+            'category', 'class', 'department', 'type',
+            'shelf', 'bin', 'location', 'site', 'warehouse',
+            'description', 'desc', 'product', 'model', 'manufacturer', 'brand',
+            'notes', 'note', 'po number', 'po #', 'purchase date', 'date',
+            'expiration', 'expiration date', 'exp date', 'lot', 'lot number', 'batch',
+        }
+        best_idx = 0
+        best_score = -1
+        for i, row in enumerate(all_rows[:20]):
+            cells = [str(c or '').strip() for c in row]
+            non_empty = sum(1 for c in cells if c)
+            if non_empty == 0:
+                continue
+            keyword_hits = sum(1 for c in cells if c.lower() in HEADER_HINTS)
+            # Weight: keyword hits count for a lot; non-empty count is a tiebreaker
+            score = keyword_hits * 100 + non_empty
+            if score > best_score:
+                best_score = score
+                best_idx = i
+        header_row_idx = best_idx
         headers = [str(h or "").strip() for h in all_rows[header_row_idx]]
         # Deduplicate blank headers
         seen = {}
