@@ -3098,98 +3098,161 @@ def invoice_import_template():
 @login_required
 @perm_required("import_export")
 def api_invoice_parse():
-    """Parse an uploaded invoice file and return a preview.
-    Matches rows to products by vendor_sku. Detects ship-to/site column automatically."""
+    """Parse an uploaded invoice file. Returns raw rows + headers + auto-detected
+    column mapping so the UI can show a column-mapping step before the preview."""
     try:
-        return _api_invoice_parse_inner()
+        f = request.files.get("file")
+        if not f:
+            return jsonify({"ok": False, "msg": "No file uploaded"})
+        try:
+            headers, rows_raw, file_meta = _read_file_rows(f)
+        except ValueError as e:
+            return jsonify({"ok": False, "msg": str(e)})
+        except Exception as e:
+            return jsonify({"ok": False, "msg": "Could not read file: " + str(e)})
+
+        if not rows_raw:
+            return jsonify({"ok": False, "msg": "File has no data rows"})
+
+        auto_map = _detect_columns(headers)
+        sample_rows = rows_raw[:5]
+
+        site_suggestion = _detect_site_in_rows(rows_raw)
+        if not site_suggestion and file_meta.get("ship_to"):
+            site_suggestion = file_meta["ship_to"]
+
+        return jsonify({
+            "ok":             True,
+            "headers":        headers,
+            "rows_raw":       rows_raw,
+            "sample_rows":    sample_rows,
+            "auto_map":       auto_map,
+            "file_meta":      file_meta,
+            "site_suggestion": site_suggestion,
+        })
     except Exception as e:
         return jsonify({"ok": False, "msg": "Unexpected error: " + str(e)})
 
 
-def _api_invoice_parse_inner():
-    f = request.files.get("file")
-    if not f:
-        return jsonify({"ok": False, "msg": "No file uploaded"})
+@bp.route("/api/invoice/preview", methods=["POST"])
+@login_required
+@perm_required("import_export")
+def api_invoice_preview():
+    """Apply a user-confirmed column mapping to raw rows and return a matched preview."""
     try:
-        headers, rows_raw, file_meta = _read_file_rows(f)
-    except ValueError as e:
-        return jsonify({"ok": False, "msg": str(e)})
+        d = request.json or {}
+        rows_raw = d.get("rows_raw", [])
+        mapping  = d.get("mapping", {})  # {field_key: header_name}
+
+        if not rows_raw:
+            return jsonify({"ok": False, "msg": "No rows to preview"})
+
+        # Build product lookup maps
+        prod_by_vendor_sku = {}
+        for p in query("SELECT id, name, vendor_sku FROM products WHERE active=1 AND vendor_sku IS NOT NULL AND vendor_sku != ''"):
+            prod_by_vendor_sku[p["vendor_sku"].strip().lower()] = {"id": p["id"], "name": p["name"]}
+        prod_by_item_sku = {}
+        for r in query("""SELECT DISTINCT i.sku, i.product_id, p.name as product_name
+                          FROM items i JOIN products p ON p.id=i.product_id
+                          WHERE i.sku IS NOT NULL AND i.sku != '' AND i.product_id IS NOT NULL AND p.active=1"""):
+            prod_by_item_sku[r["sku"].strip().lower()] = {"id": r["product_id"], "name": r["product_name"]}
+
+        def _get(row, field):
+            col = mapping.get(field)
+            if not col:
+                return ""
+            v = str(row.get(col) or "").strip()
+            return "" if v.lower() in ("none", "n/a", "—", "-", "null") else v
+
+        result_rows = []
+        matched = unmatched = 0
+
+        for row in rows_raw:
+            sku       = _get(row, "sku")
+            desc      = _get(row, "description")
+            qty_raw   = _get(row, "qty")
+            price_raw = _get(row, "cost_price")
+            exp_raw   = _get(row, "expiration_date")
+            lot       = _get(row, "lot_number")
+
+            if not sku:
+                continue
+            try:
+                qty = int(float(qty_raw.replace(',', ''))) if qty_raw else None
+            except (ValueError, TypeError):
+                qty = None
+            if not qty:
+                continue
+            try:
+                unit_price = float(price_raw.replace(',', '').replace('$', '')) if price_raw else None
+            except (ValueError, TypeError):
+                unit_price = None
+
+            sku_key = sku.lower()
+            product = prod_by_vendor_sku.get(sku_key) or prod_by_item_sku.get(sku_key)
+            status  = "matched" if product else "unmatched"
+            if product: matched += 1
+            else:       unmatched += 1
+
+            result_rows.append({
+                "vendor_sku":      sku,
+                "description":     desc,
+                "qty":             qty,
+                "unit_price":      unit_price,
+                "expiration_date": _norm_date_str(exp_raw),
+                "lot_number":      lot,
+                "product_id":      product["id"]   if product else None,
+                "product_name":    product["name"] if product else None,
+                "status":          status,
+            })
+
+        if not result_rows:
+            return jsonify({"ok": False, "msg": "No rows with a valid SKU and Quantity found. Check your column mapping."})
+
+        return jsonify({"ok": True, "rows": result_rows,
+                        "matched": matched, "unmatched": unmatched})
     except Exception as e:
-        return jsonify({"ok": False, "msg": "Could not read file: " + str(e)})
+        return jsonify({"ok": False, "msg": "Unexpected error: " + str(e)})
 
-    # Use shared column detection so invoice files with varied headers also work
-    col_map = _detect_columns(headers)
 
-    # Build product lookup maps
-    prod_by_vendor_sku = {}
-    for p in query("SELECT id, name, vendor_sku FROM products WHERE active=1 AND vendor_sku IS NOT NULL AND vendor_sku != ''"):
-        prod_by_vendor_sku[p["vendor_sku"].strip().lower()] = {"id": p["id"], "name": p["name"]}
-    prod_by_item_sku = {}
-    for r in query("""SELECT DISTINCT i.sku, i.product_id, p.name as product_name
-                      FROM items i JOIN products p ON p.id=i.product_id
-                      WHERE i.sku IS NOT NULL AND i.sku != '' AND i.product_id IS NOT NULL AND p.active=1"""):
-        prod_by_item_sku[r["sku"].strip().lower()] = {"id": r["product_id"], "name": r["product_name"]}
+@bp.route("/api/invoice/mappings", methods=["GET"])
+@login_required
+@perm_required("import_export")
+def api_invoice_get_mapping():
+    """Return saved column mapping for a vendor name."""
+    vendor = (request.args.get("vendor") or "").strip()
+    if not vendor:
+        return jsonify({"ok": True, "mapping": None})
+    row = query("SELECT mapping FROM invoice_mappings WHERE LOWER(vendor_name)=LOWER(?)",
+                [vendor], one=True)
+    if not row:
+        return jsonify({"ok": True, "mapping": None})
+    try:
+        return jsonify({"ok": True, "mapping": json.loads(row["mapping"])})
+    except Exception:
+        return jsonify({"ok": True, "mapping": None})
 
-    def _get(row, field):
-        col = col_map.get(field)
-        if not col:
-            return ""
-        v = str(row.get(col) or "").strip()
-        return "" if v.lower() in ("none", "n/a", "—", "-") else v
 
-    result_rows = []
-    matched = unmatched = 0
-
-    for row in rows_raw:
-        sku     = _get(row, "sku")
-        desc    = _get(row, "description") or _get(row, "name")
-        qty_raw = _get(row, "qty")
-        price_raw = _get(row, "cost_price")
-        exp_raw = _get(row, "expiration_date")
-        lot     = _get(row, "lot_number")
-
-        if not sku:
-            continue
-        try:
-            qty = int(float(qty_raw.replace(',', ''))) if qty_raw else None
-        except (ValueError, TypeError):
-            qty = None
-        if not qty:
-            continue
-        try:
-            unit_price = float(price_raw.replace(',', '').replace('$', '')) if price_raw else None
-        except (ValueError, TypeError):
-            unit_price = None
-
-        sku_key = sku.lower()
-        product = prod_by_vendor_sku.get(sku_key) or prod_by_item_sku.get(sku_key)
-        status  = "matched" if product else "unmatched"
-        if product: matched += 1
-        else:       unmatched += 1
-
-        result_rows.append({
-            "vendor_sku":      sku,
-            "description":     desc,
-            "qty":             qty,
-            "unit_price":      unit_price,
-            "expiration_date": _norm_date_str(exp_raw),
-            "lot_number":      lot,
-            "product_id":      product["id"]   if product else None,
-            "product_name":    product["name"] if product else None,
-            "status":          status,
-        })
-
-    if not result_rows:
-        return jsonify({"ok": False, "msg": "No valid rows found. Check that the file has SKU and Quantity columns."})
-
-    site_suggestion = _detect_site_in_rows(rows_raw)
-    # Fall back to PDF-extracted ship_to if column detection found nothing
-    if not site_suggestion and file_meta.get("ship_to"):
-        site_suggestion = file_meta["ship_to"]
-    return jsonify({"ok": True, "rows": result_rows,
-                    "matched": matched, "unmatched": unmatched,
-                    "site_suggestion": site_suggestion,
-                    "file_meta": file_meta})
+@bp.route("/api/invoice/mappings", methods=["POST"])
+@login_required
+@perm_required("import_export")
+def api_invoice_save_mapping():
+    """Save or update a column mapping for a vendor."""
+    d = request.json or {}
+    vendor  = (d.get("vendor_name") or "").strip()
+    mapping = d.get("mapping")
+    if not vendor or not mapping:
+        return jsonify({"ok": False, "msg": "vendor_name and mapping required"})
+    now = datetime.utcnow().isoformat()
+    existing = query("SELECT id FROM invoice_mappings WHERE LOWER(vendor_name)=LOWER(?)",
+                     [vendor], one=True)
+    if existing:
+        execute("UPDATE invoice_mappings SET mapping=?, updated_at=? WHERE id=?",
+                [json.dumps(mapping), now, existing["id"]])
+    else:
+        execute("INSERT INTO invoice_mappings (vendor_name, mapping, created_at, updated_at) VALUES (?,?,?,?)",
+                [vendor, json.dumps(mapping), now, now])
+    return jsonify({"ok": True})
 
 
 @bp.route("/api/invoice/commit", methods=["POST"])

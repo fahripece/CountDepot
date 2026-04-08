@@ -407,6 +407,13 @@ def _init_db_conn(db):
             line_count  INTEGER DEFAULT 0,
             notes       TEXT
         );
+        CREATE TABLE IF NOT EXISTS invoice_mappings (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            vendor_name TEXT NOT NULL,
+            mapping     TEXT NOT NULL,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        );
     """)
 
     # ── Indexes ────────────────────────────────────────────────────────────────
