@@ -8,6 +8,19 @@ from config import Config
 _initialized_tenants: set = set()
 
 
+class Row(dict):
+    """Dict subclass that also supports integer index access (like sqlite3.Row)
+    and .get() — so both row["col"] and row[0] and row.get("col") all work."""
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+
+def _row_factory(cursor, row):
+    return Row(zip([c[0] for c in cursor.description], row))
+
+
 def get_db():
     """Open (or reuse) the current tenant's inventory.db.
 
@@ -18,7 +31,7 @@ def get_db():
     if "db" not in g:
         db_path = _tenant_db_path(g.tenant_slug)
         g.db = sqlite3.connect(db_path)
-        g.db.row_factory = sqlite3.Row
+        g.db.row_factory = _row_factory
         g.db.execute("PRAGMA journal_mode=WAL")
         g.db.execute("PRAGMA foreign_keys=ON")
         g.db.execute("PRAGMA synchronous=NORMAL")
@@ -34,7 +47,7 @@ def close_db(e=None):
 
 def query(sql, args=(), one=False):
     cur = get_db().execute(sql, args)
-    rv = [dict(r) for r in cur.fetchall()]
+    rv = cur.fetchall()
     return (rv[0] if rv else None) if one else rv
 
 
