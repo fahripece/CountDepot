@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, request, session, redirect, url_fo
 
 from app.db import query
 from app.helpers import (login_required, perm_required, admin_required,
-                         get_low_stock_alerts, ALL_PERMISSIONS, PERM_KEYS)
+                         ALL_PERMISSIONS, PERM_KEYS)
 
 bp = Blueprint("main", __name__)
 
@@ -50,7 +50,6 @@ def inventory():
         companies    = [dict(r) for r in query("SELECT * FROM companies WHERE active=1 ORDER BY name")],
         distributors = [r["name"] for r in query("SELECT name FROM distributors ORDER BY name")],
         category_fields = _cat_fields(),
-        alerts       = get_low_stock_alerts(),
         products     = _products_list(),
         user_perms   = list(session.get("permissions", "").split(",")))
 
