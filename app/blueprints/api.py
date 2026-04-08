@@ -475,6 +475,13 @@ def api_scan():
 @login_required
 @perm_required("checkout_checkin")
 def api_checkout():
+    try:
+        return _api_checkout_inner()
+    except Exception as e:
+        import traceback
+        return jsonify({"ok": False, "msg": f"Checkout error: {type(e).__name__}: {e}", "trace": traceback.format_exc()}), 500
+
+def _api_checkout_inner():
     d    = request.json
     item = query("""SELECT i.*, p.require_scan_checkout as product_scan_req
                     FROM items i LEFT JOIN products p ON p.id=i.product_id
@@ -1153,26 +1160,30 @@ def api_item_edit():
 @login_required
 @perm_required("delete_items")
 def api_item_delete():
-    d           = request.json
-    ids         = d.get("ids") or ([d["id"]] if d.get("id") else [])
-    loc_ids     = session.get("location_ids") or []
-    deleted     = 0
-    product_ids = set()
-    for iid in ids:
-        item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
-        if not item:
-            continue
-        if loc_ids and item["location_id"] not in loc_ids:
-            continue
-        execute("UPDATE items SET active=0 WHERE id=?", [iid])
-        execute("DELETE FROM tasks WHERE item_id=?", [iid])
-        log_action("ITEM_DELETE", iid, item["name"], "Deleted")
-        deleted += 1
-        if item.get("product_id"):
-            product_ids.add(item["product_id"])
-    for pid in product_ids:
-        notify_low_stock_if_needed(pid)
-    return jsonify({"ok": True, "deleted": deleted})
+    try:
+        d           = request.json
+        ids         = d.get("ids") or ([d["id"]] if d.get("id") else [])
+        loc_ids     = session.get("location_ids") or []
+        deleted     = 0
+        product_ids = set()
+        for iid in ids:
+            item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+            if not item:
+                continue
+            if loc_ids and item["location_id"] not in loc_ids:
+                continue
+            execute("UPDATE items SET active=0 WHERE id=?", [iid])
+            execute("DELETE FROM tasks WHERE item_id=?", [iid])
+            log_action("ITEM_DELETE", iid, item["name"], "Deleted")
+            deleted += 1
+            if item.get("product_id"):
+                product_ids.add(item["product_id"])
+        for pid in product_ids:
+            notify_low_stock_if_needed(pid)
+        return jsonify({"ok": True, "deleted": deleted})
+    except Exception as e:
+        import traceback
+        return jsonify({"ok": False, "msg": f"Delete error: {type(e).__name__}: {e}", "trace": traceback.format_exc()}), 500
 
 
 # ── Bulk operations ───────────────────────────────────────────────────────────
