@@ -2658,25 +2658,35 @@ def _detect_columns(headers):
     Returns dict of {field_name → original_header}."""
     # Ordered by priority — more specific patterns listed first
     FIELD_PATTERNS = [
-        ("name",            ["item name", "product name", "name", "item", "product", "title"]),
-        ("qty",             ["on hand", "on_hand", "qty on hand", "qty", "quantity", "count", "stock", "units", "amount"]),
-        ("cost_price",      ["unit cost", "cost price", "purchase price", "buy price", "wholesale price",
-                             "wholesale", "unit price", "cost"]),
+        ("sku",             ["vendor sku", "vendor_sku", "vendor sku/description",
+                             "part number", "part #", "part no", "part no.", "part num",
+                             "item #", "item no", "item no.", "item number", "item code", "item id",
+                             "product code", "product #", "product no", "prod #", "prod code",
+                             "sku", "code", "barcode", "upc", "catalog #", "catalog no",
+                             "mfr part", "mfr #", "vendor part"]),
+        ("qty",             ["qty ordered", "qty shipped", "qty received", "qty invoiced",
+                             "quantity ordered", "quantity shipped", "quantity received",
+                             "on hand", "on_hand", "qty on hand", "qty", "quantity",
+                             "units ordered", "units shipped", "units", "ordered", "shipped",
+                             "received", "count", "stock", "amount", "pcs", "pieces"]),
+        ("cost_price",      ["unit cost", "unit price", "unit value", "each", "price each",
+                             "cost price", "purchase price", "buy price", "wholesale price",
+                             "wholesale", "cost per unit", "cost"]),
         ("sale_price",      ["sale price", "retail price", "sell price", "selling price", "msrp", "retail"]),
         ("serial",          ["serial number", "serial no", "serial #", "serial num", "serial", "sn", "s/n"]),
-        ("sku",             ["vendor sku", "vendor_sku", "part number", "part #", "part no",
-                             "item code", "barcode", "upc", "sku", "code"]),
+        ("name",            ["item name", "product name", "item description", "name", "product", "title"]),
         ("category",        ["category", "cat", "class", "department", "dept", "type"]),
         ("shelf",           ["shelf location", "bin location", "shelf", "bin", "aisle", "row", "storage"]),
         ("site",            ["ship to", "shipto", "warehouse", "facility", "branch", "site",
                              "store", "office", "plant", "location"]),
         ("expiration_date", ["expiration date", "expiration", "exp date", "exp", "expiry",
-                             "best by", "use by", "expires", "best before"]),
-        ("lot_number",      ["lot number", "lot #", "lot no", "batch number", "batch no", "lot", "batch"]),
+                             "best by", "use by", "expires", "best before", "bb date", "use before"]),
+        ("lot_number",      ["lot number", "lot #", "lot no", "lot nbr", "lot num",
+                             "batch number", "batch no", "batch #", "batch", "lot"]),
         ("notes",           ["notes", "note", "comments", "comment", "remarks", "memo"]),
         ("manufacturer",    ["manufacturer", "brand", "make", "mfr", "mfg", "vendor", "supplier"]),
         ("model",           ["model number", "model #", "model no", "model name", "model"]),
-        ("description",     ["description", "desc", "details", "product description"]),
+        ("description",     ["description", "desc", "details", "product description", "item description"]),
         ("purchase_date",   ["purchase date", "received date", "date received", "date", "po date"]),
         ("po_number",       ["po number", "po #", "po no", "purchase order", "order #", "p.o."]),
     ]
@@ -2985,24 +2995,29 @@ def _read_pdf_rows(f):
                 if has_qty_val or has_date_val:
                     if current:
                         tier2_rows.append(current)
+                    # Split item column: first word = Vendor SKU, rest = Description
+                    vendor_sku  = item_words[0].rstrip(':') if item_words else ''
+                    description = ' '.join(item_words[1:]).strip()
                     current = {
-                        FRIENDLY.get('item',     'Description/SKU'):    ' '.join(item_words).strip(),
-                        FRIENDLY.get('qty',      'Quantity'):           qty_str,
-                        FRIENDLY.get('exp_date', 'Expiration Date'):    exp_str,
-                        FRIENDLY.get('lot_nbr',  'Lot Number'):         ' '.join(buckets.get('lot_nbr', [])).strip(),
-                        FRIENDLY.get('unit_val', 'Unit Price'):         ' '.join(buckets.get('unit_val', [])).replace('$','').strip(),
-                        FRIENDLY.get('total_val','Total'):              ' '.join(buckets.get('total_val',[])).replace('$','').strip(),
+                        "Vendor SKU":      vendor_sku,
+                        "Description":     description,
+                        "Quantity":        qty_str,
+                        "Expiration Date": exp_str,
+                        "Lot Number":      ' '.join(buckets.get('lot_nbr', [])).strip(),
+                        "Unit Price":      ' '.join(buckets.get('unit_val', [])).replace('$','').strip(),
+                        "Total":           ' '.join(buckets.get('total_val',[])).replace('$','').strip(),
                     }
                 elif current and first_x < qty_x * 0.95:
                     cont = ' '.join(w['text'] for w in row_words if w['x0'] < qty_x).strip()
                     if cont:
-                        current[FRIENDLY['item']] = (current[FRIENDLY['item']] + ' ' + cont).strip()
+                        current["Description"] = (current["Description"] + ' ' + cont).strip()
 
             if current:
                 tier2_rows.append(current)
 
         if tier2_rows:
-            hdrs = list(tier2_rows[0].keys())
+            hdrs = ["Vendor SKU", "Description", "Quantity", "Expiration Date",
+                    "Lot Number", "Unit Price", "Total"]
             return hdrs, tier2_rows, meta
 
         # ── Tier 3: generic column extraction — always returns something ───
