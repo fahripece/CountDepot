@@ -9,7 +9,7 @@
       <option value="">All Time</option>
       <option value="today">Today</option>
       <option value="week">This Week</option>
-      <option value="month">This Month</option>
+      <option value="month" selected>This Month</option>
       <option value="quarter">This Quarter</option>
       <option value="year">This Year</option>
       <option value="last30">Last 30 Days</option>
@@ -23,23 +23,55 @@
     </div>
   </div>
 </div>
+
 <div style="flex:1;overflow-y:auto;padding:20px 24px" id="rptContent">
   <div style="text-align:center;padding:60px;color:#94a3b8">Loading…</div>
 </div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
-.rpt-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px}
+.rpt-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.rpt-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px}
 .chart-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:18px 20px}
-.chart-title{font-size:13px;font-weight:600;color:#0f172a;margin-bottom:16px}
-.act-row{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f5f4f1}
+.chart-title{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.chart-title span{font-size:11px;font-weight:400;color:#94a3b8}
+.act-row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid #f5f4f1}
 .act-row:last-child{border-bottom:none}
 .act-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
-.act-summary{font-size:11px;color:#94a3b8;margin-top:2px}
-@media(max-width:900px){.rpt-grid-3{grid-template-columns:1fr}}
+.act-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:.3px}
+.stat-mini{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:14px 18px;display:flex;flex-direction:column;gap:2px}
+.stat-mini-val{font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:#0f172a}
+.stat-mini-lbl{font-size:11px;color:#94a3b8}
+.action-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f5f4f1}
+.action-row:last-child{border-bottom:none}
+.action-bar-wrap{flex:1;background:#f1f5f9;border-radius:4px;height:6px;overflow:hidden}
+.action-bar{height:6px;border-radius:4px;transition:width .4s}
+.tech-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f4f1}
+.tech-row:last-child{border-bottom:none}
+.tech-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+@media(max-width:900px){.rpt-grid-2,.rpt-grid-3{grid-template-columns:1fr}}
 </style>
 <script>
-const ACTION_COLORS={CHECKOUT:'#b91c1c',CHECKIN:'#15803d',QTY_ADD:'#047857',QTY_REMOVE:'#b45309',QTY_SET:'#6d28d9',ITEM_ADD:'#0891b2',ITEM_EDIT:'#d97706',ITEM_DELETE:'#dc2626',ITEM_SOLD:'#7c3aed',ITEM_MODIFY:'#d97706',PRODUCT_ADD:'#0891b2',CAT_ADD:'#7c3aed',USER_ADD:'#0062cc',LOGIN:'#1d4ed8',LOGOUT:'#6b7280'};
+const ACTION_COLORS={
+  CHECKOUT:'#b91c1c',CHECKIN:'#15803d',
+  QTY_ADD:'#047857',QTY_REMOVE:'#b45309',QTY_SET:'#6d28d9',
+  ITEM_ADD:'#0891b2',ITEM_EDIT:'#d97706',ITEM_DELETE:'#dc2626',
+  ITEM_SOLD:'#7c3aed',ITEM_MODIFY:'#d97706',
+  PRODUCT_ADD:'#0891b2',PRODUCT_EDIT:'#d97706',
+  CAT_ADD:'#7c3aed',USER_ADD:'#0062cc',LOGIN:'#1d4ed8',LOGOUT:'#6b7280'
+};
+const ACTION_LABELS={
+  CHECKOUT:'Check Out',CHECKIN:'Check In',
+  QTY_ADD:'Qty Added',QTY_REMOVE:'Qty Removed',QTY_SET:'Qty Set',
+  ITEM_ADD:'Item Added',ITEM_EDIT:'Item Edited',ITEM_DELETE:'Item Deleted',
+  ITEM_SOLD:'Item Sold',ITEM_MODIFY:'Item Modified',
+  PRODUCT_ADD:'Product Added',PRODUCT_EDIT:'Product Edited',
+  CAT_ADD:'Category Added',USER_ADD:'User Added',
+  LOGIN:'Login',LOGOUT:'Logout'
+};
+const TECH_COLORS=['#0f172a','#1d4ed8','#047857','#b45309','#7c3aed','#0891b2','#d97706','#dc2626','#6d28d9','#374151'];
 let charts={};
+
 function onPeriodChange(){
   const v=document.getElementById('periodSel').value;
   document.getElementById('customRange').style.display=v==='custom'?'flex':'none';
@@ -55,40 +87,151 @@ function getParams(){
   }
   return params;
 }
+
 async function loadReport(){
+  document.getElementById('rptContent').innerHTML='<div style="text-align:center;padding:60px;color:#94a3b8">Loading…</div>';
   const data=await fetch('/api/report/activity?'+getParams()).then(r=>r.json());
-  const pLabel=data.period.from?(data.period.from+' \u2192 '+data.period.to):'All Time';
+  const pLabel=data.period.from?(data.period.from+' → '+data.period.to):'All Time';
   document.getElementById('rpt-period').textContent=pLabel;
   Object.values(charts).forEach(ch=>{try{ch.destroy()}catch(e){}});charts={};
+
   const totalActions=data.actions.reduce((a,b)=>a+b.count,0);
+  const totalCheckouts=(data.actions.find(a=>a.action==='CHECKOUT')||{}).count||0;
+  const totalCheckins=(data.actions.find(a=>a.action==='CHECKIN')||{}).count||0;
+  const activeUsers=typeof data.active_users==='object'?data.active_users.cnt||0:data.active_users||0;
+
   document.getElementById('rptContent').innerHTML=`
-  <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
-    <div><span style="font-size:28px;font-weight:700;font-family:'IBM Plex Mono',monospace">${totalActions}</span><span style="font-size:12px;color:#94a3b8;margin-left:6px">total actions</span></div>
-    <div>${data.actions.slice(0,6).map(a=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:12px"><span style="width:8px;height:8px;border-radius:50%;background:${ACTION_COLORS[a.action]||'#94a3b8'}"></span>${a.action} <strong>${a.count}</strong></span>`).join('')}</div>
+  <!-- Summary cards -->
+  <div class="rpt-grid-3" style="margin-bottom:16px">
+    <div class="stat-mini"><div class="stat-mini-val">${totalActions}</div><div class="stat-mini-lbl">Total Actions</div></div>
+    <div class="stat-mini"><div class="stat-mini-val">${totalCheckouts}</div><div class="stat-mini-lbl">Check Outs</div></div>
+    <div class="stat-mini"><div class="stat-mini-val" style="color:#15803d">${totalCheckins}</div><div class="stat-mini-lbl">Check Ins</div></div>
   </div>
+
+  <!-- Daily activity chart -->
+  ${data.daily&&data.daily.length>1?`
+  <div class="chart-card" style="margin-bottom:16px">
+    <div class="chart-title">Daily Activity <span>${data.daily.length} days</span></div>
+    <canvas id="dailyChart" height="70"></canvas>
+  </div>`:''}
+
   <div class="rpt-grid-3">
-    <div class="chart-card"><div class="chart-title">Most Checked-Out Items</div>${data.top_items.length?'<canvas id="topChart" height="220"></canvas>':'<div style="color:#94a3b8;font-size:13px;padding:20px 0">No checkouts.</div>'}</div>
-    <div class="chart-card"><div class="chart-title">Tech Activity</div>${data.tech_activity.length?'<canvas id="techChart" height="220"></canvas>':'<div style="color:#94a3b8;font-size:13px;padding:20px 0">No tech activity.</div>'}</div>
-    <div class="chart-card"><div class="chart-title">Actions Breakdown</div>${data.actions.length?'<canvas id="actChart" height="220"></canvas>':'<div style="color:#94a3b8;font-size:13px;padding:20px 0">No actions.</div>'}</div>
+    <!-- Actions breakdown -->
+    <div class="chart-card">
+      <div class="chart-title">Actions Breakdown <span>${totalActions} total</span></div>
+      ${data.actions.length?`<div id="actionsList"></div>`:'<div style="color:#94a3b8;font-size:13px">No actions recorded.</div>'}
+    </div>
+
+    <!-- Most checked-out items -->
+    <div class="chart-card">
+      <div class="chart-title">Most Checked Out <span>by item</span></div>
+      ${data.top_items.length?'<canvas id="topChart" height="220"></canvas>':'<div style="color:#94a3b8;font-size:13px;padding:20px 0">No checkouts yet.</div>'}
+    </div>
+
+    <!-- Tech leaderboard -->
+    <div class="chart-card">
+      <div class="chart-title">Tech Leaderboard <span>checkouts by user</span></div>
+      ${data.tech_activity.length?'<div id="techList"></div>':'<div style="color:#94a3b8;font-size:13px;padding:20px 0">No checkout activity.</div>'}
+    </div>
   </div>
-  <div class="chart-card"><div class="chart-title">Recent Activity (${data.recent.length})</div><div id="actFeed" style="max-height:400px;overflow-y:auto"></div></div>`;
-  if(data.top_items.length){
-    charts.top=new Chart(document.getElementById('topChart'),{type:'bar',data:{labels:data.top_items.map(i=>i.name.length>20?i.name.substring(0,20)+'\u2026':i.name),datasets:[{label:'Checkouts',data:data.top_items.map(i=>i.count),backgroundColor:'#1d4ed8',borderRadius:4}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{stepSize:1}}}}});
+
+  <!-- Recent activity feed -->
+  <div class="chart-card">
+    <div class="chart-title">Recent Activity <span>${data.recent.length} entries</span></div>
+    <div id="actFeed" style="max-height:480px;overflow-y:auto"></div>
+  </div>`;
+
+  // Daily activity line chart
+  if(data.daily&&data.daily.length>1){
+    charts.daily=new Chart(document.getElementById('dailyChart'),{
+      type:'bar',
+      data:{
+        labels:data.daily.map(d=>d.day.slice(5)),
+        datasets:[{label:'Actions',data:data.daily.map(d=>d.count),
+          backgroundColor:'#1d4ed820',borderColor:'#1d4ed8',borderWidth:1.5,borderRadius:2,fill:true}]
+      },
+      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{title:t=>data.daily[t[0].dataIndex].day}}},
+        scales:{x:{grid:{display:false},ticks:{maxTicksLimit:15,font:{size:10}}},y:{beginAtZero:true,ticks:{stepSize:1,font:{size:10}}}}}
+    });
   }
-  if(data.tech_activity.length){
-    charts.tech=new Chart(document.getElementById('techChart'),{type:'bar',data:{labels:data.tech_activity.map(t=>t.name||'Unknown'),datasets:[{label:'Checkouts',data:data.tech_activity.map(t=>t.count),backgroundColor:['#0f172a','#1d4ed8','#047857','#b45309','#7c3aed','#0891b2','#d97706','#dc2626','#6d28d9','#374151'],borderRadius:4}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{stepSize:1}}}}});
-  }
+
+  // Actions breakdown — detailed list with bars
   if(data.actions.length){
-    charts.act=new Chart(document.getElementById('actChart'),{type:'doughnut',data:{labels:data.actions.map(a=>a.action),datasets:[{data:data.actions.map(a=>a.count),backgroundColor:data.actions.map(a=>ACTION_COLORS[a.action]||'#94a3b8'),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:6}}}}});
+    const maxCnt=data.actions[0].count;
+    document.getElementById('actionsList').innerHTML=data.actions.map(a=>{
+      const color=ACTION_COLORS[a.action]||'#94a3b8';
+      const label=ACTION_LABELS[a.action]||a.action;
+      const pct=totalActions>0?Math.round(a.count/totalActions*100):0;
+      const barW=Math.round(a.count/maxCnt*100);
+      return `<div class="action-row">
+        <span style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0;display:inline-block"></span>
+        <span style="font-size:12px;color:#0f172a;min-width:110px">${label}</span>
+        <div class="action-bar-wrap"><div class="action-bar" style="width:${barW}%;background:${color}"></div></div>
+        <span style="font-size:12px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:#0f172a;min-width:32px;text-align:right">${a.count}</span>
+        <span style="font-size:10px;color:#94a3b8;min-width:30px;text-align:right">${pct}%</span>
+      </div>`;
+    }).join('');
   }
+
+  // Tech leaderboard
+  if(data.tech_activity.length){
+    const maxTech=data.tech_activity[0].count;
+    document.getElementById('techList').innerHTML=data.tech_activity.map((t,i)=>{
+      const color=TECH_COLORS[i%TECH_COLORS.length];
+      const initials=(t.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+      const barW=Math.round(t.count/maxTech*100);
+      return `<div class="tech-row">
+        <div class="tech-avatar" style="background:${color}">${initials}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.name||'Unknown'}</div>
+          <div style="background:#f1f5f9;border-radius:4px;height:5px;margin-top:4px"><div style="width:${barW}%;height:5px;border-radius:4px;background:${color}"></div></div>
+        </div>
+        <span style="font-size:13px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:${color};flex-shrink:0">${t.count}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // Top items bar chart
+  if(data.top_items.length){
+    charts.top=new Chart(document.getElementById('topChart'),{
+      type:'bar',
+      data:{
+        labels:data.top_items.map(i=>i.name.length>22?i.name.substring(0,22)+'…':i.name),
+        datasets:[{label:'Checkouts',data:data.top_items.map(i=>i.count),backgroundColor:'#1d4ed8',borderRadius:4}]
+      },
+      options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},
+        scales:{x:{beginAtZero:true,ticks:{stepSize:1,font:{size:10}}},y:{ticks:{font:{size:10}}}}}
+    });
+  }
+
+  // Recent activity feed
   const feed=document.getElementById('actFeed');
   if(data.recent.length){
     feed.innerHTML=data.recent.map(r=>{
       const color=ACTION_COLORS[r.action]||'#94a3b8';
-      const snsku=r.item_serial||r.item_sku||'';
-      return `<div class="act-row"><div class="act-dot" style="background:${color}"></div><div style="flex:1"><div style="font-size:12.5px"><span style="font-weight:600;color:${color}">${r.action}</span> ${r.item_name?'\u2014 '+r.item_name:''}</div><div class="act-summary">${r.ts} \xb7 ${r.username||'\u2014'}${snsku?' \xb7 '+snsku:''}${r.product_name?' \xb7 '+r.product_name:''}${r.detail?' \xb7 '+r.detail.substring(0,80):''}</div></div></div>`;
+      const label=ACTION_LABELS[r.action]||r.action;
+      const snsku=r.item_serial?'S/N: '+r.item_serial:(r.item_sku?'SKU: '+r.item_sku:'');
+      const detail=(r.detail||'').replace(/^By: /,'').substring(0,120);
+      return `<div class="act-row">
+        <div class="act-dot" style="background:${color};margin-top:6px"></div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span class="act-badge" style="background:${color}18;color:${color}">${label}</span>
+            ${r.item_name?`<span style="font-size:12.5px;font-weight:600;color:#0f172a">${r.item_name}</span>`:''}
+            ${r.product_name&&r.product_name!==r.item_name?`<span style="font-size:11px;color:#64748b">${r.product_name}</span>`:''}
+          </div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:3px;display:flex;gap:8px;flex-wrap:wrap">
+            <span>🕐 ${r.ts}</span>
+            ${r.username?`<span>👤 ${r.username}</span>`:''}
+            ${snsku?`<span>🔖 ${snsku}</span>`:''}
+            ${detail?`<span style="color:#64748b">${detail}</span>`:''}
+          </div>
+        </div>
+      </div>`;
     }).join('');
-  } else feed.innerHTML='<div style="color:#94a3b8;font-size:13px;padding:20px 0">No activity.</div>';
+  } else {
+    feed.innerHTML='<div style="color:#94a3b8;font-size:13px;padding:20px 0">No activity in this period.</div>';
+  }
 }
 loadReport();
 </script>

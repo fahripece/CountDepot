@@ -247,25 +247,35 @@ def api_report_activity():
     top_items = query(f"""SELECT item_name, COUNT(*) as cnt FROM audit_log a
                       WHERE action='CHECKOUT' AND item_name IS NOT NULL{df_sql}
                       GROUP BY item_name ORDER BY cnt DESC LIMIT 10""", df_args)
-    tech = query(f"""SELECT
-                     CASE WHEN detail LIKE 'By: %' THEN
-                         TRIM(SUBSTR(detail, 5, CASE WHEN INSTR(detail,' | ')>0
-                             THEN INSTR(detail,' | ')-5 ELSE LENGTH(detail) END))
-                     ELSE username END as tech, COUNT(*) as cnt
-                   FROM audit_log a WHERE action='CHECKOUT'{df_sql}
+    tech = query(f"""SELECT tech, COUNT(*) as cnt FROM (
+                     SELECT NULLIF(TRIM(CASE WHEN detail LIKE 'By: %' THEN
+                         SUBSTR(detail, 5, CASE WHEN INSTR(detail,' | ')>0
+                             THEN INSTR(detail,' | ')-5 ELSE LENGTH(detail) END)
+                     ELSE COALESCE(username,'Unknown') END),'') as tech
+                     FROM audit_log a WHERE action='CHECKOUT'{df_sql}
+                   ) WHERE tech IS NOT NULL AND tech != ''
                    GROUP BY tech ORDER BY cnt DESC LIMIT 10""", df_args)
     actions = query(f"""SELECT action, COUNT(*) as cnt FROM audit_log a
                     WHERE 1=1{df_sql} GROUP BY action ORDER BY cnt DESC""", df_args)
     recent  = query(f"""SELECT a.ts, a.action, a.item_name, a.username, a.detail,
-                       a.item_serial, a.item_sku, a.product_name
+                       a.item_serial, a.item_sku, a.product_name, a.before_state, a.after_state
                    FROM audit_log a WHERE 1=1{df_sql}
                    ORDER BY a.id DESC LIMIT 100""", df_args)
+    # Daily activity counts for sparkline (last 30 days or within range)
+    daily = query(f"""SELECT SUBSTR(a.ts,1,10) as day, COUNT(*) as cnt
+                   FROM audit_log a WHERE 1=1{df_sql}
+                   GROUP BY day ORDER BY day ASC LIMIT 60""", df_args)
+    # Unique active users in period
+    active_users = query(f"""SELECT COUNT(DISTINCT username) as cnt FROM audit_log a
+                          WHERE username IS NOT NULL AND username != 'system'{df_sql}""", df_args)
     return jsonify({
         "period":        {"from": date_from, "to": date_to},
         "top_items":     [{"name": r["item_name"], "count": r["cnt"]} for r in top_items],
         "tech_activity": [{"name": r["tech"],      "count": r["cnt"]} for r in tech],
         "actions":       [{"action": r["action"],  "count": r["cnt"]} for r in actions],
         "recent":        [dict(r) for r in recent],
+        "daily":         [{"day": r["day"], "count": r["cnt"]} for r in daily],
+        "active_users":  active_users[0] if active_users else 0,
     })
 
 
