@@ -82,11 +82,16 @@ def create_app():
 
         resolve_tenant()
 
-        # Only run schema init once per tenant per process (not every request)
+        # Full schema init (CREATE TABLE etc.) runs once per tenant per process.
+        # Migrations run on every request so new columns are never missed when
+        # the server stays up across deploys.
         from app.db import _initialized_tenants
+        from app.schema import run_migrations_only
         if g.tenant_slug not in _initialized_tenants:
             init_db()
             _initialized_tenants.add(g.tenant_slug)
+        else:
+            run_migrations_only()
 
         # ── Resolve API key after tenant is set ──────────────────────────────
         if getattr(g, "pending_api_key", None):

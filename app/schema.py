@@ -107,6 +107,16 @@ def init_db():
     _init_db_conn(get_db())
 
 
+def run_migrations_only():
+    """Run only the migration step — fast PRAGMA checks, skips full DDL.
+    Called on every request after the first so new columns are never missed
+    when the server stays up across code deploys."""
+    try:
+        _run_migrations(get_db())
+    except Exception:
+        pass
+
+
 def _init_db_conn(db):
     """Apply full schema, migrations, and seed data to a raw sqlite3 connection.
     Safe to call on any fresh connection — all DDL uses CREATE IF NOT EXISTS.
