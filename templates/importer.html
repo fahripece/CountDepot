@@ -190,74 +190,58 @@
     </div>
   </div>
 
-  <!-- Step 2: Map Columns -->
-  <div id="inv-step-map" style="display:none">
+  <!-- Step 2: Review & Import (mapping + live preview combined) -->
+  <div id="inv-step-preview" style="display:none">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
       <button class="btn btn-secondary btn-sm" onclick="invGoBack('upload')">← Back</button>
-      <div style="font-weight:600;font-size:15px">Map Columns</div>
-      <div style="margin-left:auto;font-size:12px;color:#64748b" id="inv-map-saved-badge" style="display:none"></div>
+      <div style="font-weight:600;font-size:15px">Review &amp; Import</div>
+      <div id="inv-map-saved-badge" style="display:none;margin-left:8px;font-size:12px;color:#15803d"></div>
     </div>
 
-    <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:24px;margin-bottom:16px">
-      <div style="font-size:13px;color:#64748b;margin-bottom:18px">
-        Tell us which column in your file contains each piece of data. We've made our best guess — adjust anything that's wrong.
-      </div>
-
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="border-bottom:2px solid #e5e3de">
-            <th style="text-align:left;padding:8px 12px;font-weight:600;color:#374151;width:180px">CountDepot Field</th>
-            <th style="text-align:left;padding:8px 12px;font-weight:600;color:#374151">Column in Your File</th>
-            <th style="text-align:left;padding:8px 12px;font-weight:600;color:#374151;color:#94a3b8">Sample Values</th>
-          </tr>
-        </thead>
-        <tbody id="inv-map-tbody"></tbody>
-      </table>
-
-      <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e5e3de;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#374151;cursor:pointer">
-          <input type="checkbox" id="inv-save-mapping" style="width:14px;height:14px">
-          Remember this mapping for <strong id="inv-save-vendor-label">this vendor</strong>
-        </label>
-        <div style="margin-left:auto;display:flex;gap:8px">
-          <div id="inv-map-error" style="display:none;font-size:13px;color:#b91c1c;align-self:center"></div>
-          <button class="btn btn-primary" id="inv-apply-map-btn" onclick="invApplyMapping()">Apply Mapping →</button>
+    <!-- Column mapping (collapsible) -->
+    <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;margin-bottom:14px;overflow:hidden">
+      <button onclick="invToggleMapping()" style="width:100%;text-align:left;padding:12px 16px;background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#374151">
+        <svg id="inv-map-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition:transform .15s"><polyline points="6 9 12 15 18 9"/></svg>
+        Column Mapping
+        <span id="inv-map-status" style="font-weight:400;color:#64748b;margin-left:4px"></span>
+      </button>
+      <div id="inv-map-panel" style="display:none;padding:0 16px 16px">
+        <div style="font-size:12px;color:#64748b;margin-bottom:10px">We detected your columns automatically. Change any that are wrong — the preview updates instantly.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px" id="inv-map-fields"></div>
+        <div style="margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#374151;cursor:pointer">
+            <input type="checkbox" id="inv-save-mapping" style="width:13px;height:13px">
+            Remember for <strong id="inv-save-vendor-label">this vendor</strong>
+          </label>
+          <button onclick="invSaveMapping()" class="btn btn-secondary btn-sm" style="margin-left:auto">Save Mapping</button>
         </div>
       </div>
     </div>
 
-    <!-- Site assignment (shown here so user sees it before preview) -->
-    <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:20px;margin-bottom:16px">
-      <div style="font-weight:600;font-size:14px;margin-bottom:12px">Site Assignment</div>
-      <div id="inv-site-detected" style="display:none;margin-bottom:8px;padding:9px 12px;border-radius:6px;font-size:13px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e40af;align-items:center;gap:8px">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+    <!-- Site assignment -->
+    <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="font-size:13px;font-weight:600;color:#374151;white-space:nowrap">Site:</div>
+      <div id="inv-site-detected" style="display:none;padding:5px 10px;border-radius:5px;font-size:12px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e40af;align-items:center;gap:6px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
         <span id="inv-site-detected-text"></span>
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <select id="inv-site-select" class="select" style="flex:1">
-          <option value="">— No site —</option>
-          {% for loc in locations %}
-          <option value="{{ loc.id }}">{{ loc.name }}</option>
-          {% endfor %}
-        </select>
-        <span id="inv-new-site-wrap" style="display:none;align-items:center;gap:6px;font-size:13px;color:#15803d;white-space:nowrap">
-          <input type="checkbox" id="inv-create-site" checked style="width:14px;height:14px">
-          <label for="inv-create-site">Create new site</label>
-        </span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Step 3: Preview -->
-  <div id="inv-step-preview" style="display:none">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <button class="btn btn-secondary btn-sm" onclick="invGoBack('map')">← Back</button>
-      <div style="font-weight:600;font-size:15px">Review &amp; Confirm</div>
+      <select id="inv-site-select" class="select" style="flex:1;min-width:180px;max-width:280px">
+        <option value="">— No site —</option>
+        {% for loc in locations %}
+        <option value="{{ loc.id }}">{{ loc.name }}</option>
+        {% endfor %}
+      </select>
+      <span id="inv-new-site-wrap" style="display:none;align-items:center;gap:6px;font-size:12px;color:#15803d;white-space:nowrap">
+        <input type="checkbox" id="inv-create-site" checked style="width:13px;height:13px">
+        <label for="inv-create-site">Create new site</label>
+      </span>
     </div>
 
-    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap" id="inv-preview-stats"></div>
+    <!-- Stats + preview table -->
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap" id="inv-preview-stats"></div>
+    <div id="inv-preview-loading" style="display:none;text-align:center;padding:24px;color:#64748b;font-size:13px">Updating preview…</div>
 
-    <div class="table-wrap" style="margin-bottom:16px">
+    <div class="table-wrap" style="margin-bottom:14px">
       <table class="table">
         <thead>
           <tr>
@@ -285,7 +269,7 @@
     </div>
   </div>
 
-  <!-- Step 4: Done -->
+  <!-- Step 3: Done -->
   <div id="inv-step-done" style="display:none;text-align:center;padding:60px 20px">
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="1.5" style="margin-bottom:12px"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 16 9"/></svg>
     <div style="font-size:20px;font-weight:700;color:#0f172a;margin-bottom:6px" id="inv-done-title">Import complete</div>
@@ -492,19 +476,21 @@ function genReset(){
 
 
 // ══════════════════ INVOICE MODE LOGIC ════════════════════════════════════════
-let _invFile = null, _invRowsRaw = [], _invMapping = {}, _invPreviewRows = [];
+let _invFile = null, _invRowsRaw = [], _invHeaders = [], _invSampleRows = [];
+let _invMapping = {}, _invPreviewRows = [], _invRefreshTimer = null;
 
 const INV_FIELDS = [
-  { key: 'sku',             label: 'Vendor SKU',      required: true  },
-  { key: 'qty',             label: 'Quantity',         required: true  },
-  { key: 'description',     label: 'Description',      required: false },
-  { key: 'cost_price',      label: 'Unit Price',       required: false },
-  { key: 'expiration_date', label: 'Expiration Date',  required: false },
-  { key: 'lot_number',      label: 'Lot Number',       required: false },
+  { key: 'sku',             label: 'Vendor SKU',     required: true  },
+  { key: 'qty',             label: 'Quantity',        required: true  },
+  { key: 'description',     label: 'Description',     required: false },
+  { key: 'cost_price',      label: 'Unit Price',      required: false },
+  { key: 'expiration_date', label: 'Expiration Date', required: false },
+  { key: 'lot_number',      label: 'Lot Number',      required: false },
 ];
 
 document.getElementById('inv-drop-zone').addEventListener('click', ()=>document.getElementById('inv-file-input').click());
 function invHandleDrop(e){ e.preventDefault(); document.getElementById('inv-drop-zone').style.borderColor='#cbd5e1'; document.getElementById('inv-drop-zone').style.background='#f8fafc'; const f=e.dataTransfer.files[0]; if(f) invHandleFile(f); }
+
 function invHandleFile(f){
   if(!f) return;
   const ext = f.name.split('.').pop().toLowerCase();
@@ -526,22 +512,21 @@ function invClearFile(){
 let _invVendorTimer = null;
 function invVendorTyped(){
   clearTimeout(_invVendorTimer);
-  _invVendorTimer = setTimeout(invLoadSavedMapping, 600);
-}
-async function invLoadSavedMapping(){
-  const vendor = document.getElementById('inv-vendor').value.trim();
-  if(!vendor) return;
-  try {
-    const res = await fetch('/api/invoice/mappings?vendor='+encodeURIComponent(vendor),
-      {headers:{'X-CSRF-Token':_csrfToken}}).then(r=>r.json());
-    if(res.ok && res.mapping){
-      _invMapping = res.mapping;
-      const badge = document.getElementById('inv-map-saved-badge');
-      if(badge){ badge.textContent = '✓ Saved mapping loaded for '+vendor; badge.style.display=''; }
-      // Refresh dropdowns if map step is visible
-      if(document.getElementById('inv-step-map').style.display !== 'none') invBuildMapTable();
-    }
-  } catch(e){}
+  _invVendorTimer = setTimeout(async ()=>{
+    const vendor = document.getElementById('inv-vendor').value.trim();
+    if(!vendor || !_invRowsRaw.length) return;
+    try {
+      const r = await fetch('/api/invoice/mappings?vendor='+encodeURIComponent(vendor),
+        {headers:{'X-CSRF-Token':_csrfToken}}).then(r=>r.json());
+      if(r.ok && r.mapping){
+        _invMapping = r.mapping;
+        invBuildMappingFields();
+        invScheduleRefresh();
+        const badge = document.getElementById('inv-map-saved-badge');
+        badge.textContent = '✓ Saved mapping loaded'; badge.style.display='';
+      }
+    } catch(e){}
+  }, 600);
 }
 
 async function invParseFile(){
@@ -553,13 +538,11 @@ async function invParseFile(){
   const fd = new FormData(); fd.append('file', _invFile);
   try {
     const res = await fetch('/api/invoice/parse',{method:'POST',headers:{'X-CSRF-Token':_csrfToken},body:fd}).then(r=>r.json());
-    if(!res.ok){
-      errEl.textContent = res.msg || 'Could not read file';
-      errEl.style.display = 'block';
-      return;
-    }
-    errEl.style.display = 'none';
-    _invRowsRaw = res.rows_raw;
+    if(!res.ok){ errEl.textContent=res.msg||'Could not read file'; errEl.style.display='block'; return; }
+
+    _invRowsRaw   = res.rows_raw;
+    _invHeaders   = res.headers;
+    _invSampleRows = res.sample_rows;
 
     // Auto-fill ref/vendor from PDF metadata if empty
     if(res.file_meta){
@@ -570,133 +553,138 @@ async function invParseFile(){
       if(venEl && !venEl.value.trim()) venEl.value = m.vendor_name || '';
     }
 
-    // Start with auto-detected mapping, overwrite with saved mapping if present
+    // Start from auto-detected mapping; overwrite with saved if vendor is known
     _invMapping = Object.assign({}, res.auto_map);
     const vendor = document.getElementById('inv-vendor').value.trim();
     if(vendor){
       try {
         const saved = await fetch('/api/invoice/mappings?vendor='+encodeURIComponent(vendor),
           {headers:{'X-CSRF-Token':_csrfToken}}).then(r=>r.json());
-        if(saved.ok && saved.mapping) _invMapping = saved.mapping;
+        if(saved.ok && saved.mapping){
+          _invMapping = saved.mapping;
+          const badge = document.getElementById('inv-map-saved-badge');
+          badge.textContent = '✓ Saved mapping loaded'; badge.style.display='';
+        }
       } catch(e){}
     }
 
-    // Apply site suggestion
     if(res.site_suggestion) applySiteSuggestion(res.site_suggestion, 'inv');
 
-    invShowMapStep(res.headers, res.sample_rows);
-  } catch(e){
-    errEl.textContent = 'Network error: ' + e;
-    errEl.style.display = 'block';
-  } finally {
-    btn.disabled=false; btn.textContent='Next: Map Columns →';
-  }
+    document.getElementById('inv-step-upload').style.display='none';
+    document.getElementById('inv-step-preview').style.display='';
+    const v = document.getElementById('inv-vendor').value.trim();
+    document.getElementById('inv-save-vendor-label').textContent = v ? '"'+v+'"' : 'this vendor';
+    invBuildMappingFields();
+    invUpdateMapStatus();
+    await invRefreshPreview();   // immediate first render — no loading flicker
+  } catch(e){ errEl.textContent='Network error: '+e; errEl.style.display='block'; }
+  finally { btn.disabled=false; btn.textContent='Next: Map Columns →'; }
 }
 
-function invShowMapStep(headers, sampleRows){
-  document.getElementById('inv-step-upload').style.display='none';
-  document.getElementById('inv-step-map').style.display='';
-  // Store for re-render
-  document.getElementById('inv-step-map').dataset.headers = JSON.stringify(headers);
-  document.getElementById('inv-step-map').dataset.sample  = JSON.stringify(sampleRows);
-  invBuildMapTable();
-
-  const vendor = document.getElementById('inv-vendor').value.trim();
-  document.getElementById('inv-save-vendor-label').textContent = vendor ? '"'+vendor+'"' : 'this vendor';
+function invToggleMapping(){
+  const panel   = document.getElementById('inv-map-panel');
+  const chevron = document.getElementById('inv-map-chevron');
+  const open    = panel.style.display === 'none';
+  panel.style.display = open ? '' : 'none';
+  chevron.style.transform = open ? 'rotate(180deg)' : '';
 }
 
-function invBuildMapTable(){
-  const headers    = JSON.parse(document.getElementById('inv-step-map').dataset.headers || '[]');
-  const sampleRows = JSON.parse(document.getElementById('inv-step-map').dataset.sample  || '[]');
+function invBuildMappingFields(){
+  const optBase = '<option value="">— skip —</option>' +
+    _invHeaders.map(h=>`<option value="${esc(h)}">${esc(h)}</option>`).join('');
 
-  const optionsHtml = '<option value="">— not in this file —</option>' +
-    headers.map(h=>`<option value="${esc(h)}">${esc(h)}</option>`).join('');
+  document.getElementById('inv-map-fields').innerHTML = INV_FIELDS.map(f=>{
+    const cur = _invMapping[f.key] || '';
+    const opts = optBase.replace(`value="${esc(cur)}"`, `value="${esc(cur)}" selected`);
+    const req  = f.required ? ' *' : '';
+    // Show up to 2 sample values inline
+    const samples = _invSampleRows.slice(0,2).map(r=>{
+      const v = cur ? String(r[cur]||'').trim() : '';
+      return v ? `<span style="font-size:10px;color:#94a3b8;font-family:monospace">${esc(v.slice(0,20))}</span>` : '';
+    }).filter(Boolean).join(', ');
 
-  document.getElementById('inv-map-tbody').innerHTML = INV_FIELDS.map(f=>{
-    const current = _invMapping[f.key] || '';
-    const samples = sampleRows.map(r=>{
-      const v = r[current] || '';
-      return v ? `<span style="font-family:monospace;font-size:11px;background:#f1f5f9;padding:1px 5px;border-radius:3px">${esc(String(v).slice(0,30))}</span>` : '';
-    }).filter(Boolean).slice(0,3).join(' ');
-
-    const sel = optionsHtml.replace(`value="${esc(current)}"`, `value="${esc(current)}" selected`);
-    const req = f.required ? '<span style="color:#ef4444;margin-left:3px">*</span>' : '';
-    return `<tr style="border-bottom:1px solid #f1f5f9">
-      <td style="padding:10px 12px;font-weight:600;color:#0f172a;vertical-align:middle">${esc(f.label)}${req}</td>
-      <td style="padding:8px 12px;vertical-align:middle">
-        <select class="select" style="width:100%;max-width:280px" onchange="invMappingChanged('${f.key}',this.value)">${sel}</select>
-      </td>
-      <td style="padding:8px 12px;color:#94a3b8;vertical-align:middle" id="inv-sample-${f.key}">${samples}</td>
-    </tr>`;
+    return `<div style="display:flex;flex-direction:column;gap:3px;min-width:140px">
+      <label style="font-size:11px;font-weight:600;color:#374151">${esc(f.label)}${req}</label>
+      <select class="select" style="font-size:12px" onchange="invMappingChanged('${f.key}',this.value)">${opts}</select>
+      <div id="inv-smp-${f.key}" style="min-height:14px">${samples}</div>
+    </div>`;
   }).join('');
 }
 
 function invMappingChanged(field, col){
-  _invMapping[field] = col || undefined;
-  if(!col) delete _invMapping[field];
-
-  // Refresh sample values for this row
-  const sampleRows = JSON.parse(document.getElementById('inv-step-map').dataset.sample || '[]');
-  const samples = col ? sampleRows.map(r=>{
-    const v = r[col] || '';
-    return v ? `<span style="font-family:monospace;font-size:11px;background:#f1f5f9;padding:1px 5px;border-radius:3px">${esc(String(v).slice(0,30))}</span>` : '';
-  }).filter(Boolean).slice(0,3).join(' ') : '';
-  const el = document.getElementById('inv-sample-'+field);
-  if(el) el.innerHTML = samples;
+  if(col) _invMapping[field] = col; else delete _invMapping[field];
+  // Refresh sample under that dropdown
+  const sampleEl = document.getElementById('inv-smp-'+field);
+  if(sampleEl){
+    const samples = col ? _invSampleRows.slice(0,2).map(r=>{
+      const v = String(r[col]||'').trim();
+      return v ? `<span style="font-size:10px;color:#94a3b8;font-family:monospace">${esc(v.slice(0,20))}</span>` : '';
+    }).filter(Boolean).join(', ') : '';
+    sampleEl.innerHTML = samples;
+  }
+  invUpdateMapStatus();
+  invScheduleRefresh();
 }
 
-async function invApplyMapping(){
-  const errEl = document.getElementById('inv-map-error');
-  errEl.style.display = 'none';
+function invUpdateMapStatus(){
+  const mapped = INV_FIELDS.filter(f=>_invMapping[f.key]).map(f=>f.label);
+  document.getElementById('inv-map-status').textContent = mapped.length
+    ? '(' + mapped.join(', ') + ')'
+    : '(no columns mapped)';
+}
 
-  if(!_invMapping.sku)  { errEl.textContent='Please map the Vendor SKU column.';  errEl.style.display=''; return; }
-  if(!_invMapping.qty)  { errEl.textContent='Please map the Quantity column.';     errEl.style.display=''; return; }
+function invScheduleRefresh(){
+  clearTimeout(_invRefreshTimer);
+  _invRefreshTimer = setTimeout(invRefreshPreview, 400);
+}
 
-  const btn = document.getElementById('inv-apply-map-btn');
-  btn.disabled=true; btn.textContent='Applying…';
-
+async function invRefreshPreview(){
+  if(!_invRowsRaw.length) return;
+  document.getElementById('inv-preview-loading').style.display='';
   try {
-    // Save mapping if checkbox ticked
-    const vendor = document.getElementById('inv-vendor').value.trim();
-    if(document.getElementById('inv-save-mapping').checked && vendor){
-      await fetch('/api/invoice/mappings',{method:'POST',
-        headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
-        body:JSON.stringify({vendor_name:vendor, mapping:_invMapping})});
-    }
-
     const res = await fetch('/api/invoice/preview',{method:'POST',
       headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
       body:JSON.stringify({rows_raw:_invRowsRaw, mapping:_invMapping})}).then(r=>r.json());
-
-    if(!res.ok){ errEl.textContent=res.msg||'Preview failed'; errEl.style.display=''; return; }
-
+    document.getElementById('inv-preview-loading').style.display='none';
+    if(!res.ok){
+      document.getElementById('inv-preview-tbody').innerHTML =
+        `<tr><td colspan="7" style="text-align:center;color:#b91c1c;padding:20px;font-size:13px">${esc(res.msg)}</td></tr>`;
+      document.getElementById('inv-preview-stats').innerHTML='';
+      document.getElementById('inv-confirm-summary').textContent='';
+      document.getElementById('inv-commit-btn').disabled=true;
+      return;
+    }
     _invPreviewRows = res.rows;
-    invShowPreview(res);
+    invRenderPreview(res);
   } catch(e){
-    errEl.textContent='Network error: '+e; errEl.style.display='';
-  } finally {
-    btn.disabled=false; btn.textContent='Apply Mapping →';
+    document.getElementById('inv-preview-loading').style.display='none';
   }
 }
 
-function invShowPreview(res){
-  document.getElementById('inv-step-map').style.display='none';
-  document.getElementById('inv-step-preview').style.display='';
+async function invSaveMapping(){
+  const vendor = document.getElementById('inv-vendor').value.trim();
+  if(!vendor){ toast('Enter a vendor name first','warn'); return; }
+  await fetch('/api/invoice/mappings',{method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body:JSON.stringify({vendor_name:vendor, mapping:_invMapping})});
+  toast('Mapping saved for '+vendor,'ok');
+}
 
+function invRenderPreview(res){
   document.getElementById('inv-preview-stats').innerHTML = [
     {label:'Total Rows', val:res.rows.length, color:'#0f172a'},
-    {label:'Will Import', val:res.matched, color:'#15803d'},
-    {label:'Skipped', val:res.unmatched, color:'#d97706'},
+    {label:'Will Import', val:res.matched,    color:'#15803d'},
+    {label:'Skipped',     val:res.unmatched,  color:'#d97706'},
   ].map(s=>`<div class="stat" style="min-width:110px"><div class="stat-n" style="color:${s.color}">${s.val}</div><div class="stat-l">${s.label}</div></div>`).join('');
 
   document.getElementById('inv-preview-tbody').innerHTML = res.rows.map(r=>{
-    const ok = r.status==='matched';
+    const ok   = r.status==='matched';
     const icon = ok
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`
       : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
     const prod = ok
       ? `<div style="font-weight:600;font-size:13px">${esc(r.product_name)}</div><div style="font-size:11px;color:#94a3b8">${esc(r.description||'')}</div>`
-      : `<div style="font-size:13px;color:#92400e">${esc(r.description||'—')}</div><div style="font-size:11px;color:#b45309">No matching product — SKU not in Products</div>`;
+      : `<div style="font-size:13px;color:#92400e">${esc(r.description||r.vendor_sku||'—')}</div><div style="font-size:11px;color:#b45309">No matching product</div>`;
     return `<tr style="${ok?'':'background:#fefce8'}">
       <td style="text-align:center">${icon}</td>
       <td style="font-family:monospace;font-size:12px">${esc(r.vendor_sku)}</td>
@@ -710,10 +698,9 @@ function invShowPreview(res){
 
   const unmatched = res.rows.filter(r=>r.status==='unmatched').map(r=>r.vendor_sku);
   document.getElementById('inv-unmatched-note').style.display = unmatched.length ? '' : 'none';
-  document.getElementById('inv-unmatched-list').textContent = ' ' + unmatched.join(', ');
+  document.getElementById('inv-unmatched-list').textContent = unmatched.join(', ');
 
-  const btn = document.getElementById('inv-commit-btn');
-  btn.disabled = res.matched === 0;
+  document.getElementById('inv-commit-btn').disabled = res.matched === 0;
   document.getElementById('inv-confirm-summary').textContent = res.matched===0
     ? 'No matched rows — nothing to import.'
     : res.matched + ' item'+(res.matched!==1?'s':'')+' will be created'+(res.unmatched?' ('+res.unmatched+' skipped)':'')+'.';
@@ -722,11 +709,18 @@ function invShowPreview(res){
 async function invCommit(){
   const btn = document.getElementById('inv-commit-btn');
   btn.disabled=true; btn.textContent='Importing…';
+  // Auto-save mapping if checkbox is checked
+  const vendor = document.getElementById('inv-vendor').value.trim();
+  if(document.getElementById('inv-save-mapping').checked && vendor){
+    await fetch('/api/invoice/mappings',{method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+      body:JSON.stringify({vendor_name:vendor, mapping:_invMapping})}).catch(()=>{});
+  }
   const sp = getSitePayload('inv');
   const payload = {
     rows:      _invPreviewRows,
     reference: document.getElementById('inv-ref').value.trim(),
-    vendor:    document.getElementById('inv-vendor').value.trim(),
+    vendor,
     notes:     document.getElementById('inv-notes').value.trim(),
     ...sp
   };
@@ -742,14 +736,16 @@ async function invCommit(){
 }
 
 function invGoBack(to){
-  document.getElementById('inv-step-upload').style.display  = to==='upload' ? '' : 'none';
-  document.getElementById('inv-step-map').style.display     = to==='map'    ? '' : 'none';
-  document.getElementById('inv-step-preview').style.display = 'none';
-  document.getElementById('inv-step-done').style.display    = 'none';
+  if(to==='upload'){
+    document.getElementById('inv-step-preview').style.display='none';
+    document.getElementById('inv-step-upload').style.display='';
+  }
 }
 
 function invReset(){
-  _invFile=null; _invRowsRaw=[]; _invMapping={}; _invPreviewRows=[];
+  _invFile=null; _invRowsRaw=[]; _invHeaders=[]; _invSampleRows=[];
+  _invMapping={}; _invPreviewRows=[];
+  clearTimeout(_invRefreshTimer);
   document.getElementById('inv-file-input').value='';
   document.getElementById('inv-file-info').style.display='none';
   document.getElementById('inv-parse-btn').disabled=true;
@@ -757,7 +753,9 @@ function invReset(){
   document.getElementById('inv-site-detected').style.display='none';
   document.getElementById('inv-new-site-wrap').style.display='none';
   document.getElementById('inv-site-select').value='';
-  document.getElementById('inv-step-map').style.display='none';
+  document.getElementById('inv-map-panel').style.display='none';
+  document.getElementById('inv-map-chevron').style.transform='';
+  document.getElementById('inv-map-saved-badge').style.display='none';
   document.getElementById('inv-step-preview').style.display='none';
   document.getElementById('inv-step-done').style.display='none';
   document.getElementById('inv-step-upload').style.display='';
