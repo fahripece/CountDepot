@@ -2796,236 +2796,264 @@ def _read_file_rows(f):
 
 
 def _read_pdf_rows(f):
-    """Parse an invoice PDF using word-position-based column detection.
-
-    Most invoice PDFs render text at fixed x-coordinates rather than as
-    embedded table objects. This function:
-      1. Extracts all words with their (x, y) positions.
-      2. Locates the column-header row by searching for keywords like
-         'qty', 'expiration', 'lot', etc.
-      3. Derives column x-boundaries from the header word positions.
-      4. Assigns every subsequent word to a column by x-position.
-      5. Identifies new line items vs. description-continuation lines.
-      6. Extracts invoice metadata (number, vendor, ship-to) from the header.
-
-    Returns (headers, rows, meta) where meta may contain invoice_no,
-    vendor_name, and ship_to.
+    """Parse an invoice PDF. Uses three tiers in order:
+      1. pdfplumber extract_tables() — works when PDF has ruled table borders.
+      2. Word-position column detection — works for fixed-position text layouts.
+      3. Generic row/column extraction — always works; user maps columns in UI.
+    Returns (headers, rows, meta).
     """
     import re
     try:
         import pdfplumber
     except ImportError:
-        raise ValueError(
-            "PDF parsing requires pdfplumber. Run: pip install pdfplumber"
-        )
+        raise ValueError("PDF parsing requires pdfplumber. Run: pip install pdfplumber")
 
-    SKIP_ITEM_WORDS = {'freight', 'shipping', 'handling', 'discount', 'tax',
-                       'adjustment', 'credit', 'fee', 'charges'}
-    TOTALS_PHRASES  = ('sales total', 'subtotal', 'tax total', 'order total',
-                       'balance due', 'total (usd)', 'total paid', 'amount due',
-                       'total due', 'invoice total')
-    DATE_RE  = re.compile(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}')
-    PRICE_RE = re.compile(r'^\$?[\d,]+\.\d{2}$')
-
-    # Header keyword → internal column key (ordered by priority)
-    HEADER_MAP = [
-        (['item', 'description', 'product', 'part'],          'item'),
-        (['qty', 'quantity', 'units', 'count'],                'qty'),
-        (['expiration', 'exp', 'expires', 'best', 'use by'],   'exp_date'),
-        (['lot', 'batch', 'lot nbr', 'lot no'],                'lot_nbr'),
-        (['co', 'origin', 'country'],                          'country'),
-        (['hs', 'harmonized', 'tariff'],                       'hs_code'),
-        (['unit value', 'unit price', 'unit cost', 'unit'],    'unit_val'),
-        (['total value', 'total price', 'amount', 'total'],    'total_val'),
-    ]
+    TOTALS_PHRASES = ('sales total', 'subtotal', 'tax total', 'order total',
+                      'balance due', 'total (usd)', 'total paid', 'amount due',
+                      'total due', 'invoice total', 'grand total')
+    DATE_RE = re.compile(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}')
 
     content = f.read()
-    all_rows = []
     meta = {}
 
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         full_text = "\n".join(p.extract_text() or "" for p in pdf.pages)
-
-        # ── Extract invoice metadata ───────────────────────────────────────
-        for pattern, key in [
-            (r'Invoice\s+No\.?\s*[:\-]?\s*(\S+)',             'invoice_no'),
-            (r'Invoice\s+#\s*[:\-]?\s*(\S+)',                  'invoice_no'),
-            (r'Sales\s+Order\s+No\.?\s*[:\-]?\s*(\S+)',        'sales_order'),
-            (r'Customer\s+PO\s*[:\-]?\s*(\S+)',                'customer_po'),
-        ]:
-            m = re.search(pattern, full_text, re.IGNORECASE)
-            if m:
-                meta[key] = m.group(1).strip().rstrip('.')
-
-        # Vendor name: usually the company name near the top
         lines = [l.strip() for l in full_text.split('\n') if l.strip()]
+
+        # ── Extract invoice metadata from full text ────────────────────────
+        for pattern, key in [
+            (r'Invoice\s*(?:No\.?|#)\s*[:\-]?\s*(\S+)', 'invoice_no'),
+            (r'Sales\s+Order\s*(?:No\.?)?\s*[:\-]?\s*(\S+)', 'sales_order'),
+            (r'Customer\s+PO\s*[:\-]?\s*(\S+)', 'customer_po'),
+            (r'P\.?O\.?\s*(?:Number|No\.?|#)\s*[:\-]?\s*(\S+)', 'customer_po'),
+        ]:
+            if key not in meta:
+                m = re.search(pattern, full_text, re.IGNORECASE)
+                if m:
+                    meta[key] = m.group(1).strip().rstrip('.,')
+
         for i, line in enumerate(lines[:15]):
-            if re.search(r'Invoice|Order|Receipt|Packing', line, re.IGNORECASE):
+            if re.search(r'Invoice|Order|Receipt|Packing Slip', line, re.IGNORECASE):
                 if i > 0 and len(lines[i-1]) > 3:
                     meta['vendor_name'] = lines[i-1]
                 break
 
-        # Ship-to: find "SHIP TO" label, grab the name on the next non-empty line
         for i, line in enumerate(lines):
             if re.search(r'SHIP\s*TO', line, re.IGNORECASE):
-                # On the same line after "SHIP TO:" or on the next line
                 after = re.split(r'SHIP\s*TO\s*:?\s*', line, flags=re.IGNORECASE)[-1].strip()
                 if after:
-                    # When BILL TO and SHIP TO are side-by-side the name
-                    # appears doubled — take just the second half
                     parts = after.split()
                     half = len(parts) // 2
                     meta['ship_to'] = ' '.join(parts[half:]).strip() if half else after
                 elif i + 1 < len(lines):
                     candidate = lines[i+1].strip()
-                    # Again may be duplicated
                     parts = candidate.split()
                     half = len(parts) // 2
                     meta['ship_to'] = ' '.join(parts[half:]).strip() if half > 1 else candidate
                 break
 
-        # ── Parse each page for line items ────────────────────────────────
+        # ── Tier 1: extract_tables() ───────────────────────────────────────
+        for page in pdf.pages:
+            for table in page.extract_tables() or []:
+                if not table or len(table) < 2:
+                    continue
+                # First non-empty row is headers
+                hdr_row = next((r for r in table if any(c for c in r)), None)
+                if not hdr_row or len([c for c in hdr_row if c]) < 2:
+                    continue
+                headers = [str(c or '').strip() for c in hdr_row]
+                # Deduplicate blank headers
+                seen = {}
+                clean = []
+                for h in headers:
+                    h = h or 'Column'
+                    key = h
+                    if key in seen:
+                        seen[key] += 1
+                        h = f"{h} {seen[key]}"
+                    else:
+                        seen[key] = 0
+                    clean.append(h)
+                headers = clean
+                rows = []
+                for row in table[table.index(hdr_row)+1:]:
+                    if not any(c for c in row):
+                        continue
+                    row_text = ' '.join(str(c or '') for c in row).lower()
+                    if any(ph in row_text for ph in TOTALS_PHRASES):
+                        break
+                    rows.append(dict(zip(headers, [str(c or '').strip() for c in row])))
+                if rows:
+                    return headers, rows, meta
+
+        # ── Tier 2: word-position column detection ─────────────────────────
+        HEADER_KEYWORDS = {
+            'item': 'item', 'description': 'item', 'product': 'item', 'part': 'item',
+            'qty': 'qty', 'quantity': 'qty', 'units': 'qty', 'count': 'qty', 'ordered': 'qty',
+            'shipped': 'qty', 'received': 'qty',
+            'expiration': 'exp_date', 'exp': 'exp_date', 'expires': 'exp_date',
+            'best': 'exp_date', 'expiry': 'exp_date', 'bb': 'exp_date',
+            'lot': 'lot_nbr', 'batch': 'lot_nbr',
+            'unit': 'unit_val', 'price': 'unit_val', 'cost': 'unit_val',
+            'total': 'total_val', 'amount': 'total_val', 'extended': 'total_val',
+        }
+        FRIENDLY = {
+            'item': 'Description/SKU', 'qty': 'Quantity', 'exp_date': 'Expiration Date',
+            'lot_nbr': 'Lot Number', 'unit_val': 'Unit Price', 'total_val': 'Total',
+        }
+
+        tier2_rows = []
         for page in pdf.pages:
             words = page.extract_words(x_tolerance=3, y_tolerance=3)
             if not words:
                 continue
 
-            # Group words into visual lines (bucket y into 4pt bands)
+            # Group into visual rows — use 8pt bands (more forgiving than 4pt)
             y_groups = {}
             for w in words:
-                y_key = round(w['top'] / 4) * 4
+                y_key = round(w['top'] / 8) * 8
                 y_groups.setdefault(y_key, []).append(w)
             sorted_ys = sorted(y_groups.keys())
 
-            # ── Find the column header row ─────────────────────────────────
-            header_y  = None
-            col_x     = {}   # internal_key → x_start of that column's header word
+            # Find header row: row where at least 2 words match known header keywords
+            header_y = None
+            col_x = {}  # col_key → x0
 
             for y in sorted_ys:
-                row_text_lower = [w['text'].lower() for w in y_groups[y]]
-                has_qty = any(kw in row_text_lower for kw in ('qty', 'quantity', 'units', 'count'))
-                has_item_or_lot = any(kw in row_text_lower
-                                      for kw in ('item', 'lot', 'expiration', 'description', 'part'))
-                if not (has_qty and has_item_or_lot):
-                    continue
-
-                # Found candidate header row — record x positions
-                header_y = y
-                for w in y_groups[y]:
-                    wl = w['text'].lower()
-                    for keywords, col_key in HEADER_MAP:
-                        if any(wl == kw or wl.startswith(kw) for kw in keywords):
-                            if col_key not in col_x:  # first match wins
-                                col_x[col_key] = w['x0']
-                break
+                row_words = sorted(y_groups[y], key=lambda w: w['x0'])
+                matches = {}
+                for w in row_words:
+                    wl = w['text'].lower().rstrip('.:')
+                    if wl in HEADER_KEYWORDS:
+                        ck = HEADER_KEYWORDS[wl]
+                        if ck not in matches:
+                            matches[ck] = w['x0']
+                if len(matches) >= 2:
+                    header_y = y
+                    col_x = matches
+                    break
 
             if header_y is None or 'qty' not in col_x:
                 continue
 
             qty_x = col_x['qty']
-
-            # Build ordered column boundaries
             sorted_cols = sorted(col_x.items(), key=lambda kv: kv[1])
-            col_bounds = []
-            for i, (name, x_start) in enumerate(sorted_cols):
-                x_end = sorted_cols[i+1][1] if i+1 < len(sorted_cols) else 9999
-                col_bounds.append((x_start - 5, x_end, name))
+            col_bounds = [(x, sorted_cols[i+1][1] if i+1 < len(sorted_cols) else 9999, name)
+                          for i, (name, x) in enumerate(sorted_cols)]
 
-            # ── Find where totals section starts (stop parsing there) ──────
-            totals_y = None
-            for y in sorted_ys:
-                if y <= header_y:
-                    continue
-                row_text = ' '.join(w['text'] for w in y_groups[y]).lower()
-                if any(ph in row_text for ph in TOTALS_PHRASES):
-                    totals_y = y
-                    break
-
-            # ── Assign a word to a column by x-position ───────────────────
             def word_col(w):
                 if w['x0'] < qty_x - 5:
                     return 'item'
                 for x_start, x_end, name in col_bounds:
-                    if w['x0'] >= x_start and w['x0'] < x_end:
+                    if x_start - 5 <= w['x0'] < x_end:
                         return name
                 return None
 
-            # ── Walk data rows ─────────────────────────────────────────────
-            current = None
-
+            totals_y = None
             for y in sorted_ys:
-                if y <= header_y + 3:
+                if y <= header_y:
+                    continue
+                rt = ' '.join(w['text'] for w in y_groups[y]).lower()
+                if any(ph in rt for ph in TOTALS_PHRASES):
+                    totals_y = y
+                    break
+
+            current = None
+            for y in sorted_ys:
+                if y <= header_y + 5:
                     continue
                 if totals_y and y >= totals_y:
                     break
-
                 row_words = sorted(y_groups[y], key=lambda w: w['x0'])
                 if not row_words:
                     continue
 
-                # Bucket words into columns
                 buckets = {}
                 for w in row_words:
-                    col = word_col(w)
-                    if col:
-                        buckets.setdefault(col, []).append(w['text'])
+                    ck = word_col(w)
+                    if ck:
+                        buckets.setdefault(ck, []).append(w['text'])
 
+                qty_str = ' '.join(buckets.get('qty', [])).strip()
+                exp_str = ' '.join(buckets.get('exp_date', [])).strip()
                 item_words = buckets.get('item', [])
-                qty_words  = buckets.get('qty', [])
-                qty_str    = ' '.join(qty_words).strip()
-                exp_str    = ' '.join(buckets.get('exp_date', [])).strip()
-                lot_str    = ' '.join(buckets.get('lot_nbr', [])).strip()
-                unit_str   = ' '.join(buckets.get('unit_val', [])).replace('$', '').strip()
-                total_str  = ' '.join(buckets.get('total_val', [])).replace('$', '').strip()
+                first_x = row_words[0]['x0']
 
-                first_word = item_words[0] if item_words else ''
-                first_x    = row_words[0]['x0']
-
-                # Skip known non-item rows
-                if first_word.lower() in SKIP_ITEM_WORDS:
-                    continue
-
-                # Detect new line item: has a numeric qty OR a date in the exp column
-                has_qty_val  = bool(qty_str and re.match(r'^\d+$', qty_str.replace(',', '')))
+                has_qty_val  = bool(qty_str and re.match(r'^\d[\d,]*$', qty_str))
                 has_date_val = bool(exp_str and DATE_RE.search(exp_str))
 
                 if has_qty_val or has_date_val:
-                    # Save previous
                     if current:
-                        all_rows.append(current)
-
-                    # SKU: first word in item column (strip trailing colon)
-                    sku  = first_word.rstrip(':') if first_word else ''
-                    desc = ' '.join(item_words[1:]).strip()
-
+                        tier2_rows.append(current)
                     current = {
-                        "Vendor SKU":      sku,
-                        "Description":     desc,
-                        "Quantity":        qty_str,
-                        "Expiration Date": exp_str,
-                        "Lot Number":      lot_str,
-                        "Unit Value":      unit_str,
-                        "Total Value":     total_str,
+                        FRIENDLY.get('item',     'Description/SKU'):    ' '.join(item_words).strip(),
+                        FRIENDLY.get('qty',      'Quantity'):           qty_str,
+                        FRIENDLY.get('exp_date', 'Expiration Date'):    exp_str,
+                        FRIENDLY.get('lot_nbr',  'Lot Number'):         ' '.join(buckets.get('lot_nbr', [])).strip(),
+                        FRIENDLY.get('unit_val', 'Unit Price'):         ' '.join(buckets.get('unit_val', [])).replace('$','').strip(),
+                        FRIENDLY.get('total_val','Total'):              ' '.join(buckets.get('total_val',[])).replace('$','').strip(),
                     }
-
                 elif current and first_x < qty_x * 0.95:
-                    # Continuation line: description text that wrapped to next line
-                    cont = ' '.join(w['text'] for w in row_words if w['x0'] < qty_x)
-                    if cont.strip():
-                        current["Description"] = (current["Description"] + ' ' + cont).strip()
+                    cont = ' '.join(w['text'] for w in row_words if w['x0'] < qty_x).strip()
+                    if cont:
+                        current[FRIENDLY['item']] = (current[FRIENDLY['item']] + ' ' + cont).strip()
 
             if current:
-                all_rows.append(current)
+                tier2_rows.append(current)
 
-    if not all_rows:
-        raise ValueError(
-            "No line items found in this PDF. "
-            "The layout may not be supported — try exporting as CSV or Excel."
-        )
+        if tier2_rows:
+            hdrs = list(tier2_rows[0].keys())
+            return hdrs, tier2_rows, meta
 
-    headers = ["Vendor SKU", "Description", "Quantity",
-               "Expiration Date", "Lot Number", "Unit Value", "Total Value"]
-    return headers, all_rows, meta
+        # ── Tier 3: generic column extraction — always returns something ───
+        # Cluster all words by x-position into columns, return every row.
+        # User maps columns in the UI.
+        all_words = []
+        for page in pdf.pages:
+            ws = page.extract_words(x_tolerance=3, y_tolerance=3)
+            all_words.extend(ws or [])
+
+        if not all_words:
+            raise ValueError("Could not extract any text from this PDF. It may be a scanned image.")
+
+        # Find distinct x-position clusters (column bands)
+        xs = sorted(set(round(w['x0'] / 10) * 10 for w in all_words))
+        # Merge xs within 20pts of each other
+        clusters = []
+        for x in xs:
+            if clusters and x - clusters[-1] < 20:
+                continue
+            clusters.append(x)
+        if not clusters:
+            raise ValueError("Could not detect column structure in this PDF.")
+
+        # Assign each word to the nearest cluster
+        def nearest_cluster(x):
+            return min(clusters, key=lambda c: abs(c - x))
+
+        headers = [f"Column {i+1}" for i in range(len(clusters))]
+        cluster_to_header = {c: h for c, h in zip(clusters, headers)}
+
+        y_groups = {}
+        for w in all_words:
+            y_key = round(w['top'] / 8) * 8
+            y_groups.setdefault(y_key, []).append(w)
+
+        tier3_rows = []
+        for y in sorted(y_groups.keys()):
+            row = {}
+            for w in y_groups[y]:
+                h = cluster_to_header[nearest_cluster(w['x0'])]
+                row[h] = (row.get(h, '') + ' ' + w['text']).strip()
+            if any(v for v in row.values()):
+                rt = ' '.join(row.values()).lower()
+                if not any(ph in rt for ph in TOTALS_PHRASES):
+                    tier3_rows.append(row)
+
+        if not tier3_rows:
+            raise ValueError("Could not extract any rows from this PDF.")
+
+        return headers, tier3_rows, meta
 
 
 # ── Invoice Import ─────────────────────────────────────────────────────────────
