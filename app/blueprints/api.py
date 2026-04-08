@@ -2663,7 +2663,7 @@ def _detect_columns(headers):
                              "part number", "part #", "part no", "part no.", "part num",
                              "item #", "item no", "item no.", "item number", "item code", "item id",
                              "product code", "product #", "product no", "prod #", "prod code",
-                             "sku", "code", "barcode", "upc", "catalog #", "catalog no",
+                             "sku", "code", "barcode", "upc", "upc #", "upc code", "upc/ean", "catalog #", "catalog no",
                              "mfr part", "mfr #", "vendor part"]),
         ("qty",             ["qty ordered", "qty shipped", "qty received", "qty invoiced",
                              "quantity ordered", "quantity shipped", "quantity received",
@@ -3512,10 +3512,34 @@ def _api_inventory_parse_inner():
     def _col_key(label):
         return _re.sub(r'[^a-z0-9]+', '_', label.lower().strip()).strip('_')
 
+    # Terms that are order/invoice-level and shouldn't become product fields
+    _SKIP_CUSTOM = {
+        'total', 'line total', 'order total', 'ext price', 'extended price',
+        'ext cost', 'subtotal', 'sub total', 'cases ordered', 'cases',
+        'amount due', 'invoice total', 'grand total',
+    }
+
     custom_field_candidates = []
     for h in undetected:
+        # Skip blank/empty headers (openpyxl deduplicates as _col, _col_1, etc.)
+        if _re.match(r'^_col\d*$', h.strip()):
+            continue
+        # Skip order-level aggregation columns
+        if h.lower().strip() in _SKIP_CUSTOM:
+            continue
         if any(str(row.get(h) or '').strip() for row in rows_raw):
             custom_field_candidates.append({"label": h, "key": _col_key(h)})
+
+    # Also treat flavor and pill_count as custom fields that need category_fields created,
+    # even though they're already mapped to standard keys
+    _semi_custom = [
+        ("flavor",     "Flavor"),
+        ("pill_count", "Pill/Bottle Count"),
+    ]
+    semi_custom_candidates = []
+    for key, label in _semi_custom:
+        if key in col_map:
+            semi_custom_candidates.append({"label": label, "key": key})
 
     result_rows = []
     for row in rows_raw:
@@ -3578,14 +3602,16 @@ def _api_inventory_parse_inner():
     if not site_suggestion and file_meta.get("ship_to"):
         site_suggestion = file_meta["ship_to"]
 
+    all_custom_candidates = semi_custom_candidates + custom_field_candidates
+
     return jsonify({
-        "ok":                     True,
-        "rows":                   result_rows,
-        "total":                  len(result_rows),
-        "col_map":                detected_labels,
-        "undetected":             [h for h in undetected if not any(cf["label"] == h for cf in custom_field_candidates)],
-        "custom_field_candidates": custom_field_candidates,
-        "site_suggestion": site_suggestion,
+        "ok":                      True,
+        "rows":                    result_rows,
+        "total":                   len(result_rows),
+        "col_map":                 detected_labels,
+        "undetected":              [h for h in undetected if not any(cf["label"] == h for cf in custom_field_candidates)],
+        "custom_field_candidates": all_custom_candidates,
+        "site_suggestion":         site_suggestion,
     })
 
 
