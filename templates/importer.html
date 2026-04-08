@@ -432,10 +432,19 @@ function genShowPreview(res){
   // Stats
   const total = res.total;
   const hasCat = res.rows.filter(r=>r.category_id).length;
+  const newCats = [...new Set(res.rows.filter(r=>r.category && !r.category_id).map(r=>r.category))].length;
+  // Each unique name+category combo that doesn't already have a product = new product
+  const prodSeen = new Set();
+  let newProds = 0;
+  for(const r of res.rows){
+    const pk = (r.name||'').toLowerCase()+'||'+(r.category||'').toLowerCase();
+    if(!prodSeen.has(pk)){ prodSeen.add(pk); newProds++; }
+  }
   document.getElementById('gen-preview-stats').innerHTML = [
-    {label:'Items to Import', val:total, color:'#0f172a'},
-    {label:'Category Matched', val:hasCat, color:'#15803d'},
-    {label:'No Category', val:total-hasCat, color:'#64748b'},
+    {label:'Items to Import',    val:total,    color:'#0f172a'},
+    {label:'Products (auto)',    val:newProds, color:'#7c3aed'},
+    {label:'New Categories',     val:newCats,  color:'#d97706'},
+    {label:'Category Matched',   val:hasCat,   color:'#15803d'},
   ].map(s=>`<div class="stat" style="min-width:110px"><div class="stat-n" style="color:${s.color}">${s.val}</div><div class="stat-l">${s.label}</div></div>`).join('');
 
   // Table

@@ -3629,27 +3629,83 @@ def api_inventory_commit():
 
     now = datetime.utcnow().isoformat()
     created_ids = []
-
-    # Auto-create category_fields for any custom field candidates
     custom_field_candidates = d.get("custom_field_candidates", [])
-    if custom_field_candidates:
-        # Collect all distinct category_ids that appear in rows
-        category_ids = {r["category_id"] for r in rows if r.get("category_id")}
-        existing_keys = {}  # cat_id → set of field_keys already in DB
-        for cat_id in category_ids:
-            existing_keys[cat_id] = {
-                row["field_key"]
-                for row in query("SELECT field_key FROM category_fields WHERE category_id=?", [cat_id])
-            }
-        for cat_id in category_ids:
-            sort_base = query("SELECT COUNT(*) as c FROM category_fields WHERE category_id=?",
-                              [cat_id], one=True)["c"]
-            for i, cf in enumerate(custom_field_candidates):
-                if cf["key"] not in existing_keys.get(cat_id, set()):
-                    execute("""INSERT INTO category_fields
+
+    # ── Caches so we don't query the DB on every row ──────────────────────────
+    cat_cache  = {}   # name.lower() → category_id
+    prod_cache = {}   # (name.lower(), cat_id) → product_id
+    cf_done    = set()  # (cat_id, field_key) already ensured
+
+    def _get_or_create_category(cat_name):
+        key = cat_name.strip().lower()
+        if key in cat_cache:
+            return cat_cache[key]
+        row = query("SELECT id FROM categories WHERE LOWER(name)=?", [key], one=True)
+        if row:
+            cat_cache[key] = row["id"]
+            return row["id"]
+        cid = execute("INSERT INTO categories (name, color) VALUES (?, ?)",
+                      [cat_name.strip(), "#6366f1"])
+        log_action("CATEGORY_CREATE", cid, cat_name.strip(),
+                   "Auto-created during inventory import", None, None)
+        cat_cache[key] = cid
+        return cid
+
+    def _ensure_custom_fields(cat_id):
+        """Create any custom field candidates on this category if not already present."""
+        if not custom_field_candidates or not cat_id:
+            return
+        for cf in custom_field_candidates:
+            ck = (cat_id, cf["key"])
+            if ck in cf_done:
+                continue
+            existing = query("SELECT id FROM category_fields WHERE category_id=? AND field_key=?",
+                             [cat_id, cf["key"]], one=True)
+            if not existing:
+                sort_n = query("SELECT COUNT(*) as c FROM category_fields WHERE category_id=?",
+                               [cat_id], one=True)["c"]
+                execute("""INSERT INTO category_fields
                                (category_id, field_label, field_key, field_type, required, sort_order)
                                VALUES (?, ?, ?, 'text', 0, ?)""",
-                            [cat_id, cf["label"], cf["key"], sort_base + i])
+                        [cat_id, cf["label"], cf["key"], sort_n])
+            cf_done.add(ck)
+
+    def _get_or_create_product(name, cat_id, sku, has_serial, cost, sale, mfr, model):
+        """Find an existing product by name+category, or create one."""
+        key = (name.strip().lower(), cat_id)
+        if key in prod_cache:
+            return prod_cache[key]
+        # Try to match by name (and category if set)
+        if cat_id:
+            row = query("SELECT id FROM products WHERE LOWER(name)=? AND category_id=? AND active=1",
+                        [name.strip().lower(), cat_id], one=True)
+        else:
+            row = query("SELECT id FROM products WHERE LOWER(name)=? AND active=1",
+                        [name.strip().lower()], one=True)
+        if row:
+            prod_cache[key] = row["id"]
+            return row["id"]
+        # Create product — infer tracking mode from the data
+        serial_tracked      = 1 if has_serial else 0
+        qty_tracked         = 0 if has_serial else 1
+        require_serial      = 1 if has_serial else 0
+        require_vendor_sku  = 1 if (sku and not has_serial) else 0
+        require_internal_sku = 0 if (has_serial or sku) else 1
+        pid = execute("""
+            INSERT INTO products
+                (name, category_id, manufacturer, model, vendor_sku,
+                 serial_tracked, qty_tracked,
+                 require_serial, require_vendor_sku, require_internal_sku,
+                 default_cost, default_sale, active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        """, [name.strip(), cat_id, mfr, model, sku,
+              serial_tracked, qty_tracked,
+              require_serial, require_vendor_sku, require_internal_sku,
+              cost, sale, now])
+        log_action("PRODUCT_CREATE", pid, name.strip(),
+                   "Auto-created during inventory import", None, None)
+        prod_cache[key] = pid
+        return pid
 
     for r in rows:
         name = (r.get("name") or "").strip()
@@ -3659,7 +3715,6 @@ def api_inventory_commit():
         qty      = int(r["qty"]) if r.get("qty") not in (None, "") else None
         serial   = r.get("serial") or None
         sku      = r.get("sku") or None
-        cat_id   = r.get("category_id") or None
         shelf    = r.get("shelf") or None
         cost     = float(r["cost_price"]) if r.get("cost_price") not in (None, "") else None
         sale     = float(r["sale_price"]) if r.get("sale_price") not in (None, "") else None
@@ -3669,7 +3724,21 @@ def api_inventory_commit():
         pur_date = r.get("purchase_date") or None
         po_num   = r.get("po_number") or None
 
-        # Per-row site: if the row had a site_value, resolve it (create if needed)
+        # ── Step 1: resolve category ──────────────────────────────────────────
+        cat_id = r.get("category_id") or None
+        if not cat_id and r.get("category"):
+            cat_id = _get_or_create_category(r["category"])
+        if not cat_id:
+            cat_id = _get_or_create_category("Uncategorized")
+
+        # ── Step 2: ensure custom fields exist on this category ───────────────
+        _ensure_custom_fields(cat_id)
+
+        # ── Step 3: resolve product ───────────────────────────────────────────
+        product_id = _get_or_create_product(
+            name, cat_id, sku, bool(serial), cost, sale, mfr, model)
+
+        # ── Step 4: per-row site ──────────────────────────────────────────────
         row_site_id = site_id
         row_site = r.get("site_value")
         if row_site and row_site.strip():
@@ -3677,6 +3746,7 @@ def api_inventory_commit():
             if resolved:
                 row_site_id = resolved
 
+        # ── Step 5: extra fields JSON ─────────────────────────────────────────
         extra = {}
         if r.get("expiration_date"):
             extra["expiration_date"] = r["expiration_date"]
@@ -3686,22 +3756,23 @@ def api_inventory_commit():
             extra["flavor"] = r["flavor"]
         if r.get("pill_count"):
             extra["pill_count"] = r["pill_count"]
-        # Merge in any auto-detected custom fields
         extra.update(r.get("custom_fields") or {})
 
+        # ── Step 6: create item ───────────────────────────────────────────────
         iid = execute("""
             INSERT INTO items
-                (name, serial, sku, category_id, qty, cost_price, sale_price,
+                (product_id, name, serial, sku, category_id, qty, cost_price, sale_price,
                  manufacturer, model, shelf, location_id, notes, purchase_date,
                  po_number, extra_fields, active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-        """, [name, serial, sku, cat_id, qty, cost, sale,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        """, [product_id, name, serial, sku, cat_id, qty, cost, sale,
               mfr, model, shelf, row_site_id, notes, pur_date,
               po_num, json.dumps(extra), now])
 
         log_action("INVENTORY_IMPORT", iid, name,
-                   "Inventory import: qty={}, serial={}, sku={}".format(qty, serial, sku),
-                   None, {"qty": qty})
+                   "Inventory import: product_id={}, qty={}, serial={}, sku={}".format(
+                       product_id, qty, serial, sku),
+                   None, {"qty": qty, "product_id": product_id})
         created_ids.append(iid)
 
     if not created_ids:
