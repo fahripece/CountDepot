@@ -112,7 +112,6 @@ def sites_page():
 @bp.route("/sites/<int:loc_id>")
 @login_required
 def site_detail_page(loc_id):
-    from app.helpers import location_filter_sql
     loc = query("SELECT * FROM locations WHERE id=?", [loc_id], one=True)
     if not loc:
         from flask import abort
@@ -122,7 +121,14 @@ def site_detail_page(loc_id):
     if loc_ids and loc_id not in loc_ids:
         from flask import abort
         abort(403)
-    return render_template("site_detail.html", location=dict(loc))
+    return render_template("inventory.html",
+        categories      = query("SELECT * FROM categories ORDER BY name"),
+        companies       = [dict(r) for r in query("SELECT * FROM companies WHERE active=1 ORDER BY name")],
+        distributors    = [r["name"] for r in query("SELECT name FROM distributors ORDER BY name")],
+        category_fields = _cat_fields(),
+        products        = _products_list(),
+        user_perms      = list(session.get("permissions", "").split(",")),
+        site_locked     = dict(loc))
 
 
 @bp.route("/low-stock")

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Inventory · CountDepot{% endblock %}
+{% block title %}{% if site_locked %}{{ site_locked.name }}{% else %}Inventory{% endif %} · CountDepot{% endblock %}
 {% block content %}
 <!-- SCAN BAR -->
 <div class="scan-bar" id="scanBar" style="display:none">
@@ -15,13 +15,24 @@
 </div>
 <!-- TOPBAR -->
 <div class="topbar">
+  {% if site_locked %}
+  <a href="/sites" style="color:#94a3b8;font-size:13px;margin-right:6px;white-space:nowrap">← Sites</a>
+  <span class="topbar-title">{{ site_locked.name }}</span>
+  {% if site_locked.description %}
+  <span class="topbar-sub">{{ site_locked.description }}</span>
+  {% endif %}
+  {% else %}
   <span class="topbar-title">Inventory</span>
+  {% endif %}
   <span class="topbar-sub" id="itemCount"></span>
   <div class="topbar-right">
     <button class="btn btn-secondary btn-sm" onclick="toggleScan()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h3M3 9h3M3 19h3M3 15h3M18 5h3M18 9h3M18 15h3M18 19h3M7 3v5M7 16v5M17 3v5M17 16v5M7 8h10v8H7z"/></svg>
       Scanner <small style="opacity:.5;font-size:10px">F2</small>
     </button>
+    {% if site_locked %}
+    <button class="btn btn-secondary btn-sm" onclick="openAssignModal()">Assign Items</button>
+    {% endif %}
     <div style="position:relative">
       <button class="btn btn-secondary btn-sm" onclick="toggleExportMenu()">↓ Export</button>
       <div id="exportMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:100;min-width:160px;overflow:hidden">
@@ -83,9 +94,11 @@
   <select id="tagFilter" class="select" style="width:auto;min-width:110px" onchange="loadItems()">
     <option value="">All Tags</option>
   </select>
+  {% if not site_locked %}
   <select id="locFilter" class="select" style="width:auto;min-width:130px" onchange="loadItems()">
     <option value="">All Sites</option>
   </select>
+  {% endif %}
   <select id="sortFilter" class="select" style="width:auto;min-width:110px" onchange="loadItems()">
     <option value="name">Sort: Name</option>
     <option value="shelf">Sort: Shelf</option>
@@ -641,6 +654,7 @@ const IS_ADMIN = {{ 'true' if session.get('role')=='admin' else 'false' }};
 const ALL_PRODUCTS = {{ products | tojson }};
 const CATEGORY_FIELDS = {{ category_fields | tojson }};
 const companies = {{ companies | tojson }};
+const SITE_LOCKED = {{ site_locked | tojson if site_locked is defined and site_locked else 'null' }};
 
 let allItems=[], selectedIds=new Set(), scanOpen=false, scanMode='lookup';
 let pendingCheckoutId=null, pendingQtyId=null, qtyAction='add', debTimer=null, currentDetailId=null;
@@ -654,15 +668,19 @@ async function loadItems(){await loadItemsPage(currentPage);}
 async function loadLocations(){
   try{
     const locs=await fetch('/api/locations').then(r=>r.json());
-    const sel=document.getElementById('locFilter');
-    const cur=sel.value;
-    sel.innerHTML='<option value="">All Sites</option>';
-    locs.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;if(String(l.id)===String(cur))o.selected=true;sel.appendChild(o);});
-    // Also populate the item edit form dropdown
+    const filterSel=document.getElementById('locFilter');
+    if(filterSel){
+      const cur=filterSel.value;
+      filterSel.innerHTML='<option value="">All Sites</option>';
+      locs.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;if(String(l.id)===String(cur))o.selected=true;filterSel.appendChild(o);});
+    }
+    // Populate the item edit form dropdown
     const formSel=document.getElementById('fi-location');
     const formCur=formSel.value;
     formSel.innerHTML='<option value="">— No site —</option>';
     locs.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;if(String(l.id)===String(formCur))o.selected=true;formSel.appendChild(o);});
+    // In site mode, pre-select the locked site in the item form
+    if(SITE_LOCKED && !formSel.value){formSel.value=SITE_LOCKED.id;}
   }catch(e){}
 }
 async function loadTagsFilter(){
@@ -682,7 +700,7 @@ async function loadItemsPage(page){
   const cat=document.getElementById('catFilter').value;
   const status=document.getElementById('statusFilter').value;
   const sort=document.getElementById('sortFilter').value;
-  const loc=document.getElementById('locFilter').value;
+  const loc=SITE_LOCKED ? SITE_LOCKED.id : (document.getElementById('locFilter')||{value:''}).value;
   const cond=document.getElementById('condFilter').value;
   const tag=document.getElementById('tagFilter').value;
   const params=new URLSearchParams({q,cat,status,sort,loc,cond,tag,page,per_page:PER_PAGE});
@@ -1718,5 +1736,81 @@ async function doInvConfirmScan(){
     </div>
   </div>
 </div>
+
+{% if site_locked %}
+<!-- ══ ASSIGN ITEMS MODAL (site mode only) ══ -->
+<div class="overlay" id="assignModal">
+  <div class="modal" style="max-width:600px;width:100%">
+    <div class="modal-header">
+      <div class="modal-title">Assign Unassigned Items to {{ site_locked.name }}</div>
+      <button class="modal-close" onclick="closeModal('assignModal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding-bottom:0">
+      <p style="font-size:13px;color:#64748b;margin-bottom:12px">Select items that have no site assigned and move them here.</p>
+      <input class="input" id="assignSearch" placeholder="Search unassigned items…" oninput="filterUnassigned()" style="margin-bottom:12px">
+      <div style="max-height:340px;overflow-y:auto;border:1px solid #e5e3de;border-radius:8px" id="assignList">
+        <div style="text-align:center;padding:32px;color:#94a3b8">Loading…</div>
+      </div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:8px" id="assignCount"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <span style="font-size:13px;color:#64748b" id="assignSelected">0 selected</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="closeModal('assignModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmAssign()">Assign to This Site</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+let _unassignedItems=[], _assignSelectedIds=new Set();
+const _ASSIGN_LOC_ID={{ site_locked.id }};
+
+async function openAssignModal(){
+  _assignSelectedIds=new Set();
+  _updateAssignCount();
+  openModal('assignModal');
+  document.getElementById('assignSearch').value='';
+  document.getElementById('assignList').innerHTML='<div style="text-align:center;padding:32px;color:#94a3b8">Loading…</div>';
+  _unassignedItems=await fetch('/api/items/unassigned').then(r=>r.json());
+  filterUnassigned();
+}
+function filterUnassigned(){
+  const q=(document.getElementById('assignSearch').value||'').toLowerCase();
+  const items=q?_unassignedItems.filter(i=>[i.name,i.serial,i.sku,i.internal_sku,i.product_name,i.category].filter(Boolean).some(v=>String(v).toLowerCase().includes(q))):_unassignedItems;
+  _renderUnassigned(items);
+}
+function _renderUnassigned(items){
+  const list=document.getElementById('assignList');
+  document.getElementById('assignCount').textContent=items.length+' unassigned item'+(items.length!==1?'s':'');
+  if(!items.length){list.innerHTML='<div style="text-align:center;padding:32px;color:#94a3b8">No unassigned items found.</div>';return;}
+  list.innerHTML=items.map(i=>{
+    const serial=i.serial||i.sku||i.internal_sku||'';
+    return `<label style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid #f0efec;cursor:pointer" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
+      <input type="checkbox" value="${i.id}" ${_assignSelectedIds.has(i.id)?'checked':''} onchange="_toggleAssign(${i.id},this.checked)" style="width:15px;height:15px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px">${i.name||'—'}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:1px">${[i.product_name,serial].filter(Boolean).join(' · ')||'No product / serial'}</div>
+      </div>
+      ${i.category?`<span class="tag" style="background:${i.color}18;color:${i.color};font-size:10px">${i.category}</span>`:''}
+    </label>`;
+  }).join('');
+}
+function _toggleAssign(id,checked){if(checked)_assignSelectedIds.add(id);else _assignSelectedIds.delete(id);_updateAssignCount();}
+function _updateAssignCount(){document.getElementById('assignSelected').textContent=_assignSelectedIds.size+' selected';}
+async function confirmAssign(){
+  if(!_assignSelectedIds.size){toast('Select at least one item','warn');return;}
+  const res=await fetch('/api/location/'+_ASSIGN_LOC_ID+'/assign-items',{
+    method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body:JSON.stringify({item_ids:[..._assignSelectedIds]})
+  }).then(r=>r.json());
+  if(res.ok){
+    toast(`${res.assigned} item${res.assigned!==1?'s':''} assigned ✓`,'ok');
+    closeModal('assignModal');
+    loadItems();
+  }else{toast(res.msg||'Error','err');}
+}
+</script>
+{% endif %}
 
 {% endblock %}
