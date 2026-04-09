@@ -1617,7 +1617,7 @@ loadItems();
     if(item){
       if(!allItems.find(i=>i.id===itemId)) allItems.push(item);
       showDetail(item);
-      window.history.replaceState({},'','/');
+      window.history.replaceState({},'',SITE_LOCKED?'/sites/'+SITE_LOCKED.id:'/');
     }
   };
   setTimeout(tryOpen,400);
