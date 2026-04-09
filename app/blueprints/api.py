@@ -573,14 +573,18 @@ def api_checkin():
 @bp.route("/api/locations")
 @login_required
 def api_get_locations():
-    rows = query("""
+    allowed_ids = session.get("location_ids") or []
+    sql = """
         SELECT l.*,
                COUNT(i.id) as item_count,
                SUM(CASE WHEN i.checked_out=0 AND i.sold=0 THEN 1 ELSE 0 END) as available_count
         FROM locations l
         LEFT JOIN items i ON i.location_id=l.id AND i.active=1
-        GROUP BY l.id ORDER BY l.name
-    """)
+    """
+    if allowed_ids:
+        sql += f" WHERE l.id IN ({','.join('?'*len(allowed_ids))})"
+    sql += " GROUP BY l.id ORDER BY l.name"
+    rows = query(sql, allowed_ids if allowed_ids else [])
     return jsonify([dict(r) for r in rows])
 
 
