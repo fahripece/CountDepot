@@ -884,7 +884,10 @@ def api_report_checkout_history():
 @bp.route("/api/report/locations")
 @login_required
 def api_report_locations():
+    allowed_ids = session.get("location_ids") or []  # empty = no restriction
     locs = query("SELECT * FROM locations ORDER BY name")
+    if allowed_ids:
+        locs = [l for l in locs if l["id"] in allowed_ids]
     result = []
     for loc in locs:
         items = query("""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
@@ -905,17 +908,18 @@ def api_report_locations():
         result.append({**dict(loc), "items": item_list,
                         "total": len(item_list),
                         "checked_out": sum(1 for i in item_list if i["checked_out"])})
-    # Items with no location
-    unassigned_rows = [dict(r) for r in query("""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
-                                 i.condition, i.checked_out, i.checkout_by, i.cost_price,
-                                 c.name as category, c.color
-                          FROM items i
-                          LEFT JOIN categories c ON c.id=i.category_id
-                          WHERE (i.location_id IS NULL) AND i.active=1 AND i.sold=0
-                          ORDER BY i.name""")]
-    result.append({"id": None, "name": "Unassigned", "description": "",
-                   "items": unassigned_rows,
-                   "total": len(unassigned_rows),
+    # Unassigned items — only show to unrestricted users (admins/regional managers)
+    if not allowed_ids:
+        unassigned_rows = [dict(r) for r in query("""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
+                                     i.condition, i.checked_out, i.checkout_by, i.cost_price,
+                                     c.name as category, c.color
+                              FROM items i
+                              LEFT JOIN categories c ON c.id=i.category_id
+                              WHERE (i.location_id IS NULL) AND i.active=1 AND i.sold=0
+                              ORDER BY i.name""")]
+        result.append({"id": None, "name": "Unassigned", "description": "",
+                       "items": unassigned_rows,
+                       "total": len(unassigned_rows),
                    "checked_out": sum(1 for r in unassigned_rows if r["checked_out"])})
     return jsonify({"ok": True, "locations": result})
 
