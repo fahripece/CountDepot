@@ -316,11 +316,13 @@ function applySiteSuggestion(suggestion, prefix){
   detectedEl.style.display = 'flex';
 
   if(suggestion.matched_id){
-    detectedTxt.textContent = 'Detected from file: ' + suggestion.value + ' → linked to existing site "' + suggestion.matched_name + '"';
+    detectedTxt.textContent = 'Ship-to detected: ' + suggestion.value + ' → matched to existing site "' + suggestion.matched_name + '"';
     selectEl.value = suggestion.matched_id;
     newWrap.style.display = 'none';
   } else {
-    detectedTxt.textContent = 'Detected from file: "' + suggestion.value + '" — not found in existing sites';
+    const addr = suggestion.address && suggestion.address !== suggestion.value
+                 ? ' (' + suggestion.address + ')' : '';
+    detectedTxt.textContent = 'Ship-to detected: "' + suggestion.value + '"' + addr + ' — no matching site found';
     detectedTxt.parentElement.style.borderColor = '#fde68a';
     detectedTxt.parentElement.style.background  = '#fefce8';
     detectedTxt.parentElement.style.color       = '#92400e';

@@ -2892,18 +2892,49 @@ def _read_pdf_rows(f):
                     meta['vendor_name'] = lines[i-1]
                 break
 
+        SECTION_HEADERS = re.compile(
+            r'^(bill\s*to|ship\s*to|sold\s*to|remit\s*to|from|vendor|supplier'
+            r'|attn|attention|contact|po\s*box|item|qty|description|total)',
+            re.IGNORECASE
+        )
         for i, line in enumerate(lines):
             if re.search(r'SHIP\s*TO', line, re.IGNORECASE):
                 after = re.split(r'SHIP\s*TO\s*:?\s*', line, flags=re.IGNORECASE)[-1].strip()
+                # Collect content lines: start from the inline remainder or the next line
+                content_lines = []
                 if after:
+                    # "BILL TO: SHIP TO: CompanyName..." — everything after SHIP TO: on this line
+                    # When BILL TO and SHIP TO are side-by-side, pdfplumber may put both
+                    # addresses on the same line. Split by taking the right half.
                     parts = after.split()
                     half = len(parts) // 2
-                    meta['ship_to'] = ' '.join(parts[half:]).strip() if half else after
-                elif i + 1 < len(lines):
-                    candidate = lines[i+1].strip()
-                    parts = candidate.split()
-                    half = len(parts) // 2
-                    meta['ship_to'] = ' '.join(parts[half:]).strip() if half > 1 else candidate
+                    content_lines.append(' '.join(parts[half:]).strip() if half else after)
+                    start = i + 1
+                else:
+                    start = i + 1
+
+                # Grab up to 4 more address lines after the first content
+                for j in range(start, min(start + 4, len(lines))):
+                    candidate = lines[j].strip()
+                    if not candidate:
+                        break
+                    if SECTION_HEADERS.match(candidate):
+                        break
+                    # Same side-by-side duplicate handling: if the line content
+                    # repeats itself (left=right column), take the right half
+                    words = candidate.split()
+                    mid = len(words) // 2
+                    if mid >= 2 and words[:mid] == words[mid:]:
+                        candidate = ' '.join(words[mid:])
+                    content_lines.append(candidate)
+
+                if not content_lines and i + 1 < len(lines):
+                    # fallback: just take the next line as-is
+                    content_lines = [lines[i + 1].strip()]
+
+                if content_lines:
+                    meta['ship_to']         = content_lines[0]
+                    meta['ship_to_address'] = ', '.join(content_lines)
                 break
 
         # ── Tier 1: extract_tables() ───────────────────────────────────────
@@ -3205,7 +3236,14 @@ def api_invoice_parse():
 
         site_suggestion = _detect_site_in_rows(rows_raw)
         if not site_suggestion and file_meta.get("ship_to"):
-            site_suggestion = file_meta["ship_to"]
+            ship_name = file_meta["ship_to"]
+            existing  = query("SELECT id, name FROM locations WHERE LOWER(name)=LOWER(?)", [ship_name], one=True)
+            site_suggestion = {
+                "value":        ship_name,
+                "address":      file_meta.get("ship_to_address", ship_name),
+                "matched_id":   existing["id"]   if existing else None,
+                "matched_name": existing["name"] if existing else None,
+            }
 
         return jsonify({
             "ok":             True,
@@ -3610,7 +3648,14 @@ def _api_inventory_parse_inner():
     detected_labels = {k: v for k, v in col_map.items() if k != "site"}
     site_suggestion = _detect_site_in_rows(rows_raw)
     if not site_suggestion and file_meta.get("ship_to"):
-        site_suggestion = file_meta["ship_to"]
+        ship_name = file_meta["ship_to"]
+        existing  = query("SELECT id, name FROM locations WHERE LOWER(name)=LOWER(?)", [ship_name], one=True)
+        site_suggestion = {
+            "value":        ship_name,
+            "address":      file_meta.get("ship_to_address", ship_name),
+            "matched_id":   existing["id"]   if existing else None,
+            "matched_name": existing["name"] if existing else None,
+        }
 
     all_custom_candidates = semi_custom_candidates + custom_field_candidates
 
