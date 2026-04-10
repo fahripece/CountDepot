@@ -1,9 +1,11 @@
 import json
 from flask import Blueprint, render_template, request, session, redirect, url_for, jsonify
 
-from app.db import query
+from datetime import datetime
+
+from app.db import query, execute
 from app.helpers import (login_required, perm_required, admin_required,
-                         ALL_PERMISSIONS, PERM_KEYS)
+                         log_action, ALL_PERMISSIONS, PERM_KEYS)
 
 bp = Blueprint("main", __name__)
 
@@ -247,6 +249,28 @@ def kits_page():
     return render_template("kits.html")
 
 
+# ── Procurement helpers ───────────────────────────────────────────────────────
+
+def _po_number():
+    year   = datetime.now().strftime("%Y")
+    prefix = f"PO-{year}-"
+    existing = query("SELECT po_number FROM purchase_orders WHERE po_number LIKE ?", [f"{prefix}%"])
+    nums = []
+    for r in existing:
+        try:
+            nums.append(int(r["po_number"].split("-")[-1]))
+        except Exception:
+            pass
+    return f"{prefix}{((max(nums) + 1) if nums else 1):04d}"
+
+
+def _recalc_po_total(po_id):
+    row = query("SELECT SUM(total_cost) as t FROM po_lines WHERE po_id=?", [po_id], one=True)
+    total = row["t"] or 0
+    execute("UPDATE purchase_orders SET total_cost=? WHERE id=?", [total, po_id])
+    return total
+
+
 # ── Procurement pages ─────────────────────────────────────────────────────────
 
 @bp.route("/procurement")
@@ -285,6 +309,97 @@ def procurement_detail_page(po_id):
 
 
 # ── Low stock API (lives here because it's tightly coupled to the page) ───────
+
+@bp.route("/api/procurement/low-stock-orderables")
+@login_required
+@admin_required
+def api_low_stock_orderables():
+    """Products below threshold that have a preferred vendor set."""
+    rows = query("""
+        SELECT p.id as product_id, p.name as product_name,
+               p.manufacturer, p.model, p.low_stock_threshold,
+               COUNT(i.id) as available_count,
+               pv.vendor_id, d.name as vendor_name,
+               pv.vendor_sku, pv.unit_price,
+               vc.min_order_qty, vc.lead_days
+        FROM products p
+        LEFT JOIN items i ON i.product_id = p.id
+            AND i.active=1 AND i.sold=0 AND i.checked_out=0
+        JOIN product_vendors pv ON pv.product_id = p.id AND pv.preferred=1 AND pv.active=1
+        JOIN distributors d ON d.id = pv.vendor_id
+        LEFT JOIN vendor_catalog vc ON vc.vendor_id = pv.vendor_id
+            AND vc.vendor_sku = pv.vendor_sku AND vc.active=1
+        WHERE p.active=1 AND p.low_stock_threshold > 0
+        GROUP BY p.id
+        HAVING COUNT(i.id) < p.low_stock_threshold
+        ORDER BY COUNT(i.id) ASC, p.name
+    """)
+    result = []
+    for r in rows:
+        d = dict(r)
+        avail  = d["available_count"]
+        thresh = d["low_stock_threshold"]
+        moq    = d["min_order_qty"] or 1
+        needed = thresh - avail
+        # round up to nearest MOQ
+        suggested = max(moq, (needed + moq - 1) // moq * moq)
+        d["suggested_qty"] = suggested
+        d["missing"]       = needed
+        result.append(d)
+    return jsonify({"ok": True, "orderables": result})
+
+
+@bp.route("/api/procurement/pos/from-low-stock", methods=["POST"])
+@login_required
+@admin_required
+def api_po_from_low_stock():
+    """Create draft PO(s) from selected low-stock products, grouped by vendor."""
+    d = request.json or {}
+    lines = d.get("lines", [])  # [{product_id, vendor_id, description, qty_ordered, unit_cost, vendor_sku}]
+    if not lines:
+        return jsonify({"ok": False, "msg": "No lines provided"}), 400
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Group by vendor_id
+    by_vendor = {}
+    for line in lines:
+        vid = int(line.get("vendor_id", 0))
+        if not vid:
+            continue
+        by_vendor.setdefault(vid, []).append(line)
+
+    if not by_vendor:
+        return jsonify({"ok": False, "msg": "No valid vendor assignments"}), 400
+
+    created_pos = []
+    for vendor_id, vendor_lines in by_vendor.items():
+        vendor = query("SELECT name FROM distributors WHERE id=?", [vendor_id], one=True)
+        vendor_name = vendor["name"] if vendor else None
+        po_number = _po_number()
+        po_id = execute("""
+            INSERT INTO purchase_orders
+              (po_number, vendor_id, vendor_name, status, created_by, created_at, total_cost)
+            VALUES (?,?,?,'draft',?,?,0)
+        """, [po_number, vendor_id, vendor_name, session.get("username"), now])
+
+        for line in vendor_lines:
+            qty    = int(line.get("qty_ordered") or 1)
+            cost   = float(line.get("unit_cost") or 0)
+            total  = round(qty * cost, 4)
+            execute("""
+                INSERT INTO po_lines
+                  (po_id, product_id, description, vendor_sku, qty_ordered, qty_received, unit_cost, total_cost)
+                VALUES (?,?,?,?,?,0,?,?)
+            """, [po_id, line.get("product_id"), line.get("description", ""),
+                  line.get("vendor_sku") or None, qty, cost, total])
+
+        _recalc_po_total(po_id)
+        log_action("PO_CREATE", None, po_number,
+                   f"Auto-drafted from low stock: {len(vendor_lines)} lines, vendor={vendor_name}")
+        created_pos.append({"id": po_id, "po_number": po_number, "vendor_name": vendor_name})
+
+    return jsonify({"ok": True, "pos": created_pos})
+
 
 @bp.route("/api/low-stock")
 @login_required
