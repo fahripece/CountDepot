@@ -2163,6 +2163,32 @@ def api_alerts():
     return jsonify(get_low_stock_alerts())
 
 
+@bp.route("/api/support", methods=["POST"])
+@login_required
+@api_rate_limit(max_attempts=5, window=300)
+def api_support():
+    d = request.json or {}
+    subject = (d.get("subject") or "").strip()
+    message = (d.get("message") or "").strip()
+    if not subject or not message:
+        return jsonify({"ok": False, "msg": "Subject and message are required"})
+    if len(message) > 5000:
+        return jsonify({"ok": False, "msg": "Message too long (max 5000 characters)"})
+    from flask import g
+    from app.mailer import send_support_message
+    user_email = query("SELECT email FROM users WHERE id=?",
+                       [session["user_id"]], one=True)
+    from_email = (user_email["email"] if user_email and user_email["email"] else "")
+    sent = send_support_message(
+        subject=subject,
+        message=message,
+        from_name=session.get("username", "Unknown"),
+        from_email=from_email,
+        tenant=getattr(g, "tenant_slug", "unknown")
+    )
+    return jsonify({"ok": True, "emailed": sent})
+
+
 @bp.route("/api/smtp-status")
 @login_required
 def api_smtp_status():

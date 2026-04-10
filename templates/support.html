@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}Help & Support · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Help &amp; Support</span>
+  <span class="topbar-sub">Guides and contact form</span>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:20px 24px;max-width:900px">
+
+<!-- ── CONTACT FORM ───────────────────────────────────────────────────── -->
+<div class="card" style="padding:20px 24px;margin-bottom:28px">
+  <div style="font-size:15px;font-weight:700;margin-bottom:4px">Contact Support</div>
+  <div style="font-size:13px;color:#64748b;margin-bottom:18px">Have a question or issue? Send us a message and we'll get back to you.</div>
+  <div id="support-success" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;font-size:13.5px;color:#166534;margin-bottom:16px">
+    Message sent! We'll be in touch soon.
+  </div>
+  <div id="support-err" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;font-size:13px;color:#b91c1c;margin-bottom:14px"></div>
+  <div class="field" style="margin-bottom:14px">
+    <label class="label">Subject</label>
+    <input class="input" id="sup-subject" type="text" placeholder="What's this about?" maxlength="200">
+  </div>
+  <div class="field" style="margin-bottom:16px">
+    <label class="label">Message</label>
+    <textarea class="input" id="sup-message" rows="5" placeholder="Describe your question or issue in detail…" maxlength="5000" style="resize:vertical"></textarea>
+  </div>
+  <button class="btn btn-primary" onclick="sendSupport()" id="sup-btn">Send message</button>
+</div>
+
+<!-- ── TUTORIALS ──────────────────────────────────────────────────────── -->
+<div style="font-size:15px;font-weight:700;margin-bottom:16px">How-To Guides</div>
+
+<div style="display:flex;flex-direction:column;gap:2px">
+
+<!-- Getting Started -->
+<div class="help-section">
+  <div class="help-hdr" onclick="toggleHelp(this)">
+    <span>Getting Started</span>
+    <svg class="help-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+  </div>
+  <div class="help-body">
+    <div class="help-item">
+      <div class="help-q">What is CountDepot?</div>
+      <div class="help-a">CountDepot is an inventory management system for tracking physical assets — IT equipment, tools, devices, retail stock — across your organization. You can check items in and out, track locations, scan barcodes, and generate reports.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">How is inventory organized?</div>
+      <div class="help-a">Everything follows a three-level hierarchy: <strong>Category → Product → Item</strong>. A <em>Category</em> is a broad type (e.g. Laptops). A <em>Product</em> is a specific model (e.g. ThinkPad X1 Carbon). An <em>Item</em> is a physical unit with its own serial number or SKU. You must create a Category and Product before you can add Items.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">Where do I start after logging in?</div>
+      <div class="help-a">Go to <strong>Setup → Categories</strong> to create your categories. Then go to <strong>Setup → Products</strong> to define your product models. Once products exist, you can add items from the main <strong>Inventory</strong> page using the <em>+ Add Item</em> button.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Adding Items -->
+<div class="help-section">
+  <div class="help-hdr" onclick="toggleHelp(this)">
+    <span>Adding &amp; Managing Items</span>
+    <svg class="help-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+  </div>
+  <div class="help-body">
+    <div class="help-item">
+      <div class="help-q">How do I add a single item?</div>
+      <div class="help-a">Click <strong>+ Add Item</strong> in the top bar on the Inventory page. Select a product, enter the serial/SKU, cost, shelf location, and any other details. If the product has <em>Print &amp; Scan Label</em> enabled, you'll print a label and scan it to confirm before the item is saved.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">What's the difference between serial-tracked and qty-tracked items?</div>
+      <div class="help-a"><strong>Serial-tracked</strong> items are individual units with unique serial numbers (e.g. a laptop). Each one gets its own row. <strong>Qty-tracked</strong> items are counted in bulk (e.g. a box of cables) — you track how many you have, not individual units. This is set at the product level.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">How do I edit an item?</div>
+      <div class="help-a">Click any item row to open the detail panel on the right. Click the <strong>Edit</strong> button to change any field. Changes are saved immediately and appear in the audit log.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">How do I delete items?</div>
+      <div class="help-a">Open the item detail panel and click <strong>Delete</strong> at the bottom. For bulk deletes, check multiple items using the checkboxes (admin only) and use the bulk action bar. Deleted items are soft-deleted and remain in the audit log.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Checking Out Items -->
+<div class="help-section">
+  <div class="help-hdr" onclick="toggleHelp(this)">
+    <span>Checking Out &amp; Checking In</span>
+    <svg class="help-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+  </div>
+  <div class="help-body">
+    <div class="help-item">
+      <div class="help-q">How do I check out an item?</div>
+      <div class="help-a">Open the item's detail panel and click <strong>Check Out</strong>. Enter who the item is going to (required), an optional job reference, and an expected return date. The item will show as Checked Out in red on the inventory list.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">How do I check an item back in?</div>
+      <div class="help-a">Open the detail panel for a checked-out item and click <strong>Check In</strong>. You can add a return note. The item returns to Available status.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">How do I use the Checkout page?</div>
+      <div class="help-a">The <strong>Checkout</strong> page in the nav is a scan-first workflow — scan a barcode or search for an item to quickly check it out or in without navigating the inventory table. Useful for high-volume workflows.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">Where can I see all checked-out items?</div>
+      <div class="help-a">Use the <strong>Status</strong> filter on the Inventory page and select <em>Checked Out</em>. Or go to <strong>Checked Out</strong> in the sidebar for a dedicated view.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Sites -->
+<div class="help-section">
+  <div class="help-hdr" onclick="toggleHelp(this)">
+    <span>Sites &amp; Locations</span>
+    <svg class="help-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+  </div>
+  <div class="help-body">
+    <div class="help-item">
+      <div class="help-q">What are Sites?</div>
+      <div class="help-a">Sites represent physical locations — offices, warehouses, client sites. Each item can be assigned to a site. Admins can restrict workers to only see and manage items at their assigned site(s).</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">How do I view items at a specific site?</div>
+      <div class="help-a">Go to <strong>Sites</strong> in the sidebar and click on a site. The site page shows only items assigned to that location, with the same filters and actions as the main inventory view.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">How do I assign items to a site?</div>
+      <div class="help-a">When adding or editing an item, select the site from the <em>Site</em> dropdown. You can also use the <strong>Assign Items</strong> button on a site page to pull in unassigned items in bulk.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">How do I restrict a user to a specific site?</div>
+      <div class="help-a">Go to <strong>Users &amp; Permissions</strong> (admin only) and click the <strong>Sites</strong> button on a user's row. Assign them to one or more sites. They will only be able to see items and data for those sites.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Importing -->
+<div class="help-section">
+  <div class="help-hdr" onclick="toggleHelp(this)">
+    <span>Importing Inventory &amp; Invoices</span>
+    <svg class="help-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+  </div>
+  <div class="help-body">
+    <div class="help-item">
+      <div class="help-q">What file formats can I import?</div>
+      <div class="help-a">The importer accepts <strong>PDF</strong> and <strong>Excel (.xlsx)</strong> files for both invoice and inventory imports.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">What's the difference between Invoice Import and Inventory Import?</div>
+      <div class="help-a"><strong>Invoice Import</strong> reads a vendor invoice and creates items from the line items. It auto-detects the vendor, reads the SHIP TO address to suggest a site, and matches SKUs to existing products. <strong>Inventory Import</strong> is for bulk uploading a spreadsheet of items you've already catalogued (e.g. migrating from another system).</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">What happens if a SKU on an invoice doesn't match any product?</div>
+      <div class="help-a">Unmatched SKUs appear in a separate section after the preview. You can choose to create each one as a new item — select a category (or create a new one), and CountDepot will auto-create the product and item for you.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">Where can I see past imports?</div>
+      <div class="help-a">Admins can view all past imports at <strong>Reporting → Import History</strong>. It shows vendor, date, items created, and any notes.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Reports -->
+<div class="help-section">
+  <div class="help-hdr" onclick="toggleHelp(this)">
+    <span>Reports &amp; Audit Log</span>
+    <svg class="help-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+  </div>
+  <div class="help-body">
+    <div class="help-item">
+      <div class="help-q">What reports are available?</div>
+      <div class="help-a">
+        <strong>Financial</strong> — revenue, cost, and profit overview.<br>
+        <strong>Activity</strong> — daily activity broken down by action type.<br>
+        <strong>User Activity</strong> — what each user has done and when.<br>
+        <strong>Checkout History</strong> — full record of every checkout/check-in cycle.<br>
+        <strong>Sites Report</strong> — item counts and value broken down by location.<br>
+        <strong>Import History</strong> — log of every import (admins only).
+      </div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">What is the Audit Log?</div>
+      <div class="help-a">The Audit Log records every action taken in the system — who added, edited, deleted, checked out, or imported items, and when. It is append-only and cannot be altered. Accessible from the sidebar under <strong>Audit Log</strong>.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Low Stock -->
+<div class="help-section">
+  <div class="help-hdr" onclick="toggleHelp(this)">
+    <span>Low Stock &amp; Alerts</span>
+    <svg class="help-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+  </div>
+  <div class="help-body">
+    <div class="help-item">
+      <div class="help-q">How do I set up low stock alerts?</div>
+      <div class="help-a">Go to <strong>Setup → Products</strong>, open a product, and set a <em>Low Stock Threshold</em>. When available inventory drops to or below that number, the product appears on the <strong>Low Stock</strong> page and a banner appears on the inventory page.</div>
+    </div>
+    <div class="help-item">
+      <div class="help-q">Can I get email alerts for low stock?</div>
+      <div class="help-a">Yes — if your server has email (SMTP) configured, alerts are sent automatically to admin users when a product drops below its threshold. You can also set a site-specific alert email address from the Sites page.</div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end tutorials -->
+</div><!-- end page -->
+
+<style>
+.help-section{border:1px solid #e5e3de;border-radius:10px;overflow:hidden;margin-bottom:6px;background:#fff}
+.help-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;font-weight:600;font-size:14px;user-select:none;transition:background .15s}
+.help-hdr:hover{background:#fafaf9}
+.help-chevron{width:16px;height:16px;transition:transform .2s;flex-shrink:0}
+.help-hdr.open .help-chevron{transform:rotate(180deg)}
+.help-body{display:none;border-top:1px solid #e5e3de;padding:4px 0}
+.help-item{padding:14px 18px;border-bottom:1px solid #f1f0ed}
+.help-item:last-child{border-bottom:none}
+.help-q{font-weight:600;font-size:13.5px;margin-bottom:6px;color:#0f172a}
+.help-a{font-size:13.5px;color:#475569;line-height:1.6}
+body.dark .help-section{background:#1e293b!important;border-color:#334155!important}
+body.dark .help-hdr{color:#e2e8f0!important}
+body.dark .help-hdr:hover{background:#162032!important}
+body.dark .help-body{border-color:#334155!important}
+body.dark .help-item{border-color:#334155!important}
+body.dark .help-q{color:#e2e8f0!important}
+body.dark .help-a{color:#94a3b8!important}
+</style>
+<script>
+function toggleHelp(hdr){
+  hdr.classList.toggle('open');
+  const body=hdr.nextElementSibling;
+  body.style.display=body.style.display==='block'?'none':'block';
+}
+
+async function sendSupport(){
+  const subject=document.getElementById('sup-subject').value.trim();
+  const message=document.getElementById('sup-message').value.trim();
+  const errEl=document.getElementById('support-err');
+  errEl.style.display='none';
+  if(!subject||!message){errEl.textContent='Subject and message are required.';errEl.style.display='block';return;}
+  const btn=document.getElementById('sup-btn');
+  btn.disabled=true;btn.textContent='Sending…';
+  try{
+    const r=await fetch('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject,message})});
+    const d=await r.json();
+    if(d.ok){
+      document.getElementById('sup-subject').value='';
+      document.getElementById('sup-message').value='';
+      document.getElementById('support-success').style.display='block';
+    } else {
+      errEl.textContent=d.msg||'Failed to send. Please try again.';
+      errEl.style.display='block';
+    }
+  }catch(e){
+    errEl.textContent='Network error. Please try again.';
+    errEl.style.display='block';
+  }
+  btn.disabled=false;btn.textContent='Send message';
+}
+</script>
+{% endblock %}

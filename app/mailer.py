@@ -137,6 +137,37 @@ def send_invite_email(to: str, slug: str, token: str, inviter: str = "Your admin
     return send_email(to, subject, html, text)
 
 
+def send_support_message(subject: str, message: str, from_name: str,
+                         from_email: str, tenant: str) -> bool:
+    """Send an in-app support contact form message to the platform support inbox."""
+    to = Config.SUPPORT_EMAIL or Config.PLATFORM_ADMIN_EMAIL
+    if not to:
+        log.warning(f"[SUPPORT no-dest] From: {from_name} ({tenant}) | {subject}")
+        log.warning(f"[SUPPORT body] {message[:500]}")
+        return False
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <h2 style="font-size:18px;font-weight:700;margin-bottom:6px">Support message from CountDepot</h2>
+  <div style="background:#f8f7f4;border-radius:8px;padding:14px 18px;margin-bottom:20px">
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">FROM</div>
+    <div style="font-weight:600">{from_name}</div>
+    <div style="font-size:13px;color:#64748b">{from_email or '(no email)'} &nbsp;·&nbsp; tenant: <strong>{tenant}</strong></div>
+  </div>
+  <div style="background:#f8f7f4;border-radius:8px;padding:14px 18px;margin-bottom:20px">
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:6px">SUBJECT</div>
+    <div style="font-weight:600">{subject}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #e5e3de;border-radius:8px;padding:14px 18px">
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:6px">MESSAGE</div>
+    <div style="font-size:14px;line-height:1.6;white-space:pre-wrap">{message}</div>
+  </div>
+</div>"""
+    text = (f"Support message from CountDepot\n\n"
+            f"From: {from_name} ({from_email or 'no email'}) · tenant: {tenant}\n"
+            f"Subject: {subject}\n\n{message}\n")
+    return send_email(to, f"[CountDepot Support] {subject}", html, text)
+
+
 def send_low_stock_alert(to: str, product_name: str, available: int, threshold: int) -> bool:
     subject = f"Low stock alert: {product_name}"
     html = f"""

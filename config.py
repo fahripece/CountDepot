@@ -26,6 +26,8 @@ class Config:
     SIGNUP_ENABLED    = os.environ.get("SIGNUP_ENABLED", "true").lower() == "true"
     # Platform admin MFA — set this to enable email OTP after password login
     PLATFORM_ADMIN_EMAIL = os.environ.get("PLATFORM_ADMIN_EMAIL", "")
+    # Support contact — where in-app support messages are sent
+    SUPPORT_EMAIL        = os.environ.get("SUPPORT_EMAIL", "")
     # Stripe billing
     STRIPE_SECRET_KEY          = os.environ.get("STRIPE_SECRET_KEY", "")
     STRIPE_PUBLISHABLE_KEY     = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")

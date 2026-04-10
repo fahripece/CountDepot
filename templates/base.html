@@ -355,6 +355,10 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <span style="color:#94a3b8">{{ session.get('username','') }}</span>
         {% if session.get('role') == 'admin' %}<span style="background:#1d4ed8;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">ADMIN</span>{% elif session.get('role') == 'viewer' %}<span style="background:#6d28d9;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">VIEWER</span>{% endif %}
       </div>
+      <a href="/support" class="navlink {% if request.path == '/support' %}active{% endif %}" style="color:#64748b">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>Help &amp; Support</span>
+      </a>
       <button class="navlink" id="darkToggle" onclick="toggleDark()" style="color:#94a3b8;font-size:12px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z"/></svg>
         <span id="darkLabel">Dark mode</span>

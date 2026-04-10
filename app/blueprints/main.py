@@ -279,6 +279,12 @@ def api_low_stock():
     return jsonify(result)
 
 
+@bp.route("/support")
+@login_required
+def support_page():
+    return render_template("support.html")
+
+
 @bp.route("/importer")
 @login_required
 @perm_required("import_export")
