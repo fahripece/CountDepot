@@ -433,6 +433,13 @@ def api_items():
     if "ORDER" in where_part: where_part = where_part[:where_part.rindex("ORDER")]
     total = query("SELECT COUNT(*) " + where_part, args, one=True)[0]
 
+    # Aggregate totals (all matching rows, not just current page)
+    checked_out_count = query("SELECT COUNT(*) " + where_part + " AND i.checked_out=1", args, one=True)[0]
+    stock_value_row = query(
+        "SELECT COALESCE(SUM(COALESCE(i.cost_price,0)*CASE WHEN i.qty IS NULL THEN 1 ELSE COALESCE(i.qty,0) END),0) "
+        + where_part, args, one=True)
+    stock_value = round(float(stock_value_row[0] or 0), 2)
+
     sql += f" ORDER BY {order}"
     if not no_paginate:
         sql += f" LIMIT {per_page} OFFSET {(page - 1) * per_page}"
@@ -460,7 +467,8 @@ def api_items():
         return jsonify(result)
     pages = max(1, -(-total // per_page))  # ceil division
     return jsonify({"items": result, "total": total, "page": page,
-                    "pages": pages, "per_page": per_page})
+                    "pages": pages, "per_page": per_page,
+                    "totals": {"checked_out": checked_out_count, "stock_value": stock_value}})
 
 
 @bp.route("/api/scan")
@@ -2068,6 +2076,24 @@ def api_change_password():
 @bp.route("/api/alerts")
 @login_required
 def api_alerts():
+    loc_id = request.args.get("loc", "").strip()
+    if loc_id:
+        rows = query("""
+            SELECT p.id, p.name, p.low_stock_threshold,
+                   COUNT(i.id) as available_count
+            FROM products p
+            LEFT JOIN items i ON i.product_id = p.id
+                AND i.active = 1 AND i.sold = 0 AND i.checked_out = 0
+                AND i.location_id = ?
+            WHERE p.active = 1 AND p.low_stock_threshold > 0
+            GROUP BY p.id
+            HAVING available_count <= p.low_stock_threshold
+            ORDER BY available_count ASC
+        """, [loc_id])
+        return jsonify([{"id": r["id"], "name": r["name"],
+                         "available_count": r["available_count"],
+                         "low_stock_threshold": r["low_stock_threshold"]}
+                        for r in rows])
     return jsonify(get_low_stock_alerts())
 
 

@@ -716,9 +716,10 @@ function updateStats(data){
   const items=data.items||data;
   const t=data.total!=null?data.total:(data.totals&&data.totals.total!=null?data.totals.total:items.length);
   document.getElementById('st-total').textContent=t;
-  document.getElementById('st-out').textContent=items.filter(i=>i.checked_out).length;
-  const val=items.reduce((a,i)=>a+(i.cost_price||0)*(i.qty===null?1:(i.qty||0)),0);
-  document.getElementById('st-val').textContent='$'+val.toFixed(0);
+  const outCount=(data.totals&&data.totals.checked_out!=null)?data.totals.checked_out:items.filter(i=>i.checked_out).length;
+  document.getElementById('st-out').textContent=outCount;
+  const val=(data.totals&&data.totals.stock_value!=null)?data.totals.stock_value:items.reduce((a,i)=>a+(i.cost_price||0)*(i.qty===null?1:(i.qty||0)),0);
+  document.getElementById('st-val').textContent='$'+parseFloat(val).toFixed(0);
   document.getElementById('itemCount').textContent=t+' item'+(t===1?'':'s');
   const ls=(data.totals&&data.totals.low_stock)||0;
   document.getElementById('st-low').textContent=ls;
@@ -1625,7 +1626,8 @@ loadItems();
 // Override refreshAlertBadge to also update the Low Stock stat tile with product-level count
 window.refreshAlertBadge = async function(){
   try{
-    const a=await fetch('/api/alerts').then(r=>r.json());
+    const alertUrl=SITE_LOCKED?`/api/alerts?loc=${SITE_LOCKED.id}`:'/api/alerts';
+    const a=await fetch(alertUrl).then(r=>r.json());
     const b=document.getElementById('alert-badge');
     if(b){b.textContent=a.length;b.style.display=a.length>0?'':'none';}
     const st=document.getElementById('st-low');
