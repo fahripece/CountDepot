@@ -4261,4 +4261,245 @@ def api_po_receive(po_id):
                f"Goods received; PO status → {new_status}")
     return jsonify({"ok": True, "new_status": new_status})
 
-    return jsonify({"ok": True, "created": len(created_ids)})
+
+# ── Vendor Catalog ────────────────────────────────────────────────────────────
+
+def _parse_catalog_csv(file_storage):
+    text = file_storage.read().decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+    return list(reader)
+
+
+def _parse_catalog_xlsx(file_storage):
+    import openpyxl
+    wb = openpyxl.load_workbook(file_storage, read_only=True, data_only=True)
+    ws = wb.active
+    rows_iter = ws.iter_rows(values_only=True)
+    headers = [str(h or "").strip() for h in next(rows_iter, [])]
+    if not any(headers):
+        raise ValueError("Empty header row")
+    result = []
+    for row in rows_iter:
+        if not any(c for c in row if c is not None):
+            continue
+        result.append({headers[i]: (str(row[i]) if row[i] is not None else "")
+                       for i in range(len(headers))})
+    return result
+
+
+def _normalize_catalog_row(raw):
+    aliases = {
+        "product_name":    ["product_name","product name","name","description","item name","item description"],
+        "vendor_sku":      ["vendor_sku","vendor sku","sku","part number","part#","item#","item number",
+                            "mfr part","manufacturer part","catalog number","cat#"],
+        "unit_price":      ["unit_price","unit price","price","cost","unit cost","list price"],
+        "unit_of_measure": ["unit_of_measure","uom","unit","unit of measure"],
+        "min_order_qty":   ["min_order_qty","moq","min qty","minimum qty","minimum order","min order qty"],
+        "lead_days":       ["lead_days","lead time","lead time (days)","lead days"],
+    }
+    lc = {k.lower().strip(): v for k, v in raw.items()}
+    out = {}
+    for key, opts in aliases.items():
+        for opt in opts:
+            if opt in lc:
+                out[key] = lc[opt]
+                break
+        if key not in out:
+            out[key] = ""
+    return out
+
+
+@bp.route("/api/procurement/catalog/template")
+@login_required
+@admin_required
+def api_catalog_template():
+    output = io.StringIO()
+    output.write("product_name,vendor_sku,unit_price,unit_of_measure,min_order_qty,lead_days\n")
+    output.write("Example Product,SKU-001,29.99,EA,1,5\n")
+    output.seek(0)
+    return send_file(
+        io.BytesIO(output.read().encode()),
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name="vendor_catalog_template.csv"
+    )
+
+
+@bp.route("/api/procurement/catalog/upload", methods=["POST"])
+@login_required
+@admin_required
+def api_catalog_upload():
+    vendor_id = request.form.get("vendor_id")
+    if not vendor_id:
+        return jsonify({"ok": False, "msg": "vendor_id required"}), 400
+    vendor_id = int(vendor_id)
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "msg": "No file uploaded"}), 400
+    fname = (f.filename or "").lower()
+    try:
+        if fname.endswith(".csv"):
+            rows = _parse_catalog_csv(f)
+        elif fname.endswith(".xlsx"):
+            rows = _parse_catalog_xlsx(f)
+        else:
+            return jsonify({"ok": False, "msg": "Only CSV and XLSX files are supported"}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "msg": f"Could not parse file: {e}"}), 400
+    if not rows:
+        return jsonify({"ok": False, "msg": "File is empty or has no data rows"}), 400
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    inserted = 0
+    skipped  = 0
+    replace_mode = request.form.get("replace", "0") == "1"
+    if replace_mode:
+        execute("DELETE FROM vendor_catalog WHERE vendor_id=?", [vendor_id])
+
+    for raw in rows:
+        row = _normalize_catalog_row(raw)
+        name = row.get("product_name", "").strip()
+        if not name:
+            skipped += 1
+            continue
+        sku   = row.get("vendor_sku", "").strip() or None
+        try:
+            price = float(row["unit_price"]) if row.get("unit_price") else None
+        except (ValueError, TypeError):
+            price = None
+        uom   = row.get("unit_of_measure", "").strip() or None
+        try:
+            moq   = int(float(row["min_order_qty"])) if row.get("min_order_qty") else 1
+        except (ValueError, TypeError):
+            moq = 1
+        try:
+            lead  = int(float(row["lead_days"])) if row.get("lead_days") else 0
+        except (ValueError, TypeError):
+            lead = 0
+        if sku and not replace_mode:
+            existing = query(
+                "SELECT id FROM vendor_catalog WHERE vendor_id=? AND vendor_sku=?",
+                [vendor_id, sku], one=True)
+            if existing:
+                execute("""UPDATE vendor_catalog SET product_name=?, unit_price=?,
+                           unit_of_measure=?, min_order_qty=?, lead_days=?, updated_at=?
+                           WHERE id=?""",
+                        [name, price, uom, moq, lead, now, existing["id"]])
+                inserted += 1
+                continue
+        execute("""INSERT INTO vendor_catalog
+                   (vendor_id, product_name, vendor_sku, unit_price, unit_of_measure,
+                    min_order_qty, lead_days, active, updated_at)
+                   VALUES (?,?,?,?,?,?,?,1,?)""",
+                [vendor_id, name, sku, price, uom, moq, lead, now])
+        inserted += 1
+
+    log_action("CATALOG_UPLOAD", None, None,
+               f"Vendor catalog upload: vendor_id={vendor_id}, {inserted} rows, replace={replace_mode}")
+    return jsonify({"ok": True, "inserted": inserted, "skipped": skipped})
+
+
+@bp.route("/api/procurement/catalog", methods=["GET"])
+@login_required
+@admin_required
+def api_catalog_list():
+    vendor_id = request.args.get("vendor_id")
+    q = request.args.get("q", "").strip()
+    sql = """
+        SELECT vc.*, d.name as vendor_name,
+               pv.product_id as linked_product_id, p.name as linked_product_name
+        FROM vendor_catalog vc
+        LEFT JOIN distributors d ON d.id = vc.vendor_id
+        LEFT JOIN product_vendors pv ON pv.vendor_id = vc.vendor_id
+            AND pv.vendor_sku = vc.vendor_sku AND pv.active=1
+        LEFT JOIN products p ON p.id = pv.product_id
+        WHERE vc.active=1
+    """
+    args = []
+    if vendor_id:
+        sql += " AND vc.vendor_id=?"; args.append(int(vendor_id))
+    if q:
+        sql += " AND (vc.product_name LIKE ? OR vc.vendor_sku LIKE ?)"; args += [f"%{q}%", f"%{q}%"]
+    sql += " ORDER BY vc.product_name LIMIT 500"
+    rows = [dict(r) for r in query(sql, args)]
+    count_sql = "SELECT COUNT(*) FROM vendor_catalog WHERE active=1"
+    count_args = []
+    if vendor_id:
+        count_sql += " AND vendor_id=?"; count_args.append(int(vendor_id))
+    total = query(count_sql, count_args, one=True)[0]
+    return jsonify({"ok": True, "rows": rows, "total": total})
+
+
+@bp.route("/api/procurement/catalog/<int:entry_id>/link", methods=["POST"])
+@login_required
+@admin_required
+def api_catalog_link(entry_id):
+    entry = query("SELECT * FROM vendor_catalog WHERE id=? AND active=1", [entry_id], one=True)
+    if not entry:
+        return jsonify({"ok": False, "msg": "Entry not found"}), 404
+    d = request.json or {}
+    product_id = d.get("product_id")
+    if not product_id:
+        execute("DELETE FROM product_vendors WHERE vendor_id=? AND vendor_sku=?",
+                [entry["vendor_id"], entry["vendor_sku"] or ""])
+        return jsonify({"ok": True, "unlinked": True})
+    existing = query("SELECT id FROM product_vendors WHERE product_id=? AND vendor_id=?",
+                     [product_id, entry["vendor_id"]], one=True)
+    if existing:
+        execute("UPDATE product_vendors SET vendor_sku=?, unit_price=?, active=1 WHERE id=?",
+                [entry["vendor_sku"], entry["unit_price"], existing["id"]])
+    else:
+        execute("""INSERT INTO product_vendors (product_id, vendor_id, vendor_sku, unit_price, preferred, active)
+                   VALUES (?,?,?,?,0,1)""",
+                [product_id, entry["vendor_id"], entry["vendor_sku"], entry["unit_price"]])
+    log_action("CATALOG_LINK", product_id, entry["product_name"],
+               f"Linked vendor catalog entry to product_id={product_id}")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/procurement/catalog/<int:entry_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def api_catalog_delete(entry_id):
+    entry = query("SELECT id FROM vendor_catalog WHERE id=?", [entry_id], one=True)
+    if not entry:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    execute("UPDATE vendor_catalog SET active=0 WHERE id=?", [entry_id])
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/procurement/catalog/vendor/<int:vendor_id>/search")
+@login_required
+@admin_required
+def api_catalog_vendor_search(vendor_id):
+    """Quick search a vendor catalog — used by PO line item picker."""
+    q = request.args.get("q", "").strip()
+    args = [vendor_id]
+    sql = """SELECT id, product_name, vendor_sku, unit_price, min_order_qty, lead_days
+             FROM vendor_catalog WHERE vendor_id=? AND active=1"""
+    if q:
+        sql += " AND (product_name LIKE ? OR vendor_sku LIKE ?)"; args += [f"%{q}%", f"%{q}%"]
+    sql += " ORDER BY product_name LIMIT 50"
+    rows = [dict(r) for r in query(sql, args)]
+    return jsonify({"ok": True, "rows": rows})
+
+
+@bp.route("/api/procurement/products/<int:product_id>/preferred-vendor", methods=["POST"])
+@login_required
+@admin_required
+def api_set_preferred_vendor(product_id):
+    d = request.json or {}
+    vendor_id = d.get("vendor_id")
+    if not vendor_id:
+        return jsonify({"ok": False, "msg": "vendor_id required"}), 400
+    execute("UPDATE product_vendors SET preferred=0 WHERE product_id=?", [product_id])
+    existing = query("SELECT id FROM product_vendors WHERE product_id=? AND vendor_id=?",
+                     [product_id, vendor_id], one=True)
+    if existing:
+        execute("UPDATE product_vendors SET preferred=1, active=1 WHERE id=?", [existing["id"]])
+    else:
+        execute("""INSERT INTO product_vendors (product_id, vendor_id, vendor_sku, unit_price, preferred, active)
+                   VALUES (?,?,NULL,NULL,1,1)""", [product_id, vendor_id])
+    log_action("SET_PREFERRED_VENDOR", product_id, None,
+               f"Preferred vendor set to vendor_id={vendor_id}")
+    return jsonify({"ok": True})

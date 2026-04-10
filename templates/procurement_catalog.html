@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block title %}Vendor Catalog · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Vendor Catalog</span>
+  <div class="topbar-right">
+    <select id="vendorSel" class="select" style="min-width:200px" onchange="onVendorChange()">
+      <option value="">— Select a vendor —</option>
+      {% for v in vendors %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-secondary btn-sm" onclick="openUpload()" id="upload-btn" disabled>Upload Catalog</button>
+    <a href="/api/procurement/catalog/template" class="btn btn-secondary btn-sm">Download Template</a>
+  </div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:20px 24px">
+
+  <!-- Stat strip -->
+  <div style="display:flex;gap:14px;margin-bottom:18px" id="stat-strip" style="display:none">
+    <div class="stat-pill"><span id="st-count">0</span> items in catalog</div>
+    <div class="stat-pill" id="st-linked-wrap"><span id="st-linked">0</span> linked to products</div>
+    <div class="stat-pill" id="st-unlinked-wrap"><span id="st-unlinked">0</span> not yet linked</div>
+  </div>
+
+  <!-- Search row -->
+  <div style="display:flex;gap:10px;margin-bottom:14px;align-items:center" id="search-row">
+    <div style="position:relative;flex:1;max-width:360px">
+      <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:13px;height:13px;color:#aaa;pointer-events:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="catSearch" class="input" style="padding-left:30px" oninput="filterCatalog()" placeholder="Search by name or SKU…">
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#475569;cursor:pointer">
+      <input type="checkbox" id="unlinked-only" onchange="filterCatalog()" style="width:14px;height:14px">
+      Show unlinked only
+    </label>
+  </div>
+
+  <!-- Table -->
+  <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;overflow:hidden">
+    <table class="cat-table" id="catTable">
+      <thead>
+        <tr>
+          <th>Product Name</th>
+          <th>Vendor SKU</th>
+          <th>Unit Price</th>
+          <th>UOM</th>
+          <th style="text-align:center">MOQ</th>
+          <th style="text-align:center">Lead (days)</th>
+          <th>Linked Product</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="catBody">
+        <tr><td colspan="8" class="empty-state">Select a vendor above to view their catalog.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Upload modal -->
+<div id="uploadModal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeUpload()">
+  <div class="modal-box" style="width:500px">
+    <div class="modal-head">
+      <span class="modal-title">Upload Vendor Catalog</span>
+      <button class="modal-close" onclick="closeUpload()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:#475569;margin-bottom:16px;line-height:1.6">
+        Upload a CSV or XLSX file with your vendor's product catalog.
+        <a href="/api/procurement/catalog/template" style="color:#1d4ed8">Download the template</a> to see the expected format.
+        Columns are matched by name automatically — extra columns are ignored.
+      </p>
+      <div class="form-row">
+        <label class="form-label">File <span style="color:#b91c1c">*</span></label>
+        <input type="file" id="upload-file" class="input" accept=".csv,.xlsx">
+      </div>
+      <div class="form-row">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+          <input type="checkbox" id="replace-mode" style="margin-top:2px;width:14px;height:14px">
+          <span style="font-size:13px;color:#475569;line-height:1.5">
+            <strong>Replace catalog</strong> — delete existing entries for this vendor before importing.
+            Leave unchecked to merge (add/update, keep existing).
+          </span>
+        </label>
+      </div>
+      <div id="upload-result" style="display:none;margin-top:12px;padding:12px;border-radius:8px;font-size:13px"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeUpload()">Close</button>
+      <button class="btn btn-primary" id="upload-go-btn" onclick="doUpload()">Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- Link product modal -->
+<div id="linkModal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeLinkModal()">
+  <div class="modal-box" style="width:460px">
+    <div class="modal-head">
+      <span class="modal-title">Link to Internal Product</span>
+      <button class="modal-close" onclick="closeLinkModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:#475569;margin-bottom:14px">
+        Linking this catalog entry lets you auto-fill PO lines and track preferred vendors.
+      </p>
+      <div id="link-entry-info" style="background:#f8fafc;border:1px solid #e5e3de;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px"></div>
+      <div class="form-row">
+        <label class="form-label">Internal Product</label>
+        <select id="link-product-sel" class="select">
+          <option value="">— Select product —</option>
+          {% for p in products %}<option value="{{ p.id }}">{{ p.name }}{% if p.manufacturer %} · {{ p.manufacturer }}{% endif %}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="unlinkEntry()">Unlink</button>
+      <button class="btn btn-secondary" onclick="closeLinkModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLink()">Link</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.cat-table{width:100%;border-collapse:collapse;font-size:13px}
+.cat-table th{padding:9px 14px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;border-bottom:1px solid #e5e3de;background:#fafaf8;white-space:nowrap}
+.cat-table td{padding:10px 14px;border-bottom:1px solid #f5f4f1;vertical-align:middle}
+.cat-table tbody tr:last-child td{border-bottom:none}
+.cat-table tbody tr:hover td{background:#fafaf8}
+.empty-state{text-align:center;color:#94a3b8;padding:48px!important}
+.stat-pill{background:#fff;border:1px solid #e5e3de;border-radius:20px;padding:5px 14px;font-size:12px;color:#475569;font-weight:500}
+.linked-badge{display:inline-flex;align-items:center;gap:4px;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
+.unlinked-badge{display:inline-flex;align-items:center;gap:4px;background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500;cursor:pointer}
+.unlinked-badge:hover{background:#e2e8f0}
+.form-row{margin-bottom:14px}
+.form-label{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9000}
+.modal-box{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e5e3de}
+.modal-title{font-size:15px;font-weight:700;color:#0f172a}
+.modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;line-height:1;padding:0 2px}
+.modal-body{padding:20px}
+.modal-foot{display:flex;justify-content:space-between;gap:8px;padding:14px 20px;border-top:1px solid #e5e3de;background:#fafaf8}
+.modal-foot>*:last-child,.modal-foot>*:nth-last-child(2){margin-left:auto}
+</style>
+
+<script>
+let allRows = [];
+let currentVendorId = null;
+let linkingEntryId  = null;
+
+function fmt$(n){
+  if(n===null||n===''||n===undefined) return '—';
+  return '$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+async function onVendorChange(){
+  const sel = document.getElementById('vendorSel');
+  currentVendorId = sel.value ? parseInt(sel.value) : null;
+  document.getElementById('upload-btn').disabled = !currentVendorId;
+  if(!currentVendorId){
+    allRows = [];
+    renderTable([]);
+    document.getElementById('stat-strip').style.display='none';
+    return;
+  }
+  await loadCatalog();
+}
+
+async function loadCatalog(){
+  if(!currentVendorId) return;
+  const data = await fetch(`/api/procurement/catalog?vendor_id=${currentVendorId}`).then(r=>r.json());
+  allRows = data.rows || [];
+  document.getElementById('stat-strip').style.display='flex';
+  const linked   = allRows.filter(r=>r.linked_product_id).length;
+  const unlinked = allRows.length - linked;
+  document.getElementById('st-count').textContent   = data.total ?? allRows.length;
+  document.getElementById('st-linked').textContent   = linked;
+  document.getElementById('st-unlinked').textContent = unlinked;
+  filterCatalog();
+}
+
+function filterCatalog(){
+  const q  = (document.getElementById('catSearch').value||'').toLowerCase();
+  const unlinkedOnly = document.getElementById('unlinked-only').checked;
+  const filtered = allRows.filter(r=>{
+    const matchQ = !q ||
+      (r.product_name||'').toLowerCase().includes(q) ||
+      (r.vendor_sku||'').toLowerCase().includes(q);
+    const matchU = !unlinkedOnly || !r.linked_product_id;
+    return matchQ && matchU;
+  });
+  renderTable(filtered);
+}
+
+function renderTable(rows){
+  const tbody = document.getElementById('catBody');
+  if(!rows.length){
+    const isEmpty = allRows.length===0;
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${
+      currentVendorId
+        ? (isEmpty ? 'No catalog entries. Upload a CSV or XLSX to get started.' : 'No entries match your filter.')
+        : 'Select a vendor above to view their catalog.'
+    }</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r=>`
+    <tr data-id="${r.id}">
+      <td style="font-weight:500">${r.product_name}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#475569">${r.vendor_sku||'—'}</td>
+      <td style="font-family:'IBM Plex Mono',monospace">${fmt$(r.unit_price)}</td>
+      <td style="color:#64748b">${r.unit_of_measure||'—'}</td>
+      <td style="text-align:center;color:#64748b">${r.min_order_qty||1}</td>
+      <td style="text-align:center;color:#64748b">${r.lead_days||0}</td>
+      <td>${r.linked_product_id
+        ? `<span class="linked-badge" onclick="openLink(${r.id},'${escHtml(r.product_name)}','${escHtml(r.vendor_sku||'')}',${r.linked_product_id})">✓ ${escHtml(r.linked_product_name||'')}</span>`
+        : `<span class="unlinked-badge" onclick="openLink(${r.id},'${escHtml(r.product_name)}','${escHtml(r.vendor_sku||'')}',null)">+ Link</span>`}</td>
+      <td style="text-align:right">
+        <button class="btn btn-secondary btn-sm" style="color:#b91c1c" onclick="deleteEntry(${r.id})">✕</button>
+      </td>
+    </tr>`).join('');
+}
+
+function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+function openUpload(){
+  document.getElementById('upload-file').value='';
+  document.getElementById('replace-mode').checked=false;
+  document.getElementById('upload-result').style.display='none';
+  document.getElementById('upload-go-btn').disabled=false;
+  document.getElementById('uploadModal').style.display='flex';
+}
+function closeUpload(){document.getElementById('uploadModal').style.display='none'}
+
+async function doUpload(){
+  const fileInput = document.getElementById('upload-file');
+  if(!fileInput.files.length){alert('Please select a file.'); return;}
+  const btn = document.getElementById('upload-go-btn');
+  btn.disabled=true; btn.textContent='Uploading…';
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  formData.append('vendor_id', currentVendorId);
+  formData.append('replace', document.getElementById('replace-mode').checked ? '1' : '0');
+  const csrf = document.cookie.match(/csrf_token=([^;]+)/);
+  const headers = {};
+  if(csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf[1]);
+  try {
+    const r = await fetch('/api/procurement/catalog/upload', {method:'POST', headers, body: formData});
+    const d = await r.json();
+    const res = document.getElementById('upload-result');
+    res.style.display='block';
+    if(d.ok){
+      res.style.background='#dcfce7'; res.style.color='#166534';
+      res.innerHTML=`<strong>Upload complete!</strong> ${d.inserted} items imported${d.skipped?' ('+d.skipped+' rows skipped — missing name)':''}.`;
+      await loadCatalog();
+    } else {
+      res.style.background='#fee2e2'; res.style.color='#991b1b';
+      res.textContent = d.msg || 'Upload failed.';
+    }
+  } catch(e){
+    const res = document.getElementById('upload-result');
+    res.style.display='block'; res.style.background='#fee2e2'; res.style.color='#991b1b';
+    res.textContent = 'Network error: '+e.message;
+  }
+  btn.disabled=false; btn.textContent='Upload';
+}
+
+// ── Link modal ────────────────────────────────────────────────────────────────
+function openLink(id, name, sku, linkedProductId){
+  linkingEntryId = id;
+  const info = document.getElementById('link-entry-info');
+  info.innerHTML = `<strong>${escHtml(name)}</strong>${sku?'<br><span style="color:#94a3b8;font-family:\'IBM Plex Mono\',monospace;font-size:12px">'+escHtml(sku)+'</span>':''}`;
+  const sel = document.getElementById('link-product-sel');
+  sel.value = linkedProductId || '';
+  document.getElementById('linkModal').style.display='flex';
+}
+function closeLinkModal(){document.getElementById('linkModal').style.display='none'; linkingEntryId=null;}
+
+async function saveLink(){
+  if(!linkingEntryId) return;
+  const productId = document.getElementById('link-product-sel').value;
+  if(!productId){alert('Select a product to link.'); return;}
+  const d = await api(`/api/procurement/catalog/${linkingEntryId}/link`, {product_id: parseInt(productId)});
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  closeLinkModal();
+  await loadCatalog();
+}
+
+async function unlinkEntry(){
+  if(!linkingEntryId) return;
+  if(!confirm('Remove the link between this catalog entry and its internal product?')) return;
+  const d = await api(`/api/procurement/catalog/${linkingEntryId}/link`, {product_id: null});
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  closeLinkModal();
+  await loadCatalog();
+}
+
+async function deleteEntry(id){
+  if(!confirm('Remove this catalog entry?')) return;
+  const csrf = document.cookie.match(/csrf_token=([^;]+)/);
+  const headers = {'Content-Type':'application/json'};
+  if(csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf[1]);
+  const d = await fetch(`/api/procurement/catalog/${id}`, {method:'DELETE', headers}).then(r=>r.json());
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  await loadCatalog();
+}
+</script>
+{% endblock %}

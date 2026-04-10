@@ -260,6 +260,15 @@ def procurement_page():
                            vendors=vendors, sites=sites, products=products)
 
 
+@bp.route("/procurement/catalog")
+@login_required
+@admin_required
+def procurement_catalog_page():
+    vendors  = [dict(r) for r in query("SELECT id, name FROM distributors ORDER BY name")]
+    products = _products_list()
+    return render_template("procurement_catalog.html", vendors=vendors, products=products)
+
+
 @bp.route("/procurement/<int:po_id>")
 @login_required
 @admin_required

@@ -293,9 +293,13 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
     {% if session.get('role') == 'admin' %}
     <div class="sb-section" style="margin-top:10px">Procurement</div>
     <nav class="nav">
-      <a href="/procurement" class="navlink {% if request.path.startswith('/procurement') %}active{% endif %}">
+      <a href="/procurement" class="navlink {% if request.path == '/procurement' or (request.path.startswith('/procurement/') and not request.path.startswith('/procurement/catalog')) %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
         <span>Purchase Orders</span>
+      </a>
+      <a href="/procurement/catalog" class="navlink {% if request.path.startswith('/procurement/catalog') %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        <span>Vendor Catalog</span>
       </a>
     </nav>
     {% endif %}

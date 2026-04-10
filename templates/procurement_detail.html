@@ -118,10 +118,19 @@
     </div>
     <div class="modal-body">
       <input type="hidden" id="l-id">
+      {% if po.vendor_id %}
       <div class="form-row">
-        <label class="form-label">Product (optional)</label>
+        <label class="form-label">Browse Vendor Catalog</label>
+        <div style="display:flex;gap:6px">
+          <input id="l-catalog-search" class="input" placeholder="Search catalog…" oninput="searchCatalog()" style="flex:1">
+        </div>
+        <div id="l-catalog-results" style="display:none;margin-top:6px;border:1px solid #e5e3de;border-radius:8px;overflow:hidden;max-height:180px;overflow-y:auto;background:#fff"></div>
+      </div>
+      {% endif %}
+      <div class="form-row">
+        <label class="form-label">Internal Product (optional)</label>
         <select id="l-product" class="select" onchange="onProductChange()">
-          <option value="">— Search products —</option>
+          <option value="">— Link to product —</option>
           {% for p in products %}<option value="{{ p.id }}" data-name="{{ p.name }}" data-mfr="{{ p.manufacturer or '' }}" data-model="{{ p.model or '' }}">{{ p.name }}{% if p.manufacturer %} · {{ p.manufacturer }}{% endif %}</option>{% endfor %}
         </select>
       </div>
@@ -513,6 +522,40 @@ async function api(url, body=null, method=null){
   if(body !== null) opts.body = JSON.stringify(body);
   const r = await fetch(url, opts);
   return r.json();
+}
+
+// ── Catalog search (only when PO has a vendor) ────────────────────────────────
+let catalogTimer = null;
+async function searchCatalog(){
+  const q = (document.getElementById('l-catalog-search')?.value||'').trim();
+  const results = document.getElementById('l-catalog-results');
+  if(!results) return;
+  clearTimeout(catalogTimer);
+  if(!q){results.style.display='none'; return;}
+  catalogTimer = setTimeout(async()=>{
+    const data = await fetch(`/api/procurement/catalog/vendor/{{ po.vendor_id|default(0) }}/search?q=${encodeURIComponent(q)}`).then(r=>r.json());
+    if(!data.ok || !data.rows.length){
+      results.style.display='none'; return;
+    }
+    results.style.display='block';
+    results.innerHTML = data.rows.map(r=>`
+      <div onclick="pickCatalogRow(${JSON.stringify(r).replace(/"/g,'&quot;')})"
+           style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f5f4f1;font-size:13px"
+           onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+        <div style="font-weight:500">${r.product_name}</div>
+        <div style="font-size:11px;color:#94a3b8">${r.vendor_sku||'No SKU'} · ${r.unit_price!=null?'$'+Number(r.unit_price).toFixed(2):'No price'} · MOQ: ${r.min_order_qty||1}</div>
+      </div>`).join('');
+  }, 220);
+}
+
+function pickCatalogRow(r){
+  document.getElementById('l-desc').value = r.product_name;
+  document.getElementById('l-sku').value  = r.vendor_sku || '';
+  document.getElementById('l-qty').value  = r.min_order_qty || 1;
+  if(r.unit_price!=null) document.getElementById('l-cost').value = Number(r.unit_price).toFixed(2);
+  recalcLine();
+  document.getElementById('l-catalog-results').style.display='none';
+  document.getElementById('l-catalog-search').value='';
 }
 
 loadPO();
