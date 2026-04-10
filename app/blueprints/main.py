@@ -276,8 +276,9 @@ def api_low_stock():
 @login_required
 @perm_required("import_export")
 def importer_page():
-    locations = query("SELECT id, name FROM locations ORDER BY name")
-    return render_template("importer.html", locations=locations)
+    locations  = query("SELECT id, name FROM locations ORDER BY name")
+    categories = query("SELECT id, name, color FROM categories ORDER BY name")
+    return render_template("importer.html", locations=locations, categories=categories)
 
 @bp.route("/invoice-import")
 @login_required

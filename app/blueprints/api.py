@@ -3399,8 +3399,9 @@ def api_invoice_commit():
     vendor  = (d.get("vendor") or "").strip() or None
     notes   = (d.get("notes") or "").strip() or None
 
+    new_rows    = d.get("new_rows", [])  # user-confirmed unmatched rows to create
     import_rows = [r for r in rows if r.get("status") == "matched" and r.get("product_id") and r.get("qty")]
-    if not import_rows:
+    if not import_rows and not new_rows:
         return jsonify({"ok": False, "msg": "No matched rows to import"})
 
     now = datetime.utcnow().isoformat()
@@ -3443,6 +3444,67 @@ def api_invoice_commit():
 
         log_action("INVOICE_IMPORT", iid, item_name,
                    f"Invoice import: qty={qty}, vendor_sku={vendor_sku}, lot={lot_number}, exp={exp_date}, ref={ref}",
+                   None, {"qty": qty, "lot_number": lot_number, "expiration_date": exp_date})
+        created_ids.append(iid)
+
+    # ── Process user-confirmed new rows (unmatched SKUs the user chose to create) ──
+    for r in new_rows:
+        vendor_sku    = (r.get("vendor_sku") or "").strip() or None
+        prod_name     = (r.get("description") or vendor_sku or "Unknown Item").strip()
+        qty           = int(r["qty"]) if r.get("qty") else 0
+        unit_price    = float(r["unit_price"]) if r.get("unit_price") not in (None, "") else None
+        exp_date      = (r.get("expiration_date") or "").strip() or None
+        lot_number    = (r.get("lot_number") or "").strip() or None
+        new_cat_name  = (r.get("new_category_name") or "").strip()
+        cat_id        = r.get("category_id")
+
+        if not qty:
+            continue
+
+        # 1. Resolve / create category
+        if not cat_id and new_cat_name:
+            existing_cat = query("SELECT id FROM categories WHERE LOWER(name)=LOWER(?)",
+                                 [new_cat_name], one=True)
+            if existing_cat:
+                cat_id = existing_cat["id"]
+            else:
+                cat_id = execute(
+                    "INSERT INTO categories (name, color) VALUES (?, ?)",
+                    [new_cat_name, "#6366f1"])
+        if not cat_id:
+            continue
+
+        # 2. Find or create product
+        existing_prod = query(
+            "SELECT id FROM products WHERE LOWER(name)=LOWER(?) AND category_id=? AND active=1",
+            [prod_name, cat_id], one=True)
+        if existing_prod:
+            product_id = existing_prod["id"]
+        else:
+            product_id = execute("""
+                INSERT INTO products
+                    (name, category_id, qty_tracked, serial_tracked,
+                     require_vendor_sku, require_internal_sku, vendor_sku, active, created_at)
+                VALUES (?, ?, 1, 0, 1, 0, ?, 1, ?)""",
+                [prod_name, cat_id, vendor_sku, now])
+
+        # 3. Create item
+        extra = {}
+        if exp_date:   extra["expiration_date"] = exp_date
+        if lot_number: extra["lot_number"]       = lot_number
+        if ref:        extra["invoice_ref"]      = ref
+
+        iid = execute("""
+            INSERT INTO items
+                (product_id, name, sku, category_id, qty, cost_price,
+                 location_id, extra_fields, purchased_from, active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+            [product_id, prod_name, vendor_sku, cat_id,
+             qty, unit_price, site_id, json.dumps(extra), vendor, now])
+
+        log_action("INVOICE_IMPORT", iid, prod_name,
+                   f"Invoice import (new product created): qty={qty}, vendor_sku={vendor_sku}, "
+                   f"lot={lot_number}, exp={exp_date}, ref={ref}",
                    None, {"qty": qty, "lot_number": lot_number, "expiration_date": exp_date})
         created_ids.append(iid)
 

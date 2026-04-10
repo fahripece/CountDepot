@@ -261,9 +261,18 @@
       </table>
     </div>
 
-    <div id="inv-unmatched-note" style="display:none;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;font-size:13px;color:#92400e;margin-bottom:14px">
-      <strong>Unmatched SKUs (skipped):</strong> <span id="inv-unmatched-list"></span><br>
-      <span style="font-size:12px">Set the Vendor SKU on the matching product in <a href="/products" style="color:#92400e;text-decoration:underline">Products</a>, then re-upload.</span>
+    <!-- Unmatched rows — create section -->
+    <div id="inv-unmatched-section" style="display:none;border:1px solid #fde68a;border-radius:10px;overflow:hidden;margin-bottom:14px">
+      <div style="background:#fefce8;padding:11px 16px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:13px;font-weight:600;color:#92400e">
+          ⚠ <span id="inv-unmatched-count"></span> unmatched SKU<span id="inv-unmatched-plural"></span> — create new items?
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#92400e;cursor:pointer;font-weight:500">
+          <input type="checkbox" id="inv-unmatched-all" onchange="invToggleAllUnmatched(this.checked)" style="width:13px;height:13px">
+          Create all
+        </label>
+      </div>
+      <div id="inv-unmatched-rows" style="background:#fff;padding:8px 0"></div>
     </div>
 
     <div style="display:flex;align-items:center;justify-content:space-between">
@@ -503,6 +512,7 @@ function genReset(){
 
 
 // ══════════════════ INVOICE MODE LOGIC ════════════════════════════════════════
+const IMPORTER_CATEGORIES = {{ categories | tojson }};
 let _invFile = null, _invRowsRaw = [], _invHeaders = [], _invSampleRows = [];
 let _invMapping = {}, _invPreviewRows = [], _invRefreshTimer = null;
 
@@ -722,14 +732,116 @@ function invRenderPreview(res){
     </tr>`;
   }).join('');
 
-  const unmatched = res.rows.filter(r=>r.status==='unmatched').map(r=>r.vendor_sku);
-  document.getElementById('inv-unmatched-note').style.display = unmatched.length ? '' : 'none';
-  document.getElementById('inv-unmatched-list').textContent = unmatched.join(', ');
+  const unmatchedRows = res.rows.filter(r=>r.status==='unmatched');
+  const sec = document.getElementById('inv-unmatched-section');
+  if(unmatchedRows.length){
+    document.getElementById('inv-unmatched-count').textContent = unmatchedRows.length;
+    document.getElementById('inv-unmatched-plural').textContent = unmatchedRows.length !== 1 ? 's' : '';
+    document.getElementById('inv-unmatched-all').checked = false;
+    invRenderUnmatchedRows(unmatchedRows);
+    sec.style.display = '';
+  } else {
+    sec.style.display = 'none';
+  }
 
-  document.getElementById('inv-commit-btn').disabled = res.matched === 0;
-  document.getElementById('inv-confirm-summary').textContent = res.matched===0
-    ? 'No matched rows — nothing to import.'
-    : res.matched + ' item'+(res.matched!==1?'s':'')+' will be created'+(res.unmatched?' ('+res.unmatched+' skipped)':'')+'.';
+  document.getElementById('inv-commit-btn').disabled = res.matched === 0 && unmatchedRows.length === 0;
+  document.getElementById('inv-confirm-summary').textContent = res.matched===0 && unmatchedRows.length===0
+    ? 'No rows found — check your column mapping.'
+    : res.matched + ' item'+(res.matched!==1?'s':'')+' matched'+(unmatchedRows.length?' · '+unmatchedRows.length+' unmatched (choose below)':'')+'.';
+}
+
+function invCatOptions(selectedId){
+  const opts = IMPORTER_CATEGORIES.map(c=>
+    `<option value="${c.id}" ${String(c.id)===String(selectedId)?'selected':''}>${esc(c.name)}</option>`
+  ).join('');
+  return `<option value="">— Select category —</option>${opts}<option value="__new__">＋ Create new category…</option>`;
+}
+
+function invRenderUnmatchedRows(rows){
+  document.getElementById('inv-unmatched-rows').innerHTML = rows.map((r,i)=>`
+    <div style="padding:10px 16px;border-bottom:1px solid #fef9c3;display:flex;flex-direction:column;gap:7px" id="umrow-${i}">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" data-umidx="${i}" onchange="invToggleUnmatched(${i},this.checked)"
+               style="width:15px;height:15px;flex-shrink:0">
+        <div style="flex:1;min-width:0">
+          <span style="font-weight:600;font-size:13px">${esc(r.description||r.vendor_sku||'Unknown')}</span>
+          <span style="font-size:11px;color:#94a3b8;margin-left:8px;font-family:monospace">${esc(r.vendor_sku||'')}</span>
+        </div>
+        <div style="font-size:12px;color:#64748b;white-space:nowrap">
+          Qty: <strong>${r.qty}</strong>${r.unit_price!=null?' · $'+parseFloat(r.unit_price).toFixed(2):''}
+        </div>
+      </label>
+      <div id="umrow-opts-${i}" style="display:none;padding-left:26px;display:none">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="umrow-cat-${i}" class="select" style="flex:1;min-width:180px;font-size:12px"
+                  onchange="invUnmatchedCatChange(${i},this.value)">
+            ${invCatOptions('')}
+          </select>
+          <input id="umrow-newcat-${i}" class="input" placeholder="New category name…"
+                 style="display:none;flex:1;min-width:160px;font-size:12px">
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function invToggleUnmatched(idx, checked){
+  const opts = document.getElementById('umrow-opts-'+idx);
+  opts.style.display = checked ? 'block' : 'none';
+  if(!checked){
+    document.getElementById('umrow-cat-'+idx).value='';
+    const ni=document.getElementById('umrow-newcat-'+idx);
+    ni.style.display='none'; ni.value='';
+  }
+  invUpdateCommitSummary();
+}
+
+function invToggleAllUnmatched(checked){
+  document.querySelectorAll('[data-umidx]').forEach(cb=>{
+    const i=parseInt(cb.dataset.umidx);
+    cb.checked=checked;
+    invToggleUnmatched(i,checked);
+  });
+}
+
+function invUnmatchedCatChange(idx, val){
+  const ni=document.getElementById('umrow-newcat-'+idx);
+  ni.style.display = val==='__new__' ? '' : 'none';
+  if(val!=='__new__') ni.value='';
+}
+
+function invCollectNewRows(){
+  const unmatchedRows = _invPreviewRows.filter(r=>r.status==='unmatched');
+  const out=[];
+  unmatchedRows.forEach((r,i)=>{
+    const cb=document.querySelector(`[data-umidx="${i}"]`);
+    if(!cb||!cb.checked) return;
+    const catSel=document.getElementById('umrow-cat-'+i);
+    const catVal=catSel?catSel.value:'';
+    const newCatInput=document.getElementById('umrow-newcat-'+i);
+    const newCatName=newCatInput&&catVal==='__new__'?newCatInput.value.trim():'';
+    if(!catVal && !newCatName) return; // no category chosen — skip
+    out.push({
+      vendor_sku:        r.vendor_sku,
+      description:       r.description,
+      qty:               r.qty,
+      unit_price:        r.unit_price,
+      expiration_date:   r.expiration_date,
+      lot_number:        r.lot_number,
+      category_id:       catVal && catVal!=='__new__' ? parseInt(catVal) : null,
+      new_category_name: newCatName || null,
+    });
+  });
+  return out;
+}
+
+function invUpdateCommitSummary(){
+  const matched = _invPreviewRows.filter(r=>r.status==='matched').length;
+  const creating = invCollectNewRows().length;
+  const total = matched + creating;
+  document.getElementById('inv-commit-btn').disabled = total === 0;
+  document.getElementById('inv-confirm-summary').textContent =
+    total===0 ? 'Select items to import.'
+    : matched + ' matched' + (creating ? ' + '+creating+' new item'+(creating!==1?'s':'')+' to create' : '') + '.';
 }
 
 async function invCommit(){
@@ -743,8 +855,10 @@ async function invCommit(){
       body:JSON.stringify({vendor_name:vendor, mapping:_invMapping})}).catch(()=>{});
   }
   const sp = getSitePayload('inv');
+  const new_rows = invCollectNewRows();
   const payload = {
     rows:      _invPreviewRows,
+    new_rows,
     reference: document.getElementById('inv-ref').value.trim(),
     vendor,
     notes:     document.getElementById('inv-notes').value.trim(),
