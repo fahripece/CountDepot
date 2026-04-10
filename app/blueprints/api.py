@@ -4024,4 +4024,241 @@ def api_inventory_commit():
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             [None, None, site_id, session.get("username"), now, len(created_ids), notes_global])
 
+
+# ── Procurement ───────────────────────────────────────────────────────────────
+
+def _po_number():
+    """Generate next PO number: PO-YYYY-NNNN."""
+    year = datetime.now().strftime("%Y")
+    prefix = f"PO-{year}-"
+    existing = query("SELECT po_number FROM purchase_orders WHERE po_number LIKE ?",
+                     [f"{prefix}%"])
+    nums = []
+    for r in existing:
+        try:
+            nums.append(int(r["po_number"].split("-")[-1]))
+        except Exception:
+            pass
+    seq = (max(nums) + 1) if nums else 1
+    return f"{prefix}{seq:04d}"
+
+
+def _recalc_po_total(po_id):
+    """Recalculate and store purchase_orders.total_cost."""
+    row = query("SELECT SUM(total_cost) as t FROM po_lines WHERE po_id=?", [po_id], one=True)
+    total = row["t"] or 0
+    execute("UPDATE purchase_orders SET total_cost=? WHERE id=?", [total, po_id])
+    return total
+
+
+@bp.route("/api/procurement/pos", methods=["GET"])
+@login_required
+@admin_required
+def api_po_list():
+    rows = query("""
+        SELECT po.*, d.name as vendor_display, l.name as site_display
+        FROM purchase_orders po
+        LEFT JOIN distributors d ON d.id = po.vendor_id
+        LEFT JOIN locations l ON l.id = po.site_id
+        ORDER BY po.id DESC
+    """)
+    pos = [dict(r) for r in rows]
+    # stat cards
+    total_pos = len(pos)
+    open_pos  = sum(1 for p in pos if p["status"] in ("draft","sent","partial"))
+    total_spend = sum(p["total_cost"] or 0 for p in pos if p["status"] == "received")
+    pending_spend = sum(p["total_cost"] or 0 for p in pos if p["status"] in ("sent","partial"))
+    return jsonify({
+        "ok": True,
+        "pos": pos,
+        "stats": {
+            "total": total_pos,
+            "open": open_pos,
+            "total_spend": total_spend,
+            "pending_spend": pending_spend,
+        }
+    })
+
+
+@bp.route("/api/procurement/pos", methods=["POST"])
+@login_required
+@admin_required
+def api_po_create():
+    d = request.json or {}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    vendor_id     = d.get("vendor_id") or None
+    vendor_name   = d.get("vendor_name") or None
+    site_id       = d.get("site_id") or None
+    expected_date = d.get("expected_date") or None
+    notes         = d.get("notes") or None
+    po_number     = _po_number()
+    po_id = execute("""
+        INSERT INTO purchase_orders
+          (po_number, vendor_id, vendor_name, site_id, status, created_by, created_at,
+           expected_date, notes, total_cost)
+        VALUES (?,?,?,?,?,?,?,?,?,0)
+    """, [po_number, vendor_id, vendor_name, site_id, "draft",
+          session.get("username"), now, expected_date, notes])
+    log_action("PO_CREATE", None, po_number,
+               f"Purchase order created: {po_number}, vendor={vendor_name}")
+    return jsonify({"ok": True, "id": po_id, "po_number": po_number})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>", methods=["GET"])
+@login_required
+@admin_required
+def api_po_get(po_id):
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    lines = [dict(r) for r in query(
+        "SELECT * FROM po_lines WHERE po_id=? ORDER BY id", [po_id])]
+    return jsonify({"ok": True, "po": dict(po), "lines": lines})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>", methods=["PATCH"])
+@login_required
+@admin_required
+def api_po_update(po_id):
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    d = request.json or {}
+    allowed_statuses = ("draft", "sent", "partial", "received", "closed")
+    updates = []
+    vals    = []
+    if "status" in d:
+        if d["status"] not in allowed_statuses:
+            return jsonify({"ok": False, "msg": "Invalid status"}), 400
+        updates.append("status=?"); vals.append(d["status"])
+        if d["status"] == "sent":
+            updates.append("sent_at=?"); vals.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    if "vendor_id" in d:
+        updates.append("vendor_id=?"); vals.append(d["vendor_id"] or None)
+    if "vendor_name" in d:
+        updates.append("vendor_name=?"); vals.append(d["vendor_name"] or None)
+    if "site_id" in d:
+        updates.append("site_id=?"); vals.append(d["site_id"] or None)
+    if "expected_date" in d:
+        updates.append("expected_date=?"); vals.append(d["expected_date"] or None)
+    if "notes" in d:
+        updates.append("notes=?"); vals.append(d["notes"] or None)
+    if not updates:
+        return jsonify({"ok": False, "msg": "Nothing to update"}), 400
+    vals.append(po_id)
+    execute(f"UPDATE purchase_orders SET {', '.join(updates)} WHERE id=?", vals)
+    log_action("PO_UPDATE", None, po["po_number"],
+               f"PO updated: {', '.join(updates)}")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def api_po_delete(po_id):
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    if po["status"] not in ("draft",):
+        return jsonify({"ok": False, "msg": "Only draft POs can be deleted"}), 400
+    execute("DELETE FROM po_lines WHERE po_id=?", [po_id])
+    execute("DELETE FROM purchase_orders WHERE id=?", [po_id])
+    log_action("PO_DELETE", None, po["po_number"], f"Draft PO deleted: {po['po_number']}")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/lines", methods=["POST"])
+@login_required
+@admin_required
+def api_po_line_add(po_id):
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    if po["status"] not in ("draft", "sent"):
+        return jsonify({"ok": False, "msg": "Cannot add lines to a received or closed PO"}), 400
+    d = request.json or {}
+    description = (d.get("description") or "").strip()
+    if not description:
+        return jsonify({"ok": False, "msg": "Description required"}), 400
+    qty_ordered = int(d.get("qty_ordered") or 1)
+    unit_cost   = float(d.get("unit_cost") or 0)
+    total_cost  = round(qty_ordered * unit_cost, 4)
+    product_id  = d.get("product_id") or None
+    vendor_sku  = (d.get("vendor_sku") or "").strip() or None
+    lid = execute("""
+        INSERT INTO po_lines (po_id, product_id, description, vendor_sku,
+                              qty_ordered, qty_received, unit_cost, total_cost)
+        VALUES (?,?,?,?,?,0,?,?)
+    """, [po_id, product_id, description, vendor_sku, qty_ordered, unit_cost, total_cost])
+    new_total = _recalc_po_total(po_id)
+    log_action("PO_LINE_ADD", None, po["po_number"],
+               f"Line added: {description}, qty={qty_ordered}, unit=${unit_cost}")
+    return jsonify({"ok": True, "id": lid, "total_cost": new_total})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/lines/<int:lid>", methods=["PUT"])
+@login_required
+@admin_required
+def api_po_line_update(po_id, lid):
+    line = query("SELECT * FROM po_lines WHERE id=? AND po_id=?", [lid, po_id], one=True)
+    if not line:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    d = request.json or {}
+    description = (d.get("description") or "").strip() or line["description"]
+    qty_ordered = int(d.get("qty_ordered") or line["qty_ordered"])
+    unit_cost   = float(d.get("unit_cost") if "unit_cost" in d else line["unit_cost"])
+    vendor_sku  = (d.get("vendor_sku") or "").strip() or None
+    product_id  = d.get("product_id") if "product_id" in d else line["product_id"]
+    total_cost  = round(qty_ordered * unit_cost, 4)
+    execute("""UPDATE po_lines SET description=?, vendor_sku=?, product_id=?,
+               qty_ordered=?, unit_cost=?, total_cost=? WHERE id=?""",
+            [description, vendor_sku, product_id, qty_ordered, unit_cost, total_cost, lid])
+    new_total = _recalc_po_total(po_id)
+    return jsonify({"ok": True, "total_cost": new_total})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/lines/<int:lid>", methods=["DELETE"])
+@login_required
+@admin_required
+def api_po_line_delete(po_id, lid):
+    line = query("SELECT * FROM po_lines WHERE id=? AND po_id=?", [lid, po_id], one=True)
+    if not line:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    execute("DELETE FROM po_lines WHERE id=?", [lid])
+    new_total = _recalc_po_total(po_id)
+    return jsonify({"ok": True, "total_cost": new_total})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/receive", methods=["POST"])
+@login_required
+@admin_required
+def api_po_receive(po_id):
+    """Record qty received per line. Updates po_lines.qty_received, auto-sets status."""
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    if po["status"] not in ("sent", "partial"):
+        return jsonify({"ok": False, "msg": "PO must be Sent or Partial to receive goods"}), 400
+    d = request.json or {}  # {"lines": [{"id": 1, "qty_received": 3}, ...]}
+    lines_input = d.get("lines", [])
+    if not lines_input:
+        return jsonify({"ok": False, "msg": "No lines provided"}), 400
+    for entry in lines_input:
+        lid       = int(entry.get("id", 0))
+        qty_recv  = int(entry.get("qty_received", 0))
+        line = query("SELECT * FROM po_lines WHERE id=? AND po_id=?", [lid, po_id], one=True)
+        if not line:
+            continue
+        new_total_recv = line["qty_received"] + qty_recv
+        execute("UPDATE po_lines SET qty_received=? WHERE id=?", [new_total_recv, lid])
+    # Determine new PO status
+    all_lines = query("SELECT qty_ordered, qty_received FROM po_lines WHERE po_id=?", [po_id])
+    fully_received = all(r["qty_received"] >= r["qty_ordered"] for r in all_lines)
+    any_received   = any(r["qty_received"] > 0 for r in all_lines)
+    new_status = "received" if fully_received else ("partial" if any_received else po["status"])
+    execute("UPDATE purchase_orders SET status=? WHERE id=?", [new_status, po_id])
+    log_action("PO_RECEIVE", None, po["po_number"],
+               f"Goods received; PO status → {new_status}")
+    return jsonify({"ok": True, "new_status": new_status})
+
     return jsonify({"ok": True, "created": len(created_ids)})

@@ -247,6 +247,34 @@ def kits_page():
     return render_template("kits.html")
 
 
+# ── Procurement pages ─────────────────────────────────────────────────────────
+
+@bp.route("/procurement")
+@login_required
+@admin_required
+def procurement_page():
+    vendors = [dict(r) for r in query("SELECT id, name FROM distributors ORDER BY name")]
+    sites   = [dict(r) for r in query("SELECT id, name FROM locations WHERE active=1 ORDER BY name")]
+    products = _products_list()
+    return render_template("procurement.html",
+                           vendors=vendors, sites=sites, products=products)
+
+
+@bp.route("/procurement/<int:po_id>")
+@login_required
+@admin_required
+def procurement_detail_page(po_id):
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        from flask import abort
+        abort(404)
+    vendors  = [dict(r) for r in query("SELECT id, name FROM distributors ORDER BY name")]
+    sites    = [dict(r) for r in query("SELECT id, name FROM locations WHERE active=1 ORDER BY name")]
+    products = _products_list()
+    return render_template("procurement_detail.html",
+                           po=dict(po), vendors=vendors, sites=sites, products=products)
+
+
 # ── Low stock API (lives here because it's tightly coupled to the page) ───────
 
 @bp.route("/api/low-stock")

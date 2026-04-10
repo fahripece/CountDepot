@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Purchase Orders · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Purchase Orders</span>
+  <div style="position:relative;flex:1;max-width:300px;margin-left:8px">
+    <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:13px;height:13px;color:#aaa;pointer-events:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input id="poSearch" class="input" style="padding-left:30px" oninput="filterTable()" placeholder="Search POs…">
+  </div>
+  <div class="topbar-right">
+    <select id="statusFilter" class="select" style="width:auto;min-width:130px" onchange="filterTable()">
+      <option value="">All Statuses</option>
+      <option value="draft">Draft</option>
+      <option value="sent">Sent</option>
+      <option value="partial">Partial</option>
+      <option value="received">Received</option>
+      <option value="closed">Closed</option>
+    </select>
+    <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ New PO</button>
+  </div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:20px 24px">
+  <!-- Stat tiles -->
+  <div class="po-grid4" id="statTiles">
+    <div class="kcard"><div class="kcard-l">Total POs</div><div class="kcard-v" id="st-total">—</div></div>
+    <div class="kcard"><div class="kcard-l">Open POs</div><div class="kcard-v" id="st-open">—</div></div>
+    <div class="kcard"><div class="kcard-l">Pending Value</div><div class="kcard-v" id="st-pending">—</div></div>
+    <div class="kcard"><div class="kcard-l">Total Received</div><div class="kcard-v" id="st-received">—</div></div>
+  </div>
+
+  <!-- PO table -->
+  <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;overflow:hidden;margin-top:4px">
+    <table class="po-table" id="poTable">
+      <thead>
+        <tr>
+          <th>PO Number</th>
+          <th>Vendor</th>
+          <th>Site</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Expected</th>
+          <th style="text-align:right">Total</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="poBody">
+        <tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:40px">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Create PO modal -->
+<div id="createModal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeCreate()">
+  <div class="modal-box" style="width:480px">
+    <div class="modal-head">
+      <span class="modal-title">New Purchase Order</span>
+      <button class="modal-close" onclick="closeCreate()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label class="form-label">Vendor</label>
+        <select id="c-vendor" class="select" onchange="onVendorChange()">
+          <option value="">— Select vendor —</option>
+          {% for v in vendors %}<option value="{{ v.id }}" data-name="{{ v.name }}">{{ v.name }}</option>{% endfor %}
+          <option value="__other__">Other / Enter manually</option>
+        </select>
+      </div>
+      <div class="form-row" id="c-vendor-manual-row" style="display:none">
+        <label class="form-label">Vendor Name</label>
+        <input id="c-vendor-manual" class="input" placeholder="Vendor name">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Ship to Site</label>
+        <select id="c-site" class="select">
+          <option value="">— Any / Unassigned —</option>
+          {% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Expected Delivery</label>
+        <input id="c-date" class="input" type="date">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Notes</label>
+        <textarea id="c-notes" class="input" rows="2" style="resize:vertical"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeCreate()">Cancel</button>
+      <button class="btn btn-primary" onclick="createPO()">Create PO</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.po-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.kcard{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:18px 20px}
+.kcard-l{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:#94a3b8;margin-bottom:8px}
+.kcard-v{font-size:28px;font-weight:700;font-family:'IBM Plex Mono',monospace;letter-spacing:-1px;line-height:1}
+.po-table{width:100%;border-collapse:collapse;font-size:13px}
+.po-table th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;border-bottom:1px solid #e5e3de;background:#fafaf8;white-space:nowrap}
+.po-table td{padding:11px 14px;border-bottom:1px solid #f5f4f1;vertical-align:middle}
+.po-table tbody tr:last-child td{border-bottom:none}
+.po-table tbody tr:hover td{background:#fafaf8}
+.po-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.po-badge.draft{background:#f1f5f9;color:#475569}
+.po-badge.sent{background:#dbeafe;color:#1d4ed8}
+.po-badge.partial{background:#fef3c7;color:#92400e}
+.po-badge.received{background:#dcfce7;color:#166534}
+.po-badge.closed{background:#e9e7e3;color:#64748b}
+.form-row{margin-bottom:14px}
+.form-label{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9000}
+.modal-box{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e5e3de}
+.modal-title{font-size:15px;font-weight:700;color:#0f172a}
+.modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;line-height:1;padding:0 2px}
+.modal-body{padding:20px}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid #e5e3de;background:#fafaf8}
+@media(max-width:900px){.po-grid4{grid-template-columns:repeat(2,1fr)}}
+</style>
+
+<script>
+let allPOs = [];
+
+function fmt$(n){return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function fmtDate(s){if(!s)return '—';return s.split(' ')[0]}
+
+async function loadPOs(){
+  const data = await fetch('/api/procurement/pos').then(r=>r.json());
+  allPOs = data.pos || [];
+  const s = data.stats || {};
+  document.getElementById('st-total').textContent = s.total ?? 0;
+  document.getElementById('st-open').textContent = s.open ?? 0;
+  document.getElementById('st-pending').textContent = fmt$(s.pending_spend);
+  document.getElementById('st-received').textContent = fmt$(s.total_spend);
+  renderTable(allPOs);
+}
+
+function badgeHtml(status){
+  const labels={draft:'Draft',sent:'Sent',partial:'Partial',received:'Received',closed:'Closed'};
+  return `<span class="po-badge ${status}">${labels[status]||status}</span>`;
+}
+
+function renderTable(rows){
+  const tbody = document.getElementById('poBody');
+  if(!rows.length){
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:40px">No purchase orders yet. Create your first PO above.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(p=>`
+    <tr>
+      <td><a href="/procurement/${p.id}" style="font-weight:600;color:#1d4ed8;text-decoration:none;font-family:'IBM Plex Mono',monospace">${p.po_number}</a></td>
+      <td>${p.vendor_display||p.vendor_name||'<span style="color:#94a3b8">—</span>'}</td>
+      <td>${p.site_display||'<span style="color:#94a3b8">—</span>'}</td>
+      <td>${badgeHtml(p.status)}</td>
+      <td style="color:#64748b">${fmtDate(p.created_at)}</td>
+      <td style="color:#64748b">${fmtDate(p.expected_date)}</td>
+      <td style="text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:600">${fmt$(p.total_cost)}</td>
+      <td><a href="/procurement/${p.id}" class="btn btn-secondary btn-sm">View</a></td>
+    </tr>`).join('');
+}
+
+function filterTable(){
+  const q = document.getElementById('poSearch').value.toLowerCase();
+  const st = document.getElementById('statusFilter').value;
+  const filtered = allPOs.filter(p=>{
+    const matchQ = !q ||
+      (p.po_number||'').toLowerCase().includes(q) ||
+      (p.vendor_display||p.vendor_name||'').toLowerCase().includes(q) ||
+      (p.site_display||'').toLowerCase().includes(q);
+    const matchSt = !st || p.status === st;
+    return matchQ && matchSt;
+  });
+  renderTable(filtered);
+}
+
+function openCreateModal(){
+  document.getElementById('c-vendor').value='';
+  document.getElementById('c-vendor-manual-row').style.display='none';
+  document.getElementById('c-site').value='';
+  document.getElementById('c-date').value='';
+  document.getElementById('c-notes').value='';
+  document.getElementById('createModal').style.display='flex';
+}
+function closeCreate(){document.getElementById('createModal').style.display='none'}
+
+function onVendorChange(){
+  const v = document.getElementById('c-vendor').value;
+  document.getElementById('c-vendor-manual-row').style.display = v==='__other__' ? 'block' : 'none';
+}
+
+async function createPO(){
+  const vendorSel = document.getElementById('c-vendor');
+  const vendorId  = (vendorSel.value && vendorSel.value!=='__other__') ? parseInt(vendorSel.value) : null;
+  const vendorName = vendorSel.value==='__other__'
+    ? document.getElementById('c-vendor-manual').value.trim()
+    : (vendorSel.options[vendorSel.selectedIndex]?.dataset?.name || null);
+  const siteId = document.getElementById('c-site').value ? parseInt(document.getElementById('c-site').value) : null;
+  const d = await api('/api/procurement/pos', {
+    vendor_id: vendorId, vendor_name: vendorName,
+    site_id: siteId,
+    expected_date: document.getElementById('c-date').value || null,
+    notes: document.getElementById('c-notes').value.trim() || null,
+  });
+  if(!d.ok){alert(d.msg||'Error creating PO'); return;}
+  closeCreate();
+  window.location.href = '/procurement/' + d.id;
+}
+
+loadPOs();
+</script>
+{% endblock %}

@@ -424,6 +424,55 @@ def _init_db_conn(db):
             created_at  TEXT NOT NULL,
             updated_at  TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            po_number     TEXT NOT NULL UNIQUE,
+            vendor_id     INTEGER REFERENCES distributors(id),
+            vendor_name   TEXT,
+            site_id       INTEGER REFERENCES locations(id),
+            status        TEXT NOT NULL DEFAULT 'draft',
+            created_by    TEXT NOT NULL,
+            created_at    TEXT NOT NULL,
+            sent_at       TEXT,
+            expected_date TEXT,
+            notes         TEXT,
+            approval_required INTEGER NOT NULL DEFAULT 0,
+            approved_by   TEXT,
+            approved_at   TEXT,
+            total_cost    REAL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS po_lines (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            po_id        INTEGER NOT NULL REFERENCES purchase_orders(id),
+            product_id   INTEGER REFERENCES products(id),
+            description  TEXT NOT NULL,
+            vendor_sku   TEXT,
+            qty_ordered  INTEGER NOT NULL DEFAULT 1,
+            qty_received INTEGER NOT NULL DEFAULT 0,
+            unit_cost    REAL NOT NULL DEFAULT 0,
+            total_cost   REAL NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS vendor_catalog (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            vendor_id        INTEGER NOT NULL REFERENCES distributors(id),
+            product_name     TEXT NOT NULL,
+            vendor_sku       TEXT,
+            unit_price       REAL,
+            unit_of_measure  TEXT,
+            min_order_qty    INTEGER DEFAULT 1,
+            lead_days        INTEGER DEFAULT 0,
+            active           INTEGER NOT NULL DEFAULT 1,
+            updated_at       TEXT
+        );
+        CREATE TABLE IF NOT EXISTS product_vendors (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            vendor_id  INTEGER NOT NULL REFERENCES distributors(id),
+            vendor_sku TEXT,
+            unit_price REAL,
+            preferred  INTEGER NOT NULL DEFAULT 0,
+            active     INTEGER NOT NULL DEFAULT 1
+        );
     """)
 
     # ── Indexes ────────────────────────────────────────────────────────────────

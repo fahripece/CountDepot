@@ -290,6 +290,15 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
       {% endif %}
     </nav>
     {% if session.get('role') != 'viewer' %}
+    {% if session.get('role') == 'admin' %}
+    <div class="sb-section" style="margin-top:10px">Procurement</div>
+    <nav class="nav">
+      <a href="/procurement" class="navlink {% if request.path.startswith('/procurement') %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+        <span>Purchase Orders</span>
+      </a>
+    </nav>
+    {% endif %}
     <div class="sb-section" style="margin-top:10px">Reporting</div>
     <nav class="nav">
       <a href="/report/financial" class="navlink {% if request.path == '/report/financial' or request.path == '/dashboard' %}active{% endif %}">

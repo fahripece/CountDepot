@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+{% block title %}{{ po.po_number }} · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <a href="/procurement" style="color:#64748b;text-decoration:none;font-size:13px;display:flex;align-items:center;gap:4px">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>Purchase Orders
+  </a>
+  <span style="color:#cbd5e1;margin:0 6px">/</span>
+  <span class="topbar-title" style="font-size:16px;font-family:'IBM Plex Mono',monospace">{{ po.po_number }}</span>
+  <span id="po-badge-top" class="po-badge {{ po.status }}" style="margin-left:8px">{{ po.status|capitalize }}</span>
+  <div class="topbar-right" id="action-bar">
+    <!-- rendered by JS based on status -->
+  </div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:20px 24px">
+  <div class="po-detail-grid">
+
+    <!-- Left: meta + lines -->
+    <div>
+      <!-- Meta card -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head">PO Details</div>
+        <div class="card-body">
+          <div class="meta-grid">
+            <div class="meta-item">
+              <div class="meta-label">Vendor</div>
+              <div class="meta-val" id="d-vendor">{{ po.vendor_display or po.vendor_name or '—' }}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Site</div>
+              <div class="meta-val" id="d-site">{{ po.site_display or '—' }}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Created By</div>
+              <div class="meta-val">{{ po.created_by }}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Created</div>
+              <div class="meta-val">{{ (po.created_at or '')[:10] }}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Expected Delivery</div>
+              <div class="meta-val" id="d-expected">{{ po.expected_date or '—' }}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Sent</div>
+              <div class="meta-val">{{ (po.sent_at or '')[:10] or '—' }}</div>
+            </div>
+          </div>
+          {% if po.notes %}
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f5f4f1;font-size:13px;color:#475569;line-height:1.6">{{ po.notes }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Line items card -->
+      <div class="card">
+        <div class="card-head" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Line Items</span>
+          <button class="btn btn-secondary btn-sm" id="add-line-btn" onclick="openAddLine()" {% if po.status not in ['draft','sent'] %}style="display:none"{% endif %}>+ Add Line</button>
+        </div>
+        <div class="card-body" style="padding:0">
+          <table class="po-table">
+            <thead>
+              <tr>
+                <th style="padding-left:20px">Description</th>
+                <th>Vendor SKU</th>
+                <th style="text-align:center">Ordered</th>
+                <th style="text-align:center">Received</th>
+                <th style="text-align:right">Unit Cost</th>
+                <th style="text-align:right">Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="lines-body">
+              <tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:30px">Loading…</td></tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="5" style="text-align:right;padding:12px 14px;font-size:12px;font-weight:600;color:#64748b;border-top:2px solid #e5e3de">PO Total</td>
+                <td style="text-align:right;padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:15px;border-top:2px solid #e5e3de" id="po-total">—</td>
+                <td style="border-top:2px solid #e5e3de"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: status history / receive panel -->
+    <div>
+      <div class="card" id="receive-panel" style="{% if po.status not in ['sent','partial'] %}display:none{% endif %}">
+        <div class="card-head">Receive Goods</div>
+        <div class="card-body">
+          <p style="font-size:12.5px;color:#64748b;margin-bottom:14px">Enter quantities received for each line. Partial receives are supported.</p>
+          <div id="recv-lines"></div>
+          <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="submitReceive()">Save Receipt</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:{% if po.status not in ['sent','partial'] %}0{% else %}14px{% endif %}">
+        <div class="card-head">Status</div>
+        <div class="card-body" style="padding-bottom:10px">
+          <div id="status-steps"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit line modal -->
+<div id="lineModal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeLine()">
+  <div class="modal-box" style="width:500px">
+    <div class="modal-head">
+      <span class="modal-title" id="line-modal-title">Add Line Item</span>
+      <button class="modal-close" onclick="closeLine()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="l-id">
+      <div class="form-row">
+        <label class="form-label">Product (optional)</label>
+        <select id="l-product" class="select" onchange="onProductChange()">
+          <option value="">— Search products —</option>
+          {% for p in products %}<option value="{{ p.id }}" data-name="{{ p.name }}" data-mfr="{{ p.manufacturer or '' }}" data-model="{{ p.model or '' }}">{{ p.name }}{% if p.manufacturer %} · {{ p.manufacturer }}{% endif %}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Description <span style="color:#b91c1c">*</span></label>
+        <input id="l-desc" class="input" placeholder="e.g. ThinkPad X1 Carbon (14-inch)">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Vendor SKU</label>
+        <input id="l-sku" class="input" placeholder="e.g. LEN-X1C-9GEN">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row">
+          <label class="form-label">Qty Ordered</label>
+          <input id="l-qty" class="input" type="number" min="1" value="1" oninput="recalcLine()">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Unit Cost ($)</label>
+          <input id="l-cost" class="input" type="number" min="0" step="0.01" value="0.00" oninput="recalcLine()">
+        </div>
+      </div>
+      <div style="text-align:right;font-size:13px;color:#475569">Line Total: <strong id="l-total" style="font-family:'IBM Plex Mono',monospace">$0.00</strong></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeLine()">Cancel</button>
+      <button class="btn btn-primary" id="line-save-btn" onclick="saveLine()">Add Line</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit PO meta modal -->
+<div id="editModal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeEdit()">
+  <div class="modal-box" style="width:460px">
+    <div class="modal-head">
+      <span class="modal-title">Edit PO Details</span>
+      <button class="modal-close" onclick="closeEdit()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label class="form-label">Vendor</label>
+        <select id="e-vendor" class="select" onchange="onEditVendorChange()">
+          <option value="">— Select vendor —</option>
+          {% for v in vendors %}<option value="{{ v.id }}" data-name="{{ v.name }}">{{ v.name }}</option>{% endfor %}
+          <option value="__other__">Other / Enter manually</option>
+        </select>
+      </div>
+      <div class="form-row" id="e-vendor-manual-row" style="display:none">
+        <label class="form-label">Vendor Name</label>
+        <input id="e-vendor-manual" class="input" placeholder="Vendor name">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Ship to Site</label>
+        <select id="e-site" class="select">
+          <option value="">— Any / Unassigned —</option>
+          {% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Expected Delivery</label>
+        <input id="e-date" class="input" type="date" value="{{ po.expected_date or '' }}">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Notes</label>
+        <textarea id="e-notes" class="input" rows="3" style="resize:vertical">{{ po.notes or '' }}</textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeEdit()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.po-detail-grid{display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start}
+.card{background:#fff;border:1px solid #e5e3de;border-radius:10px;overflow:hidden}
+.card-head{padding:13px 18px;font-size:13px;font-weight:700;color:#0f172a;border-bottom:1px solid #e5e3de;background:#fafaf8}
+.card-body{padding:18px}
+.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.meta-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:3px}
+.meta-val{font-size:13px;color:#0f172a;font-weight:500}
+.po-table{width:100%;border-collapse:collapse;font-size:13px}
+.po-table th{padding:9px 14px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;border-bottom:1px solid #e5e3de;white-space:nowrap}
+.po-table td{padding:10px 14px;border-bottom:1px solid #f5f4f1;vertical-align:middle}
+.po-table tbody tr:last-child td{border-bottom:none}
+.po-table tbody tr:hover td{background:#fafaf8}
+.po-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.po-badge.draft{background:#f1f5f9;color:#475569}
+.po-badge.sent{background:#dbeafe;color:#1d4ed8}
+.po-badge.partial{background:#fef3c7;color:#92400e}
+.po-badge.received{background:#dcfce7;color:#166534}
+.po-badge.closed{background:#e9e7e3;color:#64748b}
+.status-step{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f5f4f1;font-size:13px}
+.status-step:last-child{border-bottom:none}
+.status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.status-dot.done{background:#15803d}
+.status-dot.current{background:#1d4ed8;box-shadow:0 0 0 3px #dbeafe}
+.status-dot.pending{background:#e5e3de}
+.recv-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f4f1;font-size:13px}
+.recv-row:last-child{border-bottom:none}
+.form-row{margin-bottom:14px}
+.form-label{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9000}
+.modal-box{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e5e3de}
+.modal-title{font-size:15px;font-weight:700;color:#0f172a}
+.modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;line-height:1;padding:0 2px}
+.modal-body{padding:20px}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid #e5e3de;background:#fafaf8}
+@media(max-width:1050px){.po-detail-grid{grid-template-columns:1fr}}
+</style>
+
+<script>
+const PO_ID = {{ po.id }};
+let poData = null;
+let lines = [];
+
+function fmt$(n){return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+
+const STATUS_ORDER = ['draft','sent','partial','received','closed'];
+const STATUS_LABELS = {draft:'Draft',sent:'Sent to Vendor',partial:'Partially Received',received:'Fully Received',closed:'Closed'};
+
+async function loadPO(){
+  const data = await fetch(`/api/procurement/pos/${PO_ID}`).then(r=>r.json());
+  if(!data.ok){alert('PO not found'); return;}
+  poData = data.po;
+  lines  = data.lines || [];
+  renderLines();
+  renderStatusSteps();
+  renderActionBar();
+  renderReceivePanel();
+  document.getElementById('po-total').textContent = fmt$(poData.total_cost);
+}
+
+function renderLines(){
+  const canEdit = ['draft','sent'].includes(poData.status);
+  const tbody = document.getElementById('lines-body');
+  if(!lines.length){
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px">No line items yet${canEdit?' — click "+ Add Line" to start.':''}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = lines.map(l=>{
+    const recvStyle = l.qty_received >= l.qty_ordered ? 'color:#15803d;font-weight:700' :
+                      l.qty_received > 0 ? 'color:#d97706;font-weight:700' : 'color:#94a3b8';
+    const discrepancy = l.qty_received > 0 && l.qty_received < l.qty_ordered
+      ? `<span title="Discrepancy" style="color:#d97706;margin-left:4px">⚠</span>` : '';
+    return `<tr>
+      <td style="font-weight:500">${l.description}</td>
+      <td style="color:#64748b;font-family:'IBM Plex Mono',monospace;font-size:12px">${l.vendor_sku||'—'}</td>
+      <td style="text-align:center">${l.qty_ordered}</td>
+      <td style="text-align:center;${recvStyle}">${l.qty_received}${discrepancy}</td>
+      <td style="text-align:right;font-family:'IBM Plex Mono',monospace">${fmt$(l.unit_cost)}</td>
+      <td style="text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:600">${fmt$(l.total_cost)}</td>
+      <td style="text-align:right">
+        ${canEdit ? `<button class="btn btn-secondary btn-sm" onclick="openEditLine(${l.id})" style="margin-right:4px">Edit</button>
+        <button class="btn btn-secondary btn-sm" style="color:#b91c1c" onclick="deleteLine(${l.id})">✕</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('po-total').textContent = fmt$(poData.total_cost);
+  document.getElementById('add-line-btn').style.display = canEdit ? '' : 'none';
+}
+
+function renderStatusSteps(){
+  const cur = poData.status;
+  const curIdx = STATUS_ORDER.indexOf(cur);
+  const container = document.getElementById('status-steps');
+  container.innerHTML = STATUS_ORDER.map((s, i)=>{
+    const dotClass = i < curIdx ? 'done' : i === curIdx ? 'current' : 'pending';
+    const textColor = i <= curIdx ? '#0f172a' : '#94a3b8';
+    return `<div class="status-step">
+      <div class="status-dot ${dotClass}"></div>
+      <span style="color:${textColor};font-weight:${i===curIdx?'700':'400'}">${STATUS_LABELS[s]}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderActionBar(){
+  const bar = document.getElementById('action-bar');
+  const s = poData.status;
+  let html = '';
+  if(s === 'draft'){
+    html = `<button class="btn btn-secondary btn-sm" onclick="openEdit()">Edit Details</button>
+            <button class="btn btn-primary btn-sm" onclick="setStatus('sent')">Mark as Sent</button>
+            <button class="btn btn-secondary btn-sm" style="color:#b91c1c" onclick="deletePO()">Delete Draft</button>`;
+  } else if(s === 'sent' || s === 'partial'){
+    html = `<button class="btn btn-secondary btn-sm" onclick="openEdit()">Edit Details</button>
+            <button class="btn btn-primary btn-sm" onclick="showReceivePanel()">Receive Goods</button>
+            <button class="btn btn-secondary btn-sm" onclick="setStatus('closed')">Close PO</button>`;
+  } else if(s === 'received'){
+    html = `<button class="btn btn-secondary btn-sm" onclick="setStatus('closed')">Close PO</button>`;
+  }
+  bar.innerHTML = html;
+}
+
+function renderReceivePanel(){
+  const panel = document.getElementById('receive-panel');
+  const s = poData.status;
+  if(!['sent','partial'].includes(s)){panel.style.display='none'; return;}
+  panel.style.display='';
+  const container = document.getElementById('recv-lines');
+  if(!lines.length){container.innerHTML='<p style="color:#94a3b8;font-size:13px">No lines to receive.</p>'; return;}
+  container.innerHTML = lines.filter(l=>l.qty_ordered > l.qty_received).map(l=>`
+    <div class="recv-row">
+      <div style="flex:1">
+        <div style="font-weight:500;font-size:13px">${l.description}</div>
+        <div style="font-size:11px;color:#94a3b8">Ordered: ${l.qty_ordered} · Received so far: ${l.qty_received}</div>
+      </div>
+      <input type="number" min="0" max="${l.qty_ordered - l.qty_received}"
+             value="0" style="width:70px" class="input recv-qty-input" data-lid="${l.id}"
+             placeholder="Qty">
+    </div>`).join('');
+}
+
+function showReceivePanel(){
+  document.getElementById('receive-panel').style.display='';
+  document.getElementById('receive-panel').scrollIntoView({behavior:'smooth'});
+}
+
+async function submitReceive(){
+  const inputs = document.querySelectorAll('.recv-qty-input');
+  const lineUpdates = [];
+  inputs.forEach(inp=>{
+    const qty = parseInt(inp.value)||0;
+    if(qty > 0) lineUpdates.push({id: parseInt(inp.dataset.lid), qty_received: qty});
+  });
+  if(!lineUpdates.length){alert('Enter at least one quantity to receive.'); return;}
+  const d = await api(`/api/procurement/pos/${PO_ID}/receive`, {lines: lineUpdates});
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  // update badge
+  const badge = document.getElementById('po-badge-top');
+  badge.className = `po-badge ${d.new_status}`;
+  badge.textContent = d.new_status.charAt(0).toUpperCase()+d.new_status.slice(1);
+  loadPO();
+}
+
+async function setStatus(status){
+  const labels = {sent:'Mark this PO as Sent to vendor?',closed:'Close this PO?'};
+  if(!confirm(labels[status]||`Set status to ${status}?`)) return;
+  const d = await api(`/api/procurement/pos/${PO_ID}`, {status}, 'PATCH');
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  loadPO();
+  // Update badge at top
+  const badge = document.getElementById('po-badge-top');
+  badge.className = `po-badge ${status}`;
+  badge.textContent = status.charAt(0).toUpperCase()+status.slice(1);
+}
+
+async function deletePO(){
+  if(!confirm('Delete this draft PO? This cannot be undone.')) return;
+  const d = await api(`/api/procurement/pos/${PO_ID}`, null, 'DELETE');
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  window.location.href = '/procurement';
+}
+
+// ── Line item modal ──
+function openAddLine(){
+  document.getElementById('l-id').value = '';
+  document.getElementById('l-product').value = '';
+  document.getElementById('l-desc').value = '';
+  document.getElementById('l-sku').value = '';
+  document.getElementById('l-qty').value = '1';
+  document.getElementById('l-cost').value = '0.00';
+  document.getElementById('l-total').textContent = '$0.00';
+  document.getElementById('line-modal-title').textContent = 'Add Line Item';
+  document.getElementById('line-save-btn').textContent = 'Add Line';
+  document.getElementById('lineModal').style.display = 'flex';
+}
+
+function openEditLine(lid){
+  const l = lines.find(x=>x.id===lid);
+  if(!l) return;
+  document.getElementById('l-id').value = lid;
+  document.getElementById('l-product').value = l.product_id || '';
+  document.getElementById('l-desc').value = l.description;
+  document.getElementById('l-sku').value = l.vendor_sku || '';
+  document.getElementById('l-qty').value = l.qty_ordered;
+  document.getElementById('l-cost').value = Number(l.unit_cost).toFixed(2);
+  document.getElementById('l-total').textContent = fmt$(l.total_cost);
+  document.getElementById('line-modal-title').textContent = 'Edit Line Item';
+  document.getElementById('line-save-btn').textContent = 'Save';
+  document.getElementById('lineModal').style.display = 'flex';
+}
+
+function closeLine(){document.getElementById('lineModal').style.display='none'}
+
+function recalcLine(){
+  const qty  = parseFloat(document.getElementById('l-qty').value)||0;
+  const cost = parseFloat(document.getElementById('l-cost').value)||0;
+  document.getElementById('l-total').textContent = fmt$(qty*cost);
+}
+
+function onProductChange(){
+  const sel = document.getElementById('l-product');
+  const opt = sel.options[sel.selectedIndex];
+  if(!opt || !opt.value) return;
+  const name = opt.dataset.name || '';
+  const mfr  = opt.dataset.mfr  || '';
+  const model= opt.dataset.model || '';
+  const desc = [name, mfr, model].filter(Boolean).join(' · ');
+  document.getElementById('l-desc').value = desc;
+}
+
+async function saveLine(){
+  const lid  = document.getElementById('l-id').value;
+  const desc = document.getElementById('l-desc').value.trim();
+  if(!desc){alert('Description required'); return;}
+  const payload = {
+    description: desc,
+    vendor_sku:  document.getElementById('l-sku').value.trim()||null,
+    qty_ordered: parseInt(document.getElementById('l-qty').value)||1,
+    unit_cost:   parseFloat(document.getElementById('l-cost').value)||0,
+    product_id:  document.getElementById('l-product').value ? parseInt(document.getElementById('l-product').value) : null,
+  };
+  let d;
+  if(lid){
+    d = await api(`/api/procurement/pos/${PO_ID}/lines/${lid}`, payload, 'PUT');
+  } else {
+    d = await api(`/api/procurement/pos/${PO_ID}/lines`, payload);
+  }
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  closeLine();
+  loadPO();
+}
+
+async function deleteLine(lid){
+  if(!confirm('Remove this line item?')) return;
+  const d = await api(`/api/procurement/pos/${PO_ID}/lines/${lid}`, null, 'DELETE');
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  loadPO();
+}
+
+// ── Edit PO meta modal ──
+function openEdit(){
+  // Pre-fill vendor
+  const eVendor = document.getElementById('e-vendor');
+  if(poData.vendor_id){
+    eVendor.value = poData.vendor_id;
+    document.getElementById('e-vendor-manual-row').style.display='none';
+  } else if(poData.vendor_name){
+    eVendor.value = '__other__';
+    document.getElementById('e-vendor-manual').value = poData.vendor_name;
+    document.getElementById('e-vendor-manual-row').style.display='block';
+  } else {
+    eVendor.value = '';
+    document.getElementById('e-vendor-manual-row').style.display='none';
+  }
+  document.getElementById('e-site').value = poData.site_id || '';
+  document.getElementById('e-date').value = poData.expected_date || '';
+  document.getElementById('e-notes').value = poData.notes || '';
+  document.getElementById('editModal').style.display='flex';
+}
+function closeEdit(){document.getElementById('editModal').style.display='none'}
+function onEditVendorChange(){
+  const v = document.getElementById('e-vendor').value;
+  document.getElementById('e-vendor-manual-row').style.display = v==='__other__' ? 'block' : 'none';
+}
+
+async function saveEdit(){
+  const vendorSel = document.getElementById('e-vendor');
+  const vendorId  = (vendorSel.value && vendorSel.value!=='__other__') ? parseInt(vendorSel.value) : null;
+  const vendorName = vendorSel.value==='__other__'
+    ? document.getElementById('e-vendor-manual').value.trim()
+    : (vendorSel.options[vendorSel.selectedIndex]?.dataset?.name || null);
+  const siteId = document.getElementById('e-site').value ? parseInt(document.getElementById('e-site').value) : null;
+  const d = await api(`/api/procurement/pos/${PO_ID}`, {
+    vendor_id: vendorId,
+    vendor_name: vendorName,
+    site_id: siteId,
+    expected_date: document.getElementById('e-date').value || null,
+    notes: document.getElementById('e-notes').value.trim() || null,
+  }, 'PATCH');
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  closeEdit();
+  loadPO();
+  // Update displayed values
+  document.getElementById('d-vendor').textContent = vendorName || '—';
+  document.getElementById('d-site').textContent = document.getElementById('e-site').options[document.getElementById('e-site').selectedIndex]?.text || '—';
+  document.getElementById('d-expected').textContent = document.getElementById('e-date').value || '—';
+}
+
+// Extend the api() helper to support method param
+async function api(url, body=null, method=null){
+  const m = method || (body!==null ? 'POST' : 'GET');
+  const headers = {'Content-Type':'application/json'};
+  const csrf = document.cookie.match(/csrf_token=([^;]+)/);
+  if(csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf[1]);
+  const opts = {method: m, headers};
+  if(body !== null) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  return r.json();
+}
+
+loadPO();
+</script>
+{% endblock %}
