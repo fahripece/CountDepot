@@ -22,8 +22,8 @@ def validate_password(pw, current_hash=None):
     """Returns an error string if the password fails complexity rules, else None.
     Rules: 10+ chars, at least one uppercase letter, at least one digit or symbol.
     Pass current_hash to also reject reuse of the current password."""
-    if len(pw) < 10:
-        return "Password must be at least 10 characters."
+    if len(pw) < 8:
+        return "Password must be at least 8 characters."
     if not re.search(r'[A-Z]', pw):
         return "Password must contain at least one uppercase letter."
     if not re.search(r'[0-9!@#$%^&*()\-_=+\[\]{}|;:,.<>?/\\\'"`~]', pw):
