@@ -226,6 +226,13 @@ def report_checkout_history():
     return render_template("report_checkout_history.html")
 
 
+@bp.route("/report/import-history")
+@login_required
+@admin_required
+def report_import_history():
+    return render_template("report_import_history.html")
+
+
 @bp.route("/report/locations")
 @login_required
 @perm_required("view_inventory")

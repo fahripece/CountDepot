@@ -863,6 +863,47 @@ def api_delete_photo(photo_id):
     return jsonify({"ok": True})
 
 
+# ── Import history ────────────────────────────────────────────────────────────
+
+@bp.route("/api/import-history")
+@login_required
+@admin_required
+def api_import_history():
+    vendor  = request.args.get("vendor", "").strip()
+    site_q  = request.args.get("site", "").strip()
+    from_d  = request.args.get("from", "").strip()
+    to_d    = request.args.get("to", "").strip()
+    page    = max(1, int(request.args.get("page", 1) or 1))
+    per_page = 50
+
+    sql  = """SELECT ii.*, l.name as site_name
+              FROM invoice_imports ii
+              LEFT JOIN locations l ON l.id = ii.site_id
+              WHERE 1=1"""
+    args = []
+    if vendor:
+        sql += " AND (ii.vendor LIKE ? OR ii.reference LIKE ?)"; args += [f"%{vendor}%", f"%{vendor}%"]
+    if site_q:
+        sql += " AND l.name LIKE ?"; args.append(f"%{site_q}%")
+    if from_d:
+        sql += " AND ii.imported_at >= ?"; args.append(from_d)
+    if to_d:
+        sql += " AND ii.imported_at < date(?, '+1 day')"; args.append(to_d)
+
+    where_part = sql[sql.index("FROM"):]
+    total = query("SELECT COUNT(*) " + where_part, args, one=True)[0]
+    total_items = query("SELECT COALESCE(SUM(ii.line_count),0) " + where_part, args, one=True)[0]
+
+    sql += " ORDER BY ii.imported_at DESC"
+    sql += f" LIMIT {per_page} OFFSET {(page-1)*per_page}"
+
+    rows = [dict(r) for r in query(sql, args)]
+    pages = max(1, -(-total // per_page))
+    return jsonify({"ok": True, "rows": rows, "total": total,
+                    "total_items": int(total_items or 0),
+                    "page": page, "pages": pages})
+
+
 # ── Reports ───────────────────────────────────────────────────────────────────
 
 @bp.route("/api/report/checkout-history")
