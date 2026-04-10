@@ -157,7 +157,7 @@ def dashboard():
 @admin_required
 def admin_page():
     users = [dict(r) for r in query(
-        "SELECT id,username,role,permissions FROM users ORDER BY role,username")]
+        "SELECT id,username,role,permissions,email FROM users ORDER BY role,username")]
     for u in users:
         u["perm_set"] = set(u["permissions"].split(",")) if u["permissions"] else set()
     return render_template("admin.html", users=users,

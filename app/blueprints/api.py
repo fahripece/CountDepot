@@ -2056,6 +2056,31 @@ def api_user_password():
     return jsonify({"ok": True})
 
 
+@bp.route("/api/user/email", methods=["POST"])
+@login_required
+@admin_required
+def api_user_email():
+    d = request.json
+    uid   = d.get("id")
+    email = (d.get("email") or "").strip().lower()
+    if not uid:
+        return jsonify({"ok": False, "msg": "User ID required"})
+    if email and "@" not in email:
+        return jsonify({"ok": False, "msg": "Invalid email address"})
+    user = query("SELECT username FROM users WHERE id=?", [uid], one=True)
+    if not user:
+        return jsonify({"ok": False, "msg": "User not found"})
+    # Check uniqueness (only if setting an email)
+    if email:
+        clash = query("SELECT id FROM users WHERE LOWER(COALESCE(email,''))=? AND id!=?",
+                      [email, uid], one=True)
+        if clash:
+            return jsonify({"ok": False, "msg": "That email is already used by another account"})
+    execute("UPDATE users SET email=? WHERE id=?", [email or None, uid])
+    log_action("USER_EMAIL", detail=f"Updated email for {user['username']}: {email or '(cleared)'}")
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/user/delete", methods=["POST"])
 @login_required
 @admin_required

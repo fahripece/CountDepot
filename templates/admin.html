@@ -24,7 +24,7 @@
         <div class="user-avatar">{{ u.username[0].upper() }}</div>
         <div>
           <div style="font-weight:600;font-size:14px">{{ u.username }}</div>
-          <div style="font-size:11px;margin-top:2px;display:flex;align-items:center;gap:6px">
+          <div style="font-size:11px;margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span class="tag" style="font-size:10px;padding:1px 7px;background:{% if u.role=='admin' %}#eff6ff;color:#1d4ed8{% elif u.role=='viewer' %}#f5f3ff;color:#6d28d9{% else %}#f0fdf4;color:#15803d{% endif %}">{{ u.role }}</span>
             {% if u.role == 'admin' %}
               <span style="color:#94a3b8">Full access · all permissions</span>
@@ -34,6 +34,11 @@
               {% set pcount = u.perm_set | length %}
               <span style="color:#475569" id="permcount-{{ u.id }}">{{ pcount }} permission{{ 's' if pcount != 1 else '' }} granted</span>
             {% endif %}
+            {% if u.email %}
+              <span style="color:#64748b;font-family:'IBM Plex Mono',monospace;font-size:10.5px" id="user-email-display-{{ u.id }}">{{ u.email }}</span>
+            {% else %}
+              <span style="color:#f59e0b;font-size:10.5px" id="user-email-display-{{ u.id }}">⚠ no email — can't reset password</span>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -41,6 +46,7 @@
         {% if u.role == 'worker' %}
         <span style="font-size:11px;color:#94a3b8;margin-right:4px" id="permtoggle-{{ u.id }}">▸ Permissions</span>
         {% endif %}
+        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditEmail({{ u.id }},'{{ u.username }}','{{ u.email or '' }}')">Email</button>
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openResetPw({{ u.id }},'{{ u.username }}')">Reset PW</button>
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openSiteAccess({{ u.id }},'{{ u.username }}')">Sites</button>
         {% if u.id != current_user_id %}
@@ -234,6 +240,23 @@
   </div>
 </div>
 
+<!-- EDIT EMAIL MODAL -->
+<div class="overlay" id="editEmailModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Edit Email Address</div><button class="modal-close" onclick="closeModal('editEmailModal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="editEmailUserId">
+      <div style="font-size:13px;color:#475569;margin-bottom:14px">Email for <strong id="editEmailUsername"></strong></div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:14px">This email is used for login and password reset. Leave blank to clear it.</div>
+      <div class="field"><label class="label">Email address</label><input class="input" id="edit-email-val" type="email" autocomplete="email" placeholder="user@company.com"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('editEmailModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmEditEmail()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- RESET PASSWORD MODAL -->
 <div class="overlay" id="resetPwModal">
   <div class="modal modal-sm">
@@ -372,6 +395,35 @@ async function saveUser(){
   const res=await api('/api/user/add',{username,role,permissions:perms});
   if(res.ok){toast(res.msg||'Invite sent ✓','ok');closeModal('userModal');location.reload();}
   else toast(res.msg||'Error','err');
+}
+
+function openEditEmail(id,name,current){
+  document.getElementById('editEmailUserId').value=id;
+  document.getElementById('editEmailUsername').textContent=name;
+  document.getElementById('edit-email-val').value=current||'';
+  openModal('editEmailModal');
+}
+async function confirmEditEmail(){
+  const id=parseInt(document.getElementById('editEmailUserId').value);
+  const email=document.getElementById('edit-email-val').value.trim();
+  const res=await api('/api/user/email',{id,email});
+  if(res.ok){
+    const disp=document.getElementById('user-email-display-'+id);
+    if(disp){
+      if(email){
+        disp.style.color='#64748b';
+        disp.style.fontFamily="'IBM Plex Mono',monospace";
+        disp.style.fontSize='10.5px';
+        disp.textContent=email;
+      } else {
+        disp.style.color='#f59e0b';
+        disp.style.fontFamily='';
+        disp.textContent='⚠ no email — can\'t reset password';
+      }
+    }
+    toast('Email updated ✓','ok');
+    closeModal('editEmailModal');
+  } else toast(res.msg||'Error','err');
 }
 
 function openResetPw(id,name){
