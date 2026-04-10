@@ -239,8 +239,7 @@ async function sendSupport(){
   const btn=document.getElementById('sup-btn');
   btn.disabled=true;btn.textContent='Sending…';
   try{
-    const r=await fetch('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject,message})});
-    const d=await r.json();
+    const d=await api('/api/support',{subject,message});
     if(d.ok){
       document.getElementById('sup-subject').value='';
       document.getElementById('sup-message').value='';

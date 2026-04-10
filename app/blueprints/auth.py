@@ -352,6 +352,65 @@ def cross_login():
     return jsonify({"ok": True, "redirect": redirect_url})
 
 
+@bp.route("/_cross-forgot-password", methods=["POST"])
+def cross_forgot_password():
+    """Find which tenant an email belongs to and send a password reset link.
+    Always returns ok=True to avoid revealing whether the email exists."""
+    data  = request.get_json(silent=True) or {}
+    email = data.get("email", "").strip().lower()
+    if not email:
+        return jsonify({"ok": True})  # silent no-op
+
+    ip = request.remote_addr or "unknown"
+    allowed, reset_in = check_rate_limit(ip, "forgot-password", max_attempts=5, window=900)
+    if not allowed:
+        return jsonify({"ok": False, "msg": f"Too many requests. Try again in {reset_in // 60 + 1} minutes."}), 429
+
+    import os, sqlite3 as _sql
+    from config import Config as _Cfg
+    from app.platform import get_platform_db as _get_pdb
+
+    pdb     = _get_pdb()
+    tenants = pdb.execute("SELECT slug FROM tenants WHERE active=1").fetchall()
+    pdb.close()
+
+    found_slug = None
+    found_user = None
+    for row in tenants:
+        slug    = row[0]
+        db_path = os.path.join(_Cfg.TENANTS_DIR, slug, "inventory.db")
+        if not os.path.exists(db_path):
+            continue
+        conn = _sql.connect(db_path)
+        conn.row_factory = _sql.Row
+        user = conn.execute(
+            "SELECT * FROM users WHERE LOWER(COALESCE(email,''))=?", [email]
+        ).fetchone()
+        conn.close()
+        if user:
+            found_slug = slug
+            found_user = dict(user)
+            break
+
+    if found_slug and found_user:
+        import secrets as _sec
+        conn = _sql.connect(os.path.join(_Cfg.TENANTS_DIR, found_slug, "inventory.db"))
+        expires_at = (datetime.utcnow() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+        token = _sec.token_urlsafe(32)
+        conn.execute("UPDATE password_reset_tokens SET used=1 WHERE user_id=? AND used=0",
+                     [found_user["id"]])
+        conn.execute("INSERT INTO password_reset_tokens (user_id,token,expires_at) VALUES (?,?,?)",
+                     [found_user["id"], token, expires_at])
+        conn.commit()
+        conn.close()
+        from app.mailer import send_password_reset_email
+        send_password_reset_email(email, found_slug, token)
+        log_auth_event("PW_RESET", username=found_user.get("username", email),
+                       ip=ip, tenant=found_slug, detail="cross-domain reset link sent")
+
+    return jsonify({"ok": True})
+
+
 @bp.route("/auto-login")
 def auto_login():
     """Consume a cross-login token issued by /_cross-login and start a session."""

@@ -433,9 +433,8 @@ def sync_item_task(item_id, item_name, missing_fields):
         title = f"Complete item: {item_name}"
         notes = f"Missing: {', '.join(missing_fields)}"
         if existing:
-            if existing["status"] == "done":
-                execute("UPDATE tasks SET status='todo', notes=?, updated_at=? WHERE id=?",
-                        [notes, now, existing["id"]])
+            execute("UPDATE tasks SET status='todo', title=?, notes=?, updated_at=? WHERE id=?",
+                    [title, notes, now, existing["id"]])
         else:
             execute(
                 "INSERT INTO tasks (title,urgency,status,notes,created_by,created_at,item_id) "

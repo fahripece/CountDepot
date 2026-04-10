@@ -266,8 +266,9 @@ def api_report_activity():
                    FROM audit_log a WHERE 1=1{df_sql}
                    GROUP BY day ORDER BY day ASC LIMIT 60""", df_args)
     # Unique active users in period
-    active_users = query(f"""SELECT COUNT(DISTINCT username) as cnt FROM audit_log a
-                          WHERE username IS NOT NULL AND username != 'system'{df_sql}""", df_args)
+    active_users_row = query(f"""SELECT COUNT(DISTINCT username) as cnt FROM audit_log a
+                          WHERE username IS NOT NULL AND username != 'system'{df_sql}""", df_args,
+                             one=True)
     return jsonify({
         "period":        {"from": date_from, "to": date_to},
         "top_items":     [{"name": r["item_name"], "count": r["cnt"]} for r in top_items],
@@ -275,7 +276,7 @@ def api_report_activity():
         "actions":       [{"action": r["action"],  "count": r["cnt"]} for r in actions],
         "recent":        [dict(r) for r in recent],
         "daily":         [{"day": r["day"], "count": r["cnt"]} for r in daily],
-        "active_users":  active_users[0] if active_users else 0,
+        "active_users":  active_users_row["cnt"] if active_users_row else 0,
     })
 
 
@@ -426,8 +427,6 @@ def api_items():
              "cost": "i.cost_price", "sale": "i.sale_price",
              "date": "i.purchase_date"}.get(sort, "i.name")
 
-    # Count total matching rows
-    count_sql = "SELECT COUNT(*) " + sql.split("FROM", 1)[1].split("ORDER")[0]
     # Strip SELECT clause, keep from FROM onward (without ORDER BY)
     where_part = sql[sql.index("FROM"):]
     if "ORDER" in where_part: where_part = where_part[:where_part.rindex("ORDER")]

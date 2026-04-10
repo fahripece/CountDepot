@@ -579,8 +579,26 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
       onmouseover="this.style.background='#3b82f6'" onmouseout="this.style.background='#2563eb'">
       Sign in →
     </button>
-    <div style="margin-top:16px;text-align:center;font-size:13px;color:#64748b">
+    <div style="margin-top:14px;text-align:center">
+      <button onclick="showForgot()" style="background:none;border:none;color:#64748b;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:underline;padding:0">Forgot password?</button>
+    </div>
+    <div style="margin-top:10px;text-align:center;font-size:13px;color:#64748b">
       Don't have an account? <a href="/signup" style="color:#38bdf8;text-decoration:none">Start free trial</a>
+    </div>
+
+    <!-- Forgot password inline form -->
+    <div id="forgot-panel" style="display:none;margin-top:24px;border-top:1px solid #1e2d50;padding-top:24px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Reset your password</div>
+      <div style="font-size:13px;color:#64748b;margin-bottom:16px">Enter your email and we'll send you a reset link.</div>
+      <div id="forgot-success" style="display:none;background:#0d2618;border:1px solid #14532d;border-radius:8px;padding:10px 14px;font-size:13px;color:#86efac;margin-bottom:12px">Reset link sent — check your inbox.</div>
+      <div id="forgot-error" style="display:none;background:#1e0a0a;border:1px solid #7f1d1d;border-radius:8px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:12px"></div>
+      <input id="forgot-email" type="email" placeholder="you@company.com"
+        style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:12px 16px;color:#f1f5f9;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:12px"
+        onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#1e2d50'"
+        onkeydown="if(event.key==='Enter')doForgot()">
+      <button id="forgot-btn" onclick="doForgot()" style="width:100%;background:#1e2d50;color:#f1f5f9;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">
+        Send reset link →
+      </button>
     </div>
   </div>
 </div>
@@ -919,6 +937,43 @@ function closeSignin() {
   document.getElementById('signin-error').style.display = 'none';
   document.getElementById('signin-email').value = '';
   document.getElementById('signin-password').value = '';
+  document.getElementById('forgot-panel').style.display = 'none';
+  document.getElementById('forgot-success').style.display = 'none';
+  document.getElementById('forgot-error').style.display = 'none';
+  document.getElementById('forgot-email').value = '';
+}
+function showForgot() {
+  const panel = document.getElementById('forgot-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (panel.style.display === 'block') {
+    const email = document.getElementById('signin-email').value.trim();
+    if (email) document.getElementById('forgot-email').value = email;
+    setTimeout(() => document.getElementById('forgot-email').focus(), 50);
+  }
+}
+async function doForgot() {
+  const email  = document.getElementById('forgot-email').value.trim();
+  const errEl  = document.getElementById('forgot-error');
+  const okEl   = document.getElementById('forgot-success');
+  const btn    = document.getElementById('forgot-btn');
+  errEl.style.display = 'none';
+  okEl.style.display  = 'none';
+  if (!email) { errEl.textContent = 'Please enter your email address.'; errEl.style.display = 'block'; return; }
+  btn.textContent = 'Sending…'; btn.disabled = true;
+  try {
+    const res  = await fetch('/_cross-forgot-password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email}) });
+    const data = await res.json();
+    if (data.ok) {
+      okEl.style.display = 'block';
+    } else {
+      errEl.textContent = data.msg || 'Something went wrong. Please try again.';
+      errEl.style.display = 'block';
+    }
+  } catch(e) {
+    errEl.textContent = 'Connection error. Please try again.';
+    errEl.style.display = 'block';
+  }
+  btn.textContent = 'Send reset link →'; btn.disabled = false;
 }
 async function doSignin() {
   const email    = document.getElementById('signin-email').value.trim();
