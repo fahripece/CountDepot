@@ -2129,7 +2129,7 @@ def api_change_password():
     user = query("SELECT * FROM users WHERE id=?", [session["user_id"]], one=True)
     if not user or not verify_pw(d.get("old_password", ""), user["password"]):
         return jsonify({"ok": False, "msg": "Current password incorrect"})
-    pw_err = validate_password(d.get("new_password", ""))
+    pw_err = validate_password(d.get("new_password", ""), user["password"])
     if pw_err: return jsonify({"ok": False, "msg": pw_err})
     execute("UPDATE users SET password=? WHERE id=?",
             [hash_pw(d["new_password"]), session["user_id"]])

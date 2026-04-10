@@ -18,15 +18,18 @@ def hash_pw(pw):
     """Hash a password with bcrypt."""
     return _bcrypt.hashpw(pw.encode(), _bcrypt.gensalt()).decode()
 
-def validate_password(pw):
+def validate_password(pw, current_hash=None):
     """Returns an error string if the password fails complexity rules, else None.
-    Rules: 8+ chars, at least one uppercase letter, at least one digit or symbol."""
-    if len(pw) < 8:
-        return "Password must be at least 8 characters."
+    Rules: 10+ chars, at least one uppercase letter, at least one digit or symbol.
+    Pass current_hash to also reject reuse of the current password."""
+    if len(pw) < 10:
+        return "Password must be at least 10 characters."
     if not re.search(r'[A-Z]', pw):
         return "Password must contain at least one uppercase letter."
     if not re.search(r'[0-9!@#$%^&*()\-_=+\[\]{}|;:,.<>?/\\\'"`~]', pw):
         return "Password must contain at least one number or special character."
+    if current_hash and verify_pw(pw, current_hash):
+        return "New password must be different from your current password."
     return None
 
 

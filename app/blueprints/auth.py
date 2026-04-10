@@ -134,7 +134,8 @@ def change_password():
     if request.method == "POST":
         new_pw  = request.form.get("new_password", "")
         confirm = request.form.get("confirm_password", "")
-        error = validate_password(new_pw)
+        current = query("SELECT password FROM users WHERE id=?", [session["user_id"]], one=True)
+        error = validate_password(new_pw, current["password"] if current else None)
         if not error and new_pw != confirm:
             error = "Passwords do not match."
         if not error:
@@ -236,7 +237,8 @@ def reset_password(token):
     if request.method == "POST":
         new_pw  = request.form.get("new_password", "")
         confirm = request.form.get("confirm_password", "")
-        error = validate_password(new_pw)
+        current = query("SELECT password FROM users WHERE id=?", [row["user_id"]], one=True)
+        error = validate_password(new_pw, current["password"] if current else None)
         if not error and new_pw != confirm:
             error = "Passwords do not match."
         if not error:
