@@ -3633,6 +3633,15 @@ def api_invoice_commit():
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             [ref, vendor, site_id, session.get("username"), now, len(created_ids), notes])
 
+    # Link to PO if requested: mark PO as received
+    linked_po_id = d.get("linked_po_id")
+    if linked_po_id:
+        po = query("SELECT * FROM purchase_orders WHERE id=?", [linked_po_id], one=True)
+        if po and po["status"] in ("draft", "sent", "partial"):
+            execute("UPDATE purchase_orders SET status='received' WHERE id=?", [linked_po_id])
+            log_action("PO_RECEIVE", None, po["po_number"],
+                       f"Marked received via invoice import: ref={ref}")
+
     return jsonify({"ok": True, "created": len(created_ids), "item_ids": created_ids})
 
 
@@ -4240,33 +4249,111 @@ def api_po_line_delete(po_id, lid):
 @login_required
 @admin_required
 def api_po_receive(po_id):
-    """Record qty received per line. Updates po_lines.qty_received, auto-sets status."""
+    """Record qty received per line, auto-create inventory items, set PO status."""
     po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
     if not po:
         return jsonify({"ok": False, "msg": "Not found"}), 404
     if po["status"] not in ("sent", "partial"):
         return jsonify({"ok": False, "msg": "PO must be Sent or Partial to receive goods"}), 400
-    d = request.json or {}  # {"lines": [{"id": 1, "qty_received": 3}, ...]}
-    lines_input = d.get("lines", [])
+    d = request.json or {}
+    lines_input   = d.get("lines", [])
+    site_id       = d.get("site_id") or po["site_id"] or None
+    create_items  = d.get("create_items", True)  # default on
     if not lines_input:
         return jsonify({"ok": False, "msg": "No lines provided"}), 400
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    created_items   = []   # {item_id, name, qty, needs_serial}
+    needs_serial    = []   # lines that need serial entry
+
     for entry in lines_input:
-        lid       = int(entry.get("id", 0))
-        qty_recv  = int(entry.get("qty_received", 0))
+        lid      = int(entry.get("id", 0))
+        qty_recv = int(entry.get("qty_received", 0))
+        if qty_recv <= 0:
+            continue
         line = query("SELECT * FROM po_lines WHERE id=? AND po_id=?", [lid, po_id], one=True)
         if not line:
             continue
         new_total_recv = line["qty_received"] + qty_recv
         execute("UPDATE po_lines SET qty_received=? WHERE id=?", [new_total_recv, lid])
-    # Determine new PO status
+
+        # ── Auto-create inventory items ──────────────────────────────────────
+        if not create_items or not line["product_id"]:
+            continue
+        prod = query("""SELECT id, name, category_id, serial_tracked, qty_tracked,
+                               require_serial, manufacturer, model
+                        FROM products WHERE id=? AND active=1""",
+                     [line["product_id"]], one=True)
+        if not prod:
+            continue
+
+        if prod["serial_tracked"] or prod["require_serial"]:
+            # Can't auto-create without serial numbers — flag for user
+            needs_serial.append({
+                "line_id":     lid,
+                "product_id":  prod["id"],
+                "product_name": prod["name"],
+                "qty":         qty_recv,
+            })
+        elif prod["qty_tracked"]:
+            # qty-tracked: one item with qty = qty_recv
+            item_id = execute("""
+                INSERT INTO items (product_id, name, manufacturer, model, category_id,
+                                   qty, cost_price, po_number, location_id,
+                                   active, created_at, condition, notes,
+                                   extra_fields, tags)
+                VALUES (?,?,?,?,?,?,?,?,?,1,?,'New','','{}','')
+            """, [prod["id"], prod["name"], prod.get("manufacturer"),
+                  prod.get("model"), prod["category_id"],
+                  qty_recv, line["unit_cost"], po["po_number"],
+                  site_id, now])
+            _ensure_internal_sku(item_id, prod["category_id"])
+            from app.helpers import sync_item_task
+            sync_item_task(item_id, prod["name"],
+                           ["cost"] if not line["unit_cost"] else [])
+            log_action("ITEM_ADD", item_id, prod["name"],
+                       f"Auto-created from PO receipt: {po['po_number']}, qty={qty_recv}",
+                       None, {"qty": qty_recv, "source": "po_receipt"})
+            created_items.append({
+                "item_id": item_id, "name": prod["name"],
+                "qty": qty_recv, "needs_serial": False
+            })
+        else:
+            # non-qty, non-serial (unique items): create one item per unit
+            for _ in range(qty_recv):
+                item_id = execute("""
+                    INSERT INTO items (product_id, name, manufacturer, model, category_id,
+                                       cost_price, po_number, location_id,
+                                       active, created_at, condition, notes,
+                                       extra_fields, tags)
+                    VALUES (?,?,?,?,?,?,?,?,1,?,'New','','{}','')
+                """, [prod["id"], prod["name"], prod.get("manufacturer"),
+                      prod.get("model"), prod["category_id"],
+                      line["unit_cost"], po["po_number"],
+                      site_id, now])
+                _ensure_internal_sku(item_id, prod["category_id"])
+                log_action("ITEM_ADD", item_id, prod["name"],
+                           f"Auto-created from PO receipt: {po['po_number']}",
+                           None, {"source": "po_receipt"})
+            created_items.append({
+                "item_id": item_id, "name": prod["name"],
+                "qty": qty_recv, "needs_serial": False
+            })
+
+    # ── Update PO status ─────────────────────────────────────────────────────
     all_lines = query("SELECT qty_ordered, qty_received FROM po_lines WHERE po_id=?", [po_id])
     fully_received = all(r["qty_received"] >= r["qty_ordered"] for r in all_lines)
     any_received   = any(r["qty_received"] > 0 for r in all_lines)
     new_status = "received" if fully_received else ("partial" if any_received else po["status"])
     execute("UPDATE purchase_orders SET status=? WHERE id=?", [new_status, po_id])
     log_action("PO_RECEIVE", None, po["po_number"],
-               f"Goods received; PO status → {new_status}")
-    return jsonify({"ok": True, "new_status": new_status})
+               f"Goods received; status→{new_status}; {len(created_items)} items created")
+    return jsonify({
+        "ok": True,
+        "new_status":    new_status,
+        "created_items": created_items,
+        "needs_serial":  needs_serial,
+    })
 
 
 # ── Vendor Catalog ────────────────────────────────────────────────────────────

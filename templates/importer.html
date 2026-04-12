@@ -240,6 +240,15 @@
       </span>
     </div>
 
+    <!-- Link to Purchase Order (optional) -->
+    <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="font-size:13px;font-weight:600;color:#374151;white-space:nowrap">Link to PO:</div>
+      <select id="inv-po-select" class="select" style="flex:1;min-width:180px;max-width:320px">
+        <option value="">— None —</option>
+      </select>
+      <span style="font-size:11.5px;color:#94a3b8">Linking marks the PO as Received after import</span>
+    </div>
+
     <!-- Stats + preview table -->
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap" id="inv-preview-stats"></div>
     <div id="inv-preview-loading" style="display:none;text-align:center;padding:24px;color:#64748b;font-size:13px">Updating preview…</div>
@@ -856,12 +865,14 @@ async function invCommit(){
   }
   const sp = getSitePayload('inv');
   const new_rows = invCollectNewRows();
+  const linkedPo = document.getElementById('inv-po-select')?.value || null;
   const payload = {
     rows:      _invPreviewRows,
     new_rows,
     reference: document.getElementById('inv-ref').value.trim(),
     vendor,
     notes:     document.getElementById('inv-notes').value.trim(),
+    linked_po_id: linkedPo ? parseInt(linkedPo) : null,
     ...sp
   };
   try {
@@ -893,6 +904,8 @@ function invReset(){
   document.getElementById('inv-site-detected').style.display='none';
   document.getElementById('inv-new-site-wrap').style.display='none';
   document.getElementById('inv-site-select').value='';
+  const poSel = document.getElementById('inv-po-select');
+  if(poSel) poSel.value='';
   document.getElementById('inv-map-panel').style.display='none';
   document.getElementById('inv-map-chevron').style.transform='';
   document.getElementById('inv-map-saved-badge').style.display='none';
@@ -900,5 +913,21 @@ function invReset(){
   document.getElementById('inv-step-done').style.display='none';
   document.getElementById('inv-step-upload').style.display='';
 }
+
+// Load open POs for the link dropdown
+(async()=>{
+  try {
+    const d = await fetch('/api/procurement/pos').then(r=>r.json());
+    const open = (d.pos||[]).filter(p=>['draft','sent','partial'].includes(p.status));
+    const sel = document.getElementById('inv-po-select');
+    if(!sel || !open.length) return;
+    open.forEach(p=>{
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${p.po_number} — ${p.vendor_display||p.vendor_name||'No vendor'} (${p.status})`;
+      sel.appendChild(opt);
+    });
+  } catch(e){}
+})();
 </script>
 {% endblock %}

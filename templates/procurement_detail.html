@@ -95,8 +95,24 @@
         <div class="card-body">
           <p style="font-size:12.5px;color:#64748b;margin-bottom:14px">Enter quantities received for each line. Partial receives are supported.</p>
           <div id="recv-lines"></div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:#475569;cursor:pointer">
+            <input type="checkbox" id="recv-create-items" checked style="width:14px;height:14px">
+            Auto-create inventory items from received quantities
+          </label>
           <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="submitReceive()">Save Receipt</button>
         </div>
+      </div>
+
+      <!-- Receipt results panel -->
+      <div class="card" id="receipt-result-panel" style="display:none;margin-top:14px">
+        <div class="card-head" style="background:#dcfce7;color:#166534">Receipt Saved</div>
+        <div class="card-body" id="receipt-result-body"></div>
+      </div>
+
+      <!-- Discrepancy panel -->
+      <div class="card" id="discrepancy-panel" style="display:none;margin-top:14px">
+        <div class="card-head" style="background:#fef3c7;color:#92400e">Discrepancies</div>
+        <div class="card-body" id="discrepancy-body"></div>
       </div>
 
       <div class="card" style="margin-top:{% if po.status not in ['sent','partial'] %}0{% else %}14px{% endif %}">
@@ -291,6 +307,7 @@ async function loadPO(){
   renderStatusSteps();
   renderActionBar();
   renderReceivePanel();
+  renderDiscrepancies();
   document.getElementById('po-total').textContent = fmt$(poData.total_cost);
 }
 
@@ -393,13 +410,69 @@ async function submitReceive(){
     if(qty > 0) lineUpdates.push({id: parseInt(inp.dataset.lid), qty_received: qty});
   });
   if(!lineUpdates.length){alert('Enter at least one quantity to receive.'); return;}
-  const d = await api(`/api/procurement/pos/${PO_ID}/receive`, {lines: lineUpdates});
+  const createItems = document.getElementById('recv-create-items')?.checked ?? true;
+  const d = await api(`/api/procurement/pos/${PO_ID}/receive`, {
+    lines: lineUpdates,
+    create_items: createItems,
+  });
   if(!d.ok){alert(d.msg||'Error'); return;}
-  // update badge
+  // Update status badge
   const badge = document.getElementById('po-badge-top');
   badge.className = `po-badge ${d.new_status}`;
   badge.textContent = d.new_status.charAt(0).toUpperCase()+d.new_status.slice(1);
+  poData.status = d.new_status;
+  renderActionBar();
+  // Show receipt results
+  renderReceiptResult(d);
+  // Reload lines
   loadPO();
+}
+
+function renderReceiptResult(d){
+  const panel = document.getElementById('receipt-result-panel');
+  const body  = document.getElementById('receipt-result-body');
+  let html = '';
+  if(d.created_items?.length){
+    html += `<p style="font-size:13px;font-weight:600;color:#166534;margin-bottom:10px">${d.created_items.length} item${d.created_items.length!==1?'s':''} added to inventory:</p>`;
+    html += d.created_items.map(ci=>
+      `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f0fdf4;font-size:13px">
+        <span>${ci.name} ${ci.qty>1?'<span style="color:#64748b">×'+ci.qty+'</span>':''}</span>
+        <a href="/?item=${ci.item_id}" style="font-size:11px;color:#1d4ed8">View →</a>
+      </div>`).join('');
+  }
+  if(d.needs_serial?.length){
+    html += `<p style="font-size:13px;font-weight:600;color:#92400e;margin-top:${d.created_items?.length?'14px':'0'};margin-bottom:8px">${d.needs_serial.length} product${d.needs_serial.length!==1?'s':''} need serial numbers:</p>`;
+    html += d.needs_serial.map(ns=>
+      `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #fef3c7;font-size:13px">
+        <span>${ns.product_name} <span style="color:#64748b">×${ns.qty}</span></span>
+        <a href="/add-item?product_id=${ns.product_id}" style="font-size:11px;color:#1d4ed8">Add with serials →</a>
+      </div>`).join('');
+  }
+  if(!html) html = '<p style="font-size:13px;color:#64748b">Receipt recorded. No linked products to auto-create items from.</p>';
+  body.innerHTML = html;
+  panel.style.display = '';
+}
+
+function renderDiscrepancies(){
+  const panel = document.getElementById('discrepancy-panel');
+  const body  = document.getElementById('discrepancy-body');
+  const discrepant = lines.filter(l => l.qty_received > 0 && l.qty_received < l.qty_ordered);
+  if(!discrepant.length){panel.style.display='none'; return;}
+  panel.style.display='';
+  body.innerHTML = `
+    <p style="font-size:12.5px;color:#92400e;margin-bottom:12px">The following lines were not fully received. Follow up with the vendor.</p>
+    ${discrepant.map(l=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #fef3c7;font-size:13px">
+        <div>
+          <span style="font-weight:500">${l.description}</span>
+          ${l.vendor_sku?`<span style="color:#94a3b8;font-size:11px;margin-left:6px">${l.vendor_sku}</span>`:''}
+        </div>
+        <div style="text-align:right">
+          <span style="color:#92400e;font-weight:700">${l.qty_received} received</span>
+          <span style="color:#94a3b8"> / ${l.qty_ordered} ordered</span>
+          <span style="background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:6px">SHORT ${l.qty_ordered - l.qty_received}</span>
+        </div>
+      </div>`).join('')}`;
 }
 
 async function setStatus(status){
