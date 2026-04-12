@@ -3633,7 +3633,7 @@ def api_invoice_commit():
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             [ref, vendor, site_id, session.get("username"), now, len(created_ids), notes])
 
-    # Link to PO if requested: mark PO as received
+    # Link to PO if requested: mark PO as received + record po_invoice for 3-way match
     linked_po_id = d.get("linked_po_id")
     if linked_po_id:
         po = query("SELECT * FROM purchase_orders WHERE id=?", [linked_po_id], one=True)
@@ -3641,6 +3641,39 @@ def api_invoice_commit():
             execute("UPDATE purchase_orders SET status='received' WHERE id=?", [linked_po_id])
             log_action("PO_RECEIVE", None, po["po_number"],
                        f"Marked received via invoice import: ref={ref}")
+        if po:
+            # Build a po_invoice from the import rows for 3-way match
+            inv_total = sum(
+                (float(r.get("unit_price") or 0) * int(r.get("qty") or 0))
+                for r in import_rows
+            )
+            inv_id = execute("""
+                INSERT INTO po_invoices (po_id, invoice_ref, invoice_date, vendor_name,
+                                         total_amount, status, notes, created_by, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?)
+            """, [linked_po_id, ref, None, vendor, inv_total, "pending",
+                  f"Auto-recorded from invoice import", session.get("username"), now])
+            # Match import rows to po_lines by product_id or vendor_sku
+            po_lines_map = {r["product_id"]: r for r in
+                            query("SELECT * FROM po_lines WHERE po_id=?", [linked_po_id])}
+            po_lines_sku_map = {r["vendor_sku"]: r for r in
+                                query("SELECT * FROM po_lines WHERE po_id=?", [linked_po_id])
+                                if r["vendor_sku"]}
+            for r in import_rows:
+                qty       = int(r.get("qty") or 0)
+                price     = float(r.get("unit_price") or 0)
+                line_tot  = round(qty * price, 4)
+                prod_id   = int(r["product_id"]) if r.get("product_id") else None
+                vsku      = r.get("vendor_sku") or None
+                desc      = r.get("description") or ""
+                # Try to link to a po_line
+                po_line   = po_lines_map.get(prod_id) or (po_lines_sku_map.get(vsku) if vsku else None)
+                po_line_id = po_line["id"] if po_line else None
+                execute("""
+                    INSERT INTO po_invoice_lines
+                        (invoice_id, po_line_id, description, vendor_sku, qty_billed, unit_price, line_total)
+                    VALUES (?,?,?,?,?,?,?)
+                """, [inv_id, po_line_id, desc, vsku, qty, price, line_tot])
 
     return jsonify({"ok": True, "created": len(created_ids), "item_ids": created_ids})
 
@@ -4854,3 +4887,161 @@ def api_po_send(po_id):
 
     return jsonify({"ok": True, "emailed": ok,
                     "new_status": "sent" if po_d["status"] == "draft" else po_d["status"]})
+
+
+# ── 3-Way Match ───────────────────────────────────────────────────────────────
+
+@bp.route("/api/procurement/pos/<int:po_id>/invoices", methods=["GET"])
+@login_required
+@admin_required
+def api_po_invoices_list(po_id):
+    po = query("SELECT id FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    invoices = [dict(r) for r in query(
+        "SELECT * FROM po_invoices WHERE po_id=? ORDER BY created_at DESC", [po_id])]
+    for inv in invoices:
+        inv["lines"] = [dict(r) for r in query(
+            "SELECT * FROM po_invoice_lines WHERE invoice_id=? ORDER BY id", [inv["id"]])]
+    return jsonify({"ok": True, "invoices": invoices})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/invoices", methods=["POST"])
+@login_required
+@admin_required
+def api_po_invoice_create(po_id):
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    d    = request.json or {}
+    now  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    inv_ref  = (d.get("invoice_ref") or "").strip() or None
+    inv_date = (d.get("invoice_date") or "").strip() or None
+    vendor   = (d.get("vendor_name") or po["vendor_name"] or "").strip() or None
+    notes    = (d.get("notes") or "").strip() or None
+    inv_lines = d.get("lines", [])
+    total = sum(float(l.get("qty_billed", 0)) * float(l.get("unit_price", 0)) for l in inv_lines)
+    inv_id = execute("""
+        INSERT INTO po_invoices
+            (po_id, invoice_ref, invoice_date, vendor_name, total_amount, status, notes, created_by, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?)
+    """, [po_id, inv_ref, inv_date, vendor, round(total, 4), "pending", notes,
+          session.get("username"), now])
+    for l in inv_lines:
+        qty      = float(l.get("qty_billed") or 0)
+        price    = float(l.get("unit_price") or 0)
+        line_tot = round(qty * price, 4)
+        po_lid   = int(l["po_line_id"]) if l.get("po_line_id") else None
+        execute("""
+            INSERT INTO po_invoice_lines
+                (invoice_id, po_line_id, description, vendor_sku, qty_billed, unit_price, line_total)
+            VALUES (?,?,?,?,?,?,?)
+        """, [inv_id, po_lid, (l.get("description") or "").strip(), l.get("vendor_sku") or None,
+              qty, price, line_tot])
+    log_action("PO_INVOICE_ADD", None, po["po_number"],
+               f"Invoice recorded: ref={inv_ref}, total=${total:.2f}")
+    return jsonify({"ok": True, "id": inv_id})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/invoices/<int:inv_id>", methods=["PATCH"])
+@login_required
+@admin_required
+def api_po_invoice_update(po_id, inv_id):
+    inv = query("SELECT * FROM po_invoices WHERE id=? AND po_id=?", [inv_id, po_id], one=True)
+    if not inv:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    d = request.json or {}
+    updates, vals = [], []
+    status = d.get("status")
+    notes  = d.get("notes")
+    if status and status in ("pending", "approved", "flagged", "rejected"):
+        updates.append("status=?"); vals.append(status)
+    if notes is not None:
+        updates.append("notes=?"); vals.append(notes)
+    if not updates:
+        return jsonify({"ok": False, "msg": "Nothing to update"}), 400
+    vals.append(inv_id)
+    execute(f"UPDATE po_invoices SET {', '.join(updates)} WHERE id=?", vals)
+    po = query("SELECT po_number FROM purchase_orders WHERE id=?", [po_id], one=True)
+    log_action("PO_INVOICE_UPDATE", None, po["po_number"] if po else None,
+               f"Invoice {inv['invoice_ref'] or inv_id} → {status}")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/invoices/<int:inv_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def api_po_invoice_delete(po_id, inv_id):
+    inv = query("SELECT * FROM po_invoices WHERE id=? AND po_id=?", [inv_id, po_id], one=True)
+    if not inv:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    execute("DELETE FROM po_invoice_lines WHERE invoice_id=?", [inv_id])
+    execute("DELETE FROM po_invoices WHERE id=?", [inv_id])
+    po = query("SELECT po_number FROM purchase_orders WHERE id=?", [po_id], one=True)
+    log_action("PO_INVOICE_DELETE", None, po["po_number"] if po else None,
+               f"Invoice {inv['invoice_ref'] or inv_id} deleted")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/match", methods=["GET"])
+@login_required
+@admin_required
+def api_po_match(po_id):
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    po_lines = [dict(r) for r in query(
+        "SELECT * FROM po_lines WHERE po_id=? ORDER BY id", [po_id])]
+    invoices = [dict(r) for r in query(
+        "SELECT * FROM po_invoices WHERE po_id=? ORDER BY created_at DESC", [po_id])]
+    for inv in invoices:
+        inv["lines"] = [dict(r) for r in query(
+            "SELECT * FROM po_invoice_lines WHERE invoice_id=? ORDER BY id", [inv["id"]])]
+
+    PRICE_TOL = 0.01  # 1% tolerance before flagging
+    match_rows  = []
+    total_billed = 0.0
+
+    for pl in po_lines:
+        billed_qty   = 0.0
+        price_issues = []
+        for inv in invoices:
+            for il in inv["lines"]:
+                if il["po_line_id"] == pl["id"]:
+                    billed_qty  += il["qty_billed"]
+                    total_billed += il["line_total"]
+                    if pl["unit_cost"] and pl["unit_cost"] > 0:
+                        var_pct = abs(il["unit_price"] - pl["unit_cost"]) / pl["unit_cost"]
+                        if var_pct > PRICE_TOL:
+                            price_issues.append({
+                                "invoice_ref":   inv["invoice_ref"],
+                                "invoice_price": il["unit_price"],
+                                "po_price":      pl["unit_cost"],
+                                "variance_pct":  round(var_pct * 100, 2),
+                            })
+        issues = []
+        if price_issues:
+            issues.append(f"Price mismatch on {len(price_issues)} invoice(s)")
+        if billed_qty > 0 and abs(billed_qty - pl["qty_received"]) > 0.001:
+            issues.append(f"Qty billed ({billed_qty:g}) ≠ qty received ({pl['qty_received']})")
+        match_rows.append({
+            "po_line_id":   pl["id"],
+            "description":  pl["description"],
+            "vendor_sku":   pl["vendor_sku"],
+            "qty_ordered":  pl["qty_ordered"],
+            "qty_received": pl["qty_received"],
+            "po_unit_cost": pl["unit_cost"],
+            "qty_billed":   billed_qty,
+            "status":       "flagged" if issues else ("ok" if billed_qty > 0 else "pending"),
+            "issues":       issues,
+            "price_issues": price_issues,
+        })
+
+    return jsonify({
+        "ok":          True,
+        "match_rows":  match_rows,
+        "invoices":    invoices,
+        "total_billed": round(total_billed, 4),
+        "has_issues":  any(r["status"] == "flagged" for r in match_rows),
+        "po_total":    po["total_cost"] or 0,
+    })

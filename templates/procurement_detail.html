@@ -55,7 +55,7 @@
       </div>
 
       <!-- Line items card -->
-      <div class="card">
+      <div class="card" id="lines-card">
         <div class="card-head" style="display:flex;align-items:center;justify-content:space-between">
           <span>Line Items</span>
           <button class="btn btn-secondary btn-sm" id="add-line-btn" onclick="openAddLine()" {% if po.status not in ['draft','sent'] %}style="display:none"{% endif %}>+ Add Line</button>
@@ -84,6 +84,44 @@
               </tr>
             </tfoot>
           </table>
+        </div>
+      </div>
+    </div>
+
+      <!-- 3-Way Match card -->
+      <div class="card" id="match-card" style="margin-top:16px;display:none">
+        <div class="card-head" style="display:flex;align-items:center;justify-content:space-between">
+          <span>3-Way Match</span>
+          <button class="btn btn-secondary btn-sm" onclick="openInvoiceModal()">+ Record Invoice</button>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div id="match-alert" style="display:none;padding:10px 18px;font-size:13px;border-bottom:1px solid #e5e3de"></div>
+          <table class="po-table" id="match-table">
+            <thead>
+              <tr>
+                <th style="padding-left:20px">Description</th>
+                <th style="text-align:center">Ordered</th>
+                <th style="text-align:center">Received</th>
+                <th style="text-align:center">Billed</th>
+                <th style="text-align:right">PO Price</th>
+                <th style="text-align:center">Match</th>
+              </tr>
+            </thead>
+            <tbody id="match-body">
+              <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px">Loading…</td></tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="3" style="text-align:right;padding:10px 14px;font-size:12px;font-weight:600;color:#64748b;border-top:2px solid #e5e3de">Total Billed</td>
+                <td colspan="3" style="padding:10px 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;border-top:2px solid #e5e3de" id="match-billed-total">—</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <!-- Invoices list -->
+        <div id="invoices-section" style="border-top:2px solid #e5e3de">
+          <div style="padding:12px 18px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;border-bottom:1px solid #f5f4f1">Recorded Invoices</div>
+          <div id="invoices-list" style="padding:0 18px"></div>
         </div>
       </div>
     </div>
@@ -249,6 +287,56 @@
   </div>
 </div>
 
+<!-- Record Invoice modal -->
+<div id="invoiceModal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeInvoiceModal()">
+  <div class="modal-box" style="width:620px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-head">
+      <span class="modal-title">Record Vendor Invoice</span>
+      <button class="modal-close" onclick="closeInvoiceModal()">×</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px">
+        <div class="form-row">
+          <label class="form-label">Invoice Reference</label>
+          <input id="inv-ref" class="input" placeholder="e.g. INV-2024-00182">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Invoice Date</label>
+          <input id="inv-date" class="input" type="date">
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Notes (optional)</label>
+        <textarea id="inv-notes" class="input" rows="2" style="resize:vertical" placeholder="Any discrepancy notes…"></textarea>
+      </div>
+      <div style="margin-top:4px">
+        <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:8px">Line Items (from this invoice)</div>
+        <table class="po-table" style="margin-bottom:10px">
+          <thead>
+            <tr>
+              <th style="padding-left:8px">Description</th>
+              <th style="text-align:center">Qty Billed</th>
+              <th style="text-align:right">Unit Price</th>
+              <th style="text-align:right">Total</th>
+            </tr>
+          </thead>
+          <tbody id="inv-lines-body"></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3" style="text-align:right;padding:8px;font-size:12px;font-weight:600;color:#64748b;border-top:1px solid #e5e3de">Invoice Total</td>
+              <td style="text-align:right;padding:8px;font-family:'IBM Plex Mono',monospace;font-weight:700;border-top:1px solid #e5e3de" id="inv-total-display">$0.00</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeInvoiceModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveInvoice()">Record Invoice</button>
+    </div>
+  </div>
+</div>
+
 <style>
 .po-detail-grid{display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start}
 .card{background:#fff;border:1px solid #e5e3de;border-radius:10px;overflow:hidden}
@@ -309,6 +397,7 @@ async function loadPO(){
   renderReceivePanel();
   renderDiscrepancies();
   document.getElementById('po-total').textContent = fmt$(poData.total_cost);
+  loadMatch();
 }
 
 function renderLines(){
@@ -710,6 +799,184 @@ function pickCatalogRow(r){
   recalcLine();
   document.getElementById('l-catalog-results').style.display='none';
   document.getElementById('l-catalog-search').value='';
+}
+
+// ── 3-Way Match ───────────────────────────────────────────────────────────────
+let matchData = null;
+
+async function loadMatch(){
+  const card = document.getElementById('match-card');
+  // Only show for received or closed POs
+  if(!poData || !['received','closed','partial'].includes(poData.status)){
+    card.style.display='none'; return;
+  }
+  card.style.display='';
+  const d = await fetch(`/api/procurement/pos/${PO_ID}/match`).then(r=>r.json());
+  if(!d.ok) return;
+  matchData = d;
+  renderMatchTable(d);
+  renderInvoicesList(d.invoices);
+}
+
+function renderMatchTable(d){
+  const tbody = document.getElementById('match-body');
+  const alert = document.getElementById('match-alert');
+
+  if(!d.match_rows.length){
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px">No lines.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = d.match_rows.map(r => {
+    const statusBadge = r.status==='ok'
+      ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">OK</span>`
+      : r.status==='flagged'
+      ? `<span style="background:#fee2e2;color:#991b1b;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">FLAGGED</span>`
+      : `<span style="background:#f1f5f9;color:#64748b;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">NO INVOICE</span>`;
+    const billedColor = r.qty_billed===0 ? '#94a3b8' :
+                        r.status==='flagged' ? '#991b1b' : '#166534';
+    const issueHtml = r.issues.length
+      ? `<div style="font-size:11px;color:#991b1b;margin-top:3px">${r.issues.join(' · ')}</div>` : '';
+    return `<tr>
+      <td style="font-weight:500;padding-left:20px">
+        ${r.description}
+        ${r.vendor_sku?`<span style="color:#94a3b8;font-size:11px;margin-left:6px">${r.vendor_sku}</span>`:''}
+        ${issueHtml}
+      </td>
+      <td style="text-align:center">${r.qty_ordered}</td>
+      <td style="text-align:center">${r.qty_received}</td>
+      <td style="text-align:center;color:${billedColor};font-weight:${r.qty_billed?'700':'400'}">${r.qty_billed||'—'}</td>
+      <td style="text-align:right;font-family:'IBM Plex Mono',monospace">${fmt$(r.po_unit_cost)}</td>
+      <td style="text-align:center">${statusBadge}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('match-billed-total').textContent = fmt$(d.total_billed);
+
+  if(d.has_issues){
+    alert.style.display='block';
+    alert.style.background='#fee2e2'; alert.style.color='#991b1b';
+    alert.innerHTML = '<strong>Mismatches detected.</strong> Review flagged lines before approving invoices for payment.';
+  } else if(d.total_billed > 0){
+    alert.style.display='block';
+    alert.style.background='#dcfce7'; alert.style.color='#166534';
+    alert.innerHTML = `<strong>All invoiced lines match.</strong> PO total: ${fmt$(d.po_total)} · Billed: ${fmt$(d.total_billed)}`;
+  } else {
+    alert.style.display='none';
+  }
+}
+
+function renderInvoicesList(invoices){
+  const container = document.getElementById('invoices-list');
+  if(!invoices.length){
+    container.innerHTML='<p style="padding:14px 0;font-size:13px;color:#94a3b8">No invoices recorded yet. Click "+ Record Invoice" to add one.</p>';
+    return;
+  }
+  const statusColor = {pending:'#475569',approved:'#166534',flagged:'#991b1b',rejected:'#64748b'};
+  const statusBg    = {pending:'#f1f5f9',approved:'#dcfce7',flagged:'#fee2e2',rejected:'#e9e7e3'};
+  container.innerHTML = invoices.map(inv=>`
+    <div style="padding:12px 0;border-bottom:1px solid #f5f4f1;display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#0f172a">${inv.invoice_ref||'(no ref)'}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px">${inv.invoice_date||''} · ${inv.lines.length} line${inv.lines.length!==1?'s':''} · ${fmt$(inv.total_amount)}${inv.notes?` · ${inv.notes}`:''}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <span style="background:${statusBg[inv.status]||'#f1f5f9'};color:${statusColor[inv.status]||'#475569'};font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase">${inv.status}</span>
+        ${inv.status==='pending'||inv.status==='flagged' ? `<button class="btn btn-secondary btn-sm" onclick="setInvoiceStatus(${inv.id},'approved')" style="font-size:11px">Approve</button>
+        <button class="btn btn-secondary btn-sm" onclick="setInvoiceStatus(${inv.id},'flagged')" style="font-size:11px;color:#d97706">Flag</button>` : ''}
+        ${inv.status==='approved' ? `<button class="btn btn-secondary btn-sm" onclick="setInvoiceStatus(${inv.id},'pending')" style="font-size:11px">Reopen</button>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="deleteInvoice(${inv.id})" style="color:#b91c1c;font-size:11px">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+async function setInvoiceStatus(invId, status){
+  const d = await api(`/api/procurement/pos/${PO_ID}/invoices/${invId}`, {status}, 'PATCH');
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  loadMatch();
+}
+
+async function deleteInvoice(invId){
+  if(!confirm('Delete this invoice record?')) return;
+  const d = await api(`/api/procurement/pos/${PO_ID}/invoices/${invId}`, null, 'DELETE');
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  loadMatch();
+}
+
+// ── Record Invoice modal ──────────────────────────────────────────────────────
+function openInvoiceModal(){
+  document.getElementById('inv-ref').value   = '';
+  document.getElementById('inv-date').value  = new Date().toISOString().slice(0,10);
+  document.getElementById('inv-notes').value = '';
+  document.getElementById('inv-total-display').textContent = '$0.00';
+  // Populate lines from PO lines
+  const tbody = document.getElementById('inv-lines-body');
+  tbody.innerHTML = lines.map(l=>`
+    <tr data-lid="${l.id}">
+      <td style="padding:6px 8px">
+        <div style="font-weight:500;font-size:12.5px">${l.description}</div>
+        ${l.vendor_sku?`<div style="font-size:11px;color:#94a3b8">${l.vendor_sku}</div>`:''}
+      </td>
+      <td style="padding:6px 8px;text-align:center">
+        <input type="number" min="0" step="0.001" value="${l.qty_received||0}"
+               class="input inv-qty" style="width:70px;padding:4px 8px;font-size:12px"
+               oninput="recalcInvTotal()">
+      </td>
+      <td style="padding:6px 8px;text-align:right">
+        <input type="number" min="0" step="0.01" value="${Number(l.unit_cost||0).toFixed(2)}"
+               class="input inv-price" style="width:90px;padding:4px 8px;font-size:12px"
+               oninput="recalcInvTotal()">
+      </td>
+      <td style="padding:6px 8px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px" class="inv-line-total">
+        ${fmt$((l.qty_received||0) * (l.unit_cost||0))}
+      </td>
+    </tr>`).join('');
+  recalcInvTotal();
+  document.getElementById('invoiceModal').style.display='flex';
+}
+
+function closeInvoiceModal(){document.getElementById('invoiceModal').style.display='none'}
+
+function recalcInvTotal(){
+  const rows = document.querySelectorAll('#inv-lines-body tr');
+  let total = 0;
+  rows.forEach(row=>{
+    const qty   = parseFloat(row.querySelector('.inv-qty')?.value)||0;
+    const price = parseFloat(row.querySelector('.inv-price')?.value)||0;
+    const lt    = qty * price;
+    total += lt;
+    row.querySelector('.inv-line-total').textContent = fmt$(lt);
+  });
+  document.getElementById('inv-total-display').textContent = fmt$(total);
+}
+
+async function saveInvoice(){
+  const invLines = [];
+  const rows = document.querySelectorAll('#inv-lines-body tr');
+  rows.forEach((row, i)=>{
+    const lid   = parseInt(row.dataset.lid);
+    const qty   = parseFloat(row.querySelector('.inv-qty')?.value)||0;
+    const price = parseFloat(row.querySelector('.inv-price')?.value)||0;
+    if(qty > 0){
+      invLines.push({
+        po_line_id:  lid,
+        description: lines[i]?.description || '',
+        vendor_sku:  lines[i]?.vendor_sku  || null,
+        qty_billed:  qty,
+        unit_price:  price,
+      });
+    }
+  });
+  if(!invLines.length){alert('Enter at least one billed quantity.'); return;}
+  const d = await api(`/api/procurement/pos/${PO_ID}/invoices`, {
+    invoice_ref:  document.getElementById('inv-ref').value.trim()||null,
+    invoice_date: document.getElementById('inv-date').value||null,
+    notes:        document.getElementById('inv-notes').value.trim()||null,
+    lines:        invLines,
+  });
+  if(!d.ok){alert(d.msg||'Error'); return;}
+  closeInvoiceModal();
+  loadMatch();
 }
 
 loadPO();

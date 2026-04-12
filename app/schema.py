@@ -103,6 +103,9 @@ MIGRATIONS = [
     ("distributors", "contact_name", "TEXT"),
     ("distributors", "phone", "TEXT"),
 
+    # po_invoices / po_invoice_lines — 3-way match
+    # (these are new tables; added via CREATE TABLE IF NOT EXISTS in DDL)
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
 ]
 
@@ -480,6 +483,28 @@ def _init_db_conn(db):
             unit_price REAL,
             preferred  INTEGER NOT NULL DEFAULT 0,
             active     INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS po_invoices (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            po_id        INTEGER NOT NULL REFERENCES purchase_orders(id),
+            invoice_ref  TEXT,
+            invoice_date TEXT,
+            vendor_name  TEXT,
+            total_amount REAL DEFAULT 0,
+            status       TEXT NOT NULL DEFAULT 'pending',
+            notes        TEXT,
+            created_by   TEXT,
+            created_at   TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS po_invoice_lines (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_id  INTEGER NOT NULL REFERENCES po_invoices(id),
+            po_line_id  INTEGER REFERENCES po_lines(id),
+            description TEXT NOT NULL,
+            vendor_sku  TEXT,
+            qty_billed  REAL NOT NULL DEFAULT 0,
+            unit_price  REAL NOT NULL DEFAULT 0,
+            line_total  REAL NOT NULL DEFAULT 0
         );
     """)
 
