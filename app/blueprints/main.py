@@ -308,6 +308,13 @@ def procurement_detail_page(po_id):
                            po=dict(po), vendors=vendors, sites=sites, products=products)
 
 
+@bp.route("/procurement/analytics")
+@login_required
+@admin_required
+def procurement_analytics_page():
+    return render_template("procurement_analytics.html")
+
+
 # ── Low stock API (lives here because it's tightly coupled to the page) ───────
 
 @bp.route("/api/procurement/low-stock-orderables")

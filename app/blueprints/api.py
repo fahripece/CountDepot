@@ -5045,3 +5045,101 @@ def api_po_match(po_id):
         "has_issues":  any(r["status"] == "flagged" for r in match_rows),
         "po_total":    po["total_cost"] or 0,
     })
+
+
+# ── Spend Analytics ───────────────────────────────────────────────────────────
+
+@bp.route("/api/procurement/analytics")
+@login_required
+@admin_required
+def api_procurement_analytics():
+    date_from, date_to = _parse_date_range(request)
+    df_sql, df_args = _date_filter_sql("po.created_at", date_from, date_to)
+
+    # All non-draft POs count as spend committed
+    status_clause = "po.status IN ('sent','partial','received','closed')"
+    base_where  = f"WHERE {status_clause}{df_sql}"
+    base_args   = df_args[:]
+
+    # ── KPIs ─────────────────────────────────────────────────────────────────
+    kpi = query(
+        f"SELECT COUNT(*) as po_count, SUM(po.total_cost) as total_spend, "
+        f"AVG(po.total_cost) as avg_po_value "
+        f"FROM purchase_orders po {base_where}", base_args, one=True)
+
+    month_start = datetime.now().strftime("%Y-%m-01")
+    this_month  = query(
+        "SELECT SUM(total_cost) as t FROM purchase_orders "
+        f"WHERE {status_clause.replace('po.','').replace('po.','')} AND created_at >= ?",
+        [month_start], one=True)
+
+    open_val = query(
+        "SELECT SUM(total_cost) as t FROM purchase_orders "
+        "WHERE status IN ('draft','sent','partial')", one=True)
+
+    # ── By vendor ─────────────────────────────────────────────────────────────
+    by_vendor_rows = query(
+        f"SELECT COALESCE(po.vendor_name, d.name, 'Unknown') as vendor_name, "
+        f"COUNT(*) as po_count, SUM(po.total_cost) as total_spend "
+        f"FROM purchase_orders po LEFT JOIN distributors d ON d.id = po.vendor_id "
+        f"{base_where} GROUP BY vendor_name ORDER BY total_spend DESC LIMIT 20",
+        base_args)
+    by_vendor = [dict(r) for r in by_vendor_rows]
+    grand_vendor = sum(r["total_spend"] or 0 for r in by_vendor)
+    for r in by_vendor:
+        r["percent"] = round((r["total_spend"] or 0) / grand_vendor * 100, 1) if grand_vendor else 0
+
+    # ── By month (last 12 months regardless of period filter) ─────────────────
+    by_month = [dict(r) for r in query(
+        "SELECT strftime('%Y-%m', created_at) as month, "
+        "SUM(total_cost) as total_spend, COUNT(*) as po_count "
+        f"FROM purchase_orders WHERE {status_clause.replace('po.', '')} "
+        "AND created_at >= datetime('now', '-12 months') "
+        "GROUP BY month ORDER BY month")]
+
+    # ── Top line items ────────────────────────────────────────────────────────
+    top_items = [dict(r) for r in query(
+        "SELECT pl.description, COUNT(*) as line_count, "
+        "SUM(pl.total_cost) as total_spend, "
+        "SUM(pl.qty_ordered) as total_qty, "
+        "AVG(pl.unit_cost) as avg_unit_cost "
+        "FROM po_lines pl JOIN purchase_orders po ON po.id = pl.po_id "
+        f"{base_where} GROUP BY LOWER(pl.description) "
+        "ORDER BY total_spend DESC LIMIT 15", base_args)]
+
+    # ── Monthly budget (from settings) ────────────────────────────────────────
+    budget_row = query("SELECT value FROM settings WHERE key='monthly_po_budget'", one=True)
+    monthly_budget = float(budget_row["value"]) if budget_row and budget_row["value"] else 0
+
+    return jsonify({
+        "ok":     True,
+        "period": {"from": date_from, "to": date_to},
+        "kpi":    {
+            "po_count":      kpi["po_count"]    or 0,
+            "total_spend":   kpi["total_spend"] or 0,
+            "avg_po_value":  kpi["avg_po_value"]or 0,
+            "this_month":    this_month["t"]    or 0,
+            "open_value":    open_val["t"]      or 0,
+        },
+        "by_vendor":      by_vendor,
+        "by_month":       by_month,
+        "top_items":      top_items,
+        "monthly_budget": monthly_budget,
+    })
+
+
+@bp.route("/api/procurement/analytics/budget", methods=["POST"])
+@login_required
+@admin_required
+def api_procurement_set_budget():
+    d = request.json or {}
+    val = d.get("monthly_budget")
+    if val is None:
+        return jsonify({"ok": False, "msg": "monthly_budget required"}), 400
+    try:
+        val = float(val)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "msg": "Invalid value"}), 400
+    execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            ["monthly_po_budget", str(val)])
+    return jsonify({"ok": True})
