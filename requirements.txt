@@ -5,3 +5,4 @@ bcrypt>=4.0
 stripe>=7.0
 python-dotenv>=1.0
 pdfplumber>=0.10
+reportlab>=4.0

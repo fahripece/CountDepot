@@ -9,25 +9,38 @@ import smtplib
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text      import MIMEText
+from email.mime.base      import MIMEBase
+from email               import encoders
 from config import Config
 
 log = logging.getLogger(__name__)
 
 
-def send_email(to: str, subject: str, html: str, text: str = "") -> bool:
-    """Send an email. Returns True on success, False on failure."""
+def send_email(to: str, subject: str, html: str, text: str = "",
+               attachments: list = None) -> bool:
+    """Send an email. Returns True on success, False on failure.
+    attachments: list of (filename, bytes, mimetype) tuples."""
     if not Config.SMTP_HOST:
         log.warning(f"[MAIL no-SMTP] To: {to} | Subject: {subject}")
         log.warning(f"[MAIL body] {text or html[:300]}")
         return False
     try:
-        msg = MIMEMultipart("alternative")
+        msg = MIMEMultipart("mixed")
         msg["Subject"] = subject
         msg["From"]    = Config.SMTP_FROM
         msg["To"]      = to
+        alt = MIMEMultipart("alternative")
         if text:
-            msg.attach(MIMEText(text, "plain"))
-        msg.attach(MIMEText(html, "html"))
+            alt.attach(MIMEText(text, "plain"))
+        alt.attach(MIMEText(html, "html"))
+        msg.attach(alt)
+        for fname, data, mime in (attachments or []):
+            maintype, subtype = mime.split("/", 1)
+            part = MIMEBase(maintype, subtype)
+            part.set_payload(data)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment", filename=fname)
+            msg.attach(part)
         with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT, timeout=10) as smtp:
             if Config.SMTP_USE_TLS:
                 smtp.starttls()
@@ -200,3 +213,29 @@ def send_password_reset_email(to: str, slug: str, token: str) -> bool:
 </div>"""
     text = f"Reset your CountDepot password\n\nLink (expires 1 hour): {url}\n\nIf you didn't request this, ignore this email.\n"
     return send_email(to, subject, html, text)
+
+
+def send_po_email(to: str, po_number: str, vendor_name: str,
+                  sender_name: str, notes: str, pdf_bytes: bytes) -> bool:
+    subject = f"Purchase Order {po_number} from {sender_name}"
+    notes_block = f'<p style="font-size:13px;color:#475569;margin-bottom:20px;line-height:1.6"><em>{notes}</em></p>' if notes else ""
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Purchase Order {po_number}</h1>
+  <p style="color:#64748b;margin-bottom:20px">Hi {vendor_name} — please find our purchase order attached as a PDF.</p>
+  {notes_block}
+  <div style="background:#f8f7f4;border-radius:8px;padding:14px 18px;margin-bottom:20px">
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px">PO NUMBER</div>
+    <div style="font-size:16px;font-weight:700;font-family:monospace">{po_number}</div>
+    <div style="margin-top:10px;font-size:11px;color:#94a3b8">ISSUED BY</div>
+    <div style="font-size:13px;font-weight:600">{sender_name}</div>
+  </div>
+  <p style="font-size:12px;color:#94a3b8;margin-top:24px">Please confirm receipt and expected delivery date by replying to this email.</p>
+</div>"""
+    text = (f"Purchase Order {po_number}\n\nHi {vendor_name},\n\n"
+            f"Please find our purchase order {po_number} attached.\n\n"
+            f"Issued by: {sender_name}\n"
+            f"{('Notes: ' + notes + chr(10)) if notes else ''}"
+            f"\nPlease confirm receipt by replying to this email.\n")
+    return send_email(to, subject, html, text,
+                      attachments=[(f"{po_number}.pdf", pdf_bytes, "application/pdf")])

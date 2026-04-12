@@ -4108,7 +4108,14 @@ def api_po_create():
 @login_required
 @admin_required
 def api_po_get(po_id):
-    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    po = query("""
+        SELECT po.*, d.name as vendor_display, d.email as _vendor_email,
+               l.name as site_display
+        FROM purchase_orders po
+        LEFT JOIN distributors d ON d.id = po.vendor_id
+        LEFT JOIN locations l ON l.id = po.site_id
+        WHERE po.id=?
+    """, [po_id], one=True)
     if not po:
         return jsonify({"ok": False, "msg": "Not found"}), 404
     lines = [dict(r) for r in query(
@@ -4503,3 +4510,260 @@ def api_set_preferred_vendor(product_id):
     log_action("SET_PREFERRED_VENDOR", product_id, None,
                f"Preferred vendor set to vendor_id={vendor_id}")
     return jsonify({"ok": True})
+
+
+# ── PO PDF generation + email sending ────────────────────────────────────────
+
+def _generate_po_pdf(po, lines, tenant_name):
+    """Generate a professional PDF for a purchase order. Returns bytes."""
+    import io as _io
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, HRFlowable)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_LEFT
+
+    buf = _io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter,
+                            leftMargin=0.75*inch, rightMargin=0.75*inch,
+                            topMargin=0.75*inch, bottomMargin=0.75*inch)
+
+    styles = getSampleStyleSheet()
+    navy   = colors.HexColor("#0f172a")
+    blue   = colors.HexColor("#1d4ed8")
+    grey   = colors.HexColor("#64748b")
+    lgrey  = colors.HexColor("#f8f7f4")
+    border = colors.HexColor("#e5e3de")
+
+    h1  = ParagraphStyle("h1",  fontSize=22, textColor=navy,  fontName="Helvetica-Bold",  spaceAfter=2)
+    sub = ParagraphStyle("sub", fontSize=10, textColor=grey,  fontName="Helvetica",        spaceAfter=0)
+    lbl = ParagraphStyle("lbl", fontSize=8,  textColor=grey,  fontName="Helvetica-Bold",   spaceAfter=2,
+                         textTransform="uppercase", letterSpacing=0.5)
+    val = ParagraphStyle("val", fontSize=11, textColor=navy,  fontName="Helvetica-Bold",   spaceAfter=0)
+    sm  = ParagraphStyle("sm",  fontSize=9,  textColor=grey,  fontName="Helvetica")
+    th  = ParagraphStyle("th",  fontSize=8,  textColor=grey,  fontName="Helvetica-Bold",   spaceAfter=0)
+    td  = ParagraphStyle("td",  fontSize=10, textColor=navy,  fontName="Helvetica")
+    tdr = ParagraphStyle("tdr", fontSize=10, textColor=navy,  fontName="Helvetica",        alignment=TA_RIGHT)
+    tdc = ParagraphStyle("tdc", fontSize=10, textColor=navy,  fontName="Helvetica",        alignment=TA_CENTER)
+    tot = ParagraphStyle("tot", fontSize=11, textColor=navy,  fontName="Helvetica-Bold",   alignment=TA_RIGHT)
+
+    page_w = letter[0] - 1.5*inch
+
+    def fmtm(n):
+        return f"${float(n or 0):,.2f}"
+
+    story = []
+
+    # ── Header ──────────────────────────────────────────────────────────────────
+    header_data = [[
+        Paragraph(tenant_name or "CountDepot", h1),
+        Paragraph("PURCHASE ORDER", ParagraphStyle("po", fontSize=14, textColor=blue,
+                   fontName="Helvetica-Bold", alignment=TA_RIGHT)),
+    ]]
+    header_tbl = Table(header_data, colWidths=[page_w*0.6, page_w*0.4])
+    header_tbl.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "MIDDLE")]))
+    story.append(header_tbl)
+    story.append(HRFlowable(width="100%", thickness=1, color=border, spaceAfter=14, spaceBefore=8))
+
+    # ── PO meta ──────────────────────────────────────────────────────────────────
+    status_colors = {
+        "draft": "#475569", "sent": "#1d4ed8", "partial": "#92400e",
+        "received": "#166534", "closed": "#64748b"
+    }
+    sc = status_colors.get(po.get("status",""), "#475569")
+    meta_left = [
+        [Paragraph("PO NUMBER", lbl), Paragraph("VENDOR", lbl)],
+        [Paragraph(po["po_number"], ParagraphStyle("pn", fontSize=14, textColor=navy,
+                   fontName="Helvetica-Bold")),
+         Paragraph(po.get("vendor_name") or "—", val)],
+        [Spacer(1,4), Spacer(1,4)],
+        [Paragraph("STATUS", lbl), Paragraph("SITE / SHIP TO", lbl)],
+        [Paragraph(po.get("status","").upper(),
+                   ParagraphStyle("st", fontSize=10, textColor=colors.HexColor(sc),
+                                  fontName="Helvetica-Bold")),
+         Paragraph(po.get("site_display") or "—", val)],
+    ]
+    meta_right = [
+        [Paragraph("DATE ISSUED", lbl), Paragraph("EXPECTED DELIVERY", lbl)],
+        [Paragraph((po.get("created_at") or "")[:10], val),
+         Paragraph(po.get("expected_date") or "—", val)],
+        [Spacer(1,4), Spacer(1,4)],
+        [Paragraph("CREATED BY", lbl), Paragraph("", lbl)],
+        [Paragraph(po.get("created_by") or "—", val), Paragraph("", val)],
+    ]
+    col = page_w / 4
+    meta_tbl = Table(
+        [[Table(meta_left,  colWidths=[col, col]),
+          Table(meta_right, colWidths=[col, col])]],
+        colWidths=[page_w*0.5, page_w*0.5]
+    )
+    meta_tbl.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP")]))
+    story.append(meta_tbl)
+    story.append(Spacer(1, 16))
+
+    if po.get("notes"):
+        story.append(Paragraph("Notes", lbl))
+        story.append(Paragraph(po["notes"],
+                                ParagraphStyle("notes", fontSize=10, textColor=grey,
+                                               fontName="Helvetica", spaceAfter=12)))
+    story.append(HRFlowable(width="100%", thickness=1, color=border, spaceAfter=10, spaceBefore=4))
+
+    # ── Line items table ─────────────────────────────────────────────────────────
+    col_w = [page_w*0.35, page_w*0.18, page_w*0.10, page_w*0.10, page_w*0.13, page_w*0.14]
+    tbl_data = [[
+        Paragraph("Description", th), Paragraph("Vendor SKU", th),
+        Paragraph("Qty", ParagraphStyle("thc", fontSize=8, textColor=grey,
+                         fontName="Helvetica-Bold", alignment=TA_CENTER)),
+        Paragraph("Rcv'd", ParagraphStyle("thc2", fontSize=8, textColor=grey,
+                          fontName="Helvetica-Bold", alignment=TA_CENTER)),
+        Paragraph("Unit Cost", ParagraphStyle("thr", fontSize=8, textColor=grey,
+                          fontName="Helvetica-Bold", alignment=TA_RIGHT)),
+        Paragraph("Total", ParagraphStyle("thr2", fontSize=8, textColor=grey,
+                         fontName="Helvetica-Bold", alignment=TA_RIGHT)),
+    ]]
+    for line in lines:
+        tbl_data.append([
+            Paragraph(str(line.get("description") or ""), td),
+            Paragraph(str(line.get("vendor_sku") or "—"),
+                      ParagraphStyle("sku", fontSize=9, textColor=grey, fontName="Helvetica")),
+            Paragraph(str(line.get("qty_ordered") or 0), tdc),
+            Paragraph(str(line.get("qty_received") or 0), tdc),
+            Paragraph(fmtm(line.get("unit_cost")), tdr),
+            Paragraph(fmtm(line.get("total_cost")), tdr),
+        ])
+    # Total row
+    tbl_data.append([
+        Paragraph("", td), Paragraph("", td), Paragraph("", td), Paragraph("", td),
+        Paragraph("TOTAL", ParagraphStyle("totl", fontSize=9, textColor=grey,
+                           fontName="Helvetica-Bold", alignment=TA_RIGHT)),
+        Paragraph(fmtm(po.get("total_cost")), tot),
+    ])
+
+    lines_tbl = Table(tbl_data, colWidths=col_w, repeatRows=1)
+    row_count = len(tbl_data)
+    lines_tbl.setStyle(TableStyle([
+        # Header
+        ("BACKGROUND",  (0, 0), (-1, 0), lgrey),
+        ("TOPPADDING",  (0, 0), (-1, 0), 8),
+        ("BOTTOMPADDING",(0, 0), (-1, 0), 8),
+        ("LINEBELOW",   (0, 0), (-1, 0), 1, border),
+        # Data rows
+        ("TOPPADDING",  (0, 1), (-1, -2), 7),
+        ("BOTTOMPADDING",(0, 1), (-1, -2), 7),
+        ("LINEBELOW",   (0, 1), (-1, -2), 0.5, colors.HexColor("#f5f4f1")),
+        # Total row
+        ("TOPPADDING",  (0, -1), (-1, -1), 8),
+        ("BOTTOMPADDING",(0, -1), (-1, -1), 8),
+        ("LINEABOVE",   (0, -1), (-1, -1), 1.5, navy),
+        ("BACKGROUND",  (0, -1), (-1, -1), lgrey),
+        # Outer border
+        ("BOX",         (0, 0), (-1, -1), 1, border),
+        ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    story.append(lines_tbl)
+
+    # ── Footer ───────────────────────────────────────────────────────────────────
+    story.append(Spacer(1, 20))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=border, spaceAfter=8))
+    story.append(Paragraph(
+        f"This purchase order was generated by {tenant_name or 'CountDepot'}. "
+        f"Please confirm receipt and expected delivery by replying to this email.",
+        ParagraphStyle("footer", fontSize=8, textColor=grey, fontName="Helvetica")))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/pdf")
+@login_required
+@admin_required
+def api_po_pdf(po_id):
+    """Generate and return the PO as a PDF download."""
+    po = query("""
+        SELECT po.*, d.name as vendor_display, l.name as site_display
+        FROM purchase_orders po
+        LEFT JOIN distributors d ON d.id = po.vendor_id
+        LEFT JOIN locations l ON l.id = po.site_id
+        WHERE po.id=?
+    """, [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    lines = [dict(r) for r in query("SELECT * FROM po_lines WHERE po_id=? ORDER BY id", [po_id])]
+    po_d  = dict(po)
+    if not po_d.get("vendor_name"):
+        po_d["vendor_name"] = po_d.get("vendor_display")
+
+    from flask import g
+    tenant_name = g.tenant.get("name", "") if hasattr(g, "tenant") and g.tenant else ""
+    pdf_bytes = _generate_po_pdf(po_d, lines, tenant_name)
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"{po_d['po_number']}.pdf"
+    )
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/send", methods=["POST"])
+@login_required
+@admin_required
+def api_po_send(po_id):
+    """Generate PDF and email it to the vendor."""
+    po = query("""
+        SELECT po.*, d.name as vendor_display, d.email as vendor_email,
+               l.name as site_display
+        FROM purchase_orders po
+        LEFT JOIN distributors d ON d.id = po.vendor_id
+        LEFT JOIN locations l ON l.id = po.site_id
+        WHERE po.id=?
+    """, [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+
+    d = request.json or {}
+    to_email    = (d.get("to_email") or po["vendor_email"] or "").strip()
+    extra_notes = (d.get("notes") or po["notes"] or "").strip()
+
+    if not to_email:
+        return jsonify({"ok": False, "msg": "Vendor email required"}), 400
+
+    po_d = dict(po)
+    if not po_d.get("vendor_name"):
+        po_d["vendor_name"] = po_d.get("vendor_display") or "Vendor"
+
+    lines = [dict(r) for r in query("SELECT * FROM po_lines WHERE po_id=? ORDER BY id", [po_id])]
+
+    from flask import g
+    tenant_name = g.tenant.get("name", "") if hasattr(g, "tenant") and g.tenant else "CountDepot"
+
+    try:
+        pdf_bytes = _generate_po_pdf(po_d, lines, tenant_name)
+    except Exception as e:
+        return jsonify({"ok": False, "msg": f"PDF generation failed: {e}"}), 500
+
+    from app.mailer import send_po_email
+    ok = send_po_email(
+        to=to_email,
+        po_number=po_d["po_number"],
+        vendor_name=po_d["vendor_name"],
+        sender_name=tenant_name,
+        notes=extra_notes,
+        pdf_bytes=pdf_bytes
+    )
+
+    # Mark PO as sent if it was draft
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if po_d["status"] == "draft":
+        execute("UPDATE purchase_orders SET status='sent', sent_at=? WHERE id=?", [now, po_id])
+
+    # Save email back to distributor if we have a vendor_id and no email on file
+    if po_d.get("vendor_id") and not po_d.get("vendor_email"):
+        execute("UPDATE distributors SET email=? WHERE id=?", [to_email, po_d["vendor_id"]])
+
+    log_action("PO_SENT", None, po_d["po_number"],
+               f"PO emailed to {to_email}; smtp_ok={ok}")
+
+    return jsonify({"ok": True, "emailed": ok,
+                    "new_status": "sent" if po_d["status"] == "draft" else po_d["status"]})

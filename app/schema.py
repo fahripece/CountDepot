@@ -98,6 +98,11 @@ MIGRATIONS = [
     # products — vendor SKU for invoice import matching
     ("products", "vendor_sku", "TEXT"),
 
+    # distributors — email for PO sending
+    ("distributors", "email", "TEXT"),
+    ("distributors", "contact_name", "TEXT"),
+    ("distributors", "phone", "TEXT"),
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
 ]
 
@@ -246,8 +251,11 @@ def _init_db_conn(db):
             active INTEGER DEFAULT 1
         );
         CREATE TABLE IF NOT EXISTS distributors (
-            id   INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            name         TEXT UNIQUE NOT NULL,
+            email        TEXT,
+            contact_name TEXT,
+            phone        TEXT
         );
         CREATE TABLE IF NOT EXISTS tasks (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,

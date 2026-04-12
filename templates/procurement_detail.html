@@ -161,6 +161,35 @@
   </div>
 </div>
 
+<!-- Send PO modal -->
+<div id="sendModal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeSend()">
+  <div class="modal-box" style="width:460px">
+    <div class="modal-head">
+      <span class="modal-title">Send Purchase Order</span>
+      <button class="modal-close" onclick="closeSend()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:#475569;margin-bottom:16px;line-height:1.6">
+        The PO will be generated as a PDF and emailed to the vendor. Sending will mark this PO as <strong>Sent</strong> if it is currently Draft.
+      </p>
+      <div class="form-row">
+        <label class="form-label">Vendor Email <span style="color:#b91c1c">*</span></label>
+        <input id="send-email" class="input" type="email" placeholder="vendor@example.com">
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px" id="send-email-hint"></div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Additional Notes (optional)</label>
+        <textarea id="send-notes" class="input" rows="3" style="resize:vertical" placeholder="e.g. Please ship to our main office — contact Jane on arrival"></textarea>
+      </div>
+      <div id="send-result" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeSend()">Cancel</button>
+      <button class="btn btn-primary" id="send-go-btn" onclick="doSendPO()">Send PO</button>
+    </div>
+  </div>
+</div>
+
 <!-- Edit PO meta modal -->
 <div id="editModal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeEdit()">
   <div class="modal-box" style="width:460px">
@@ -313,15 +342,21 @@ function renderActionBar(){
   const s = poData.status;
   let html = '';
   if(s === 'draft'){
-    html = `<button class="btn btn-secondary btn-sm" onclick="openEdit()">Edit Details</button>
-            <button class="btn btn-primary btn-sm" onclick="setStatus('sent')">Mark as Sent</button>
+    html = `<a href="/api/procurement/pos/${PO_ID}/pdf" class="btn btn-secondary btn-sm" target="_blank">Download PDF</a>
+            <button class="btn btn-secondary btn-sm" onclick="openEdit()">Edit Details</button>
+            <button class="btn btn-primary btn-sm" onclick="openSendModal()">Send PO</button>
             <button class="btn btn-secondary btn-sm" style="color:#b91c1c" onclick="deletePO()">Delete Draft</button>`;
   } else if(s === 'sent' || s === 'partial'){
-    html = `<button class="btn btn-secondary btn-sm" onclick="openEdit()">Edit Details</button>
+    html = `<a href="/api/procurement/pos/${PO_ID}/pdf" class="btn btn-secondary btn-sm" target="_blank">Download PDF</a>
+            <button class="btn btn-secondary btn-sm" onclick="openEdit()">Edit Details</button>
+            <button class="btn btn-secondary btn-sm" onclick="openSendModal()">Resend PO</button>
             <button class="btn btn-primary btn-sm" onclick="showReceivePanel()">Receive Goods</button>
             <button class="btn btn-secondary btn-sm" onclick="setStatus('closed')">Close PO</button>`;
   } else if(s === 'received'){
-    html = `<button class="btn btn-secondary btn-sm" onclick="setStatus('closed')">Close PO</button>`;
+    html = `<a href="/api/procurement/pos/${PO_ID}/pdf" class="btn btn-secondary btn-sm" target="_blank">Download PDF</a>
+            <button class="btn btn-secondary btn-sm" onclick="setStatus('closed')">Close PO</button>`;
+  } else if(s === 'closed'){
+    html = `<a href="/api/procurement/pos/${PO_ID}/pdf" class="btn btn-secondary btn-sm" target="_blank">Download PDF</a>`;
   }
   bar.innerHTML = html;
 }
@@ -522,6 +557,52 @@ async function api(url, body=null, method=null){
   if(body !== null) opts.body = JSON.stringify(body);
   const r = await fetch(url, opts);
   return r.json();
+}
+
+// ── Send PO modal ─────────────────────────────────────────────────────────────
+function openSendModal(){
+  const hint = document.getElementById('send-email-hint');
+  // Pre-fill if vendor email is known (stored on poData after edit or from server)
+  const knownEmail = poData._vendor_email || '';
+  document.getElementById('send-email').value = knownEmail;
+  hint.textContent = knownEmail ? 'Email on file for this vendor.' : 'No email on file — enter one below. It will be saved for future POs.';
+  document.getElementById('send-notes').value = poData.notes || '';
+  document.getElementById('send-result').style.display='none';
+  document.getElementById('send-go-btn').disabled=false;
+  document.getElementById('send-go-btn').textContent='Send PO';
+  document.getElementById('sendModal').style.display='flex';
+}
+function closeSend(){ document.getElementById('sendModal').style.display='none'; }
+
+async function doSendPO(){
+  const toEmail = document.getElementById('send-email').value.trim();
+  if(!toEmail){ alert('Enter a vendor email address.'); return; }
+  const btn = document.getElementById('send-go-btn');
+  btn.disabled=true; btn.textContent='Sending…';
+  const d = await api(`/api/procurement/pos/${PO_ID}/send`, {
+    to_email: toEmail,
+    notes: document.getElementById('send-notes').value.trim() || null,
+  });
+  btn.disabled=false; btn.textContent='Send PO';
+  const res = document.getElementById('send-result');
+  res.style.display='block';
+  if(d.ok){
+    res.style.background='#dcfce7'; res.style.color='#166534';
+    res.innerHTML = d.emailed
+      ? `<strong>Sent!</strong> PO emailed to ${toEmail}.`
+      : `<strong>PO logged.</strong> SMTP is not configured — email was not delivered, but the PO is marked as sent.`;
+    // Update badge if status changed
+    if(d.new_status && d.new_status !== poData.status){
+      const badge = document.getElementById('po-badge-top');
+      badge.className = `po-badge ${d.new_status}`;
+      badge.textContent = d.new_status.charAt(0).toUpperCase()+d.new_status.slice(1);
+      poData.status = d.new_status;
+      renderActionBar();
+    }
+  } else {
+    res.style.background='#fee2e2'; res.style.color='#991b1b';
+    res.textContent = d.msg || 'Failed to send.';
+  }
 }
 
 // ── Catalog search (only when PO has a vendor) ────────────────────────────────
