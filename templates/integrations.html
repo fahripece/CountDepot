@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% block title %}Integrations · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Integrations</span>
+  <span class="topbar-sub">Connect external systems to CountDepot</span>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:20px 24px">
+
+  <!-- Amazon Business card -->
+  <div class="int-card" id="amz-card">
+    <div class="int-card-head">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="width:40px;height:40px;background:#ff9900;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;font-family:sans-serif">a</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#0f172a">Amazon Business</div>
+          <div style="font-size:12px;color:#64748b">Order history sync · Price lookup · cXML punch-out</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="amz-status-badge" class="int-badge disconnected">Not connected</span>
+        <button class="btn btn-secondary btn-sm" onclick="toggleAmzForm()" id="amz-configure-btn">Configure</button>
+      </div>
+    </div>
+
+    <div id="amz-form" style="display:none;border-top:1px solid #e5e3de;padding:20px">
+
+      <!-- Instructions -->
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;margin-bottom:20px;font-size:12.5px;color:#1e40af;line-height:1.7">
+        <strong>Setup steps:</strong><br>
+        1. Log into <a href="https://developer.amazonservices.com" target="_blank" style="color:#1d4ed8">Amazon Seller Central Developer Console</a> and create an SP-API application.<br>
+        2. Copy your <strong>LWA Client ID</strong> and <strong>Client Secret</strong> from the app credentials.<br>
+        3. Complete the authorization flow to get a <strong>Refresh Token</strong>.<br>
+        4. For cXML punch-out, enter your <strong>Amazon Business cXML credentials</strong> (provided by Amazon Business support).<br>
+        5. For <strong>US marketplace</strong>, the Marketplace ID is <code>ATVPDKIKX0DER</code>.
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">LWA OAuth Credentials</div>
+          <div class="form-row">
+            <label class="form-label">Client ID</label>
+            <input id="amz-client-id" class="input" placeholder="amzn1.application-oa2-client.…">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Client Secret</label>
+            <input id="amz-client-secret" class="input" type="password" placeholder="Enter to update">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Refresh Token</label>
+            <input id="amz-refresh-token" class="input" type="password" placeholder="Enter to update">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Marketplace ID</label>
+            <input id="amz-marketplace" class="input" placeholder="ATVPDKIKX0DER (US)">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Seller / Merchant ID</label>
+            <input id="amz-seller-id" class="input" placeholder="Your Amazon merchant ID">
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">AWS SigV4 (for order history)</div>
+          <div class="form-row">
+            <label class="form-label">AWS Access Key ID</label>
+            <input id="amz-aws-key" class="input" placeholder="AKIA…">
+          </div>
+          <div class="form-row">
+            <label class="form-label">AWS Secret Access Key</label>
+            <input id="amz-aws-secret" class="input" type="password" placeholder="Enter to update">
+          </div>
+
+          <div style="font-size:12px;font-weight:700;color:#475569;margin:16px 0 10px;text-transform:uppercase;letter-spacing:.5px">cXML Punch-out</div>
+          <div class="form-row">
+            <label class="form-label">cXML Identity</label>
+            <input id="amz-cxml-identity" class="input" placeholder="e.g. countdepot">
+          </div>
+          <div class="form-row">
+            <label class="form-label">cXML Shared Secret</label>
+            <input id="amz-cxml-secret" class="input" type="password" placeholder="Enter to update">
+          </div>
+          <div class="form-row">
+            <label class="form-label">From Domain</label>
+            <input id="amz-from-domain" class="input" placeholder="countdepot.com">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Amazon Buyer Account ID</label>
+            <input id="amz-buyer-id" class="input" placeholder="Your Amazon Business account ID">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-primary" onclick="saveAmzCreds()">Save Credentials</button>
+        <button class="btn btn-secondary" onclick="testAmzCreds()" id="amz-test-btn">Test Connection</button>
+      </div>
+      <div id="amz-test-result" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px"></div>
+    </div>
+
+    <!-- Actions panel (shown when configured) -->
+    <div id="amz-actions" style="display:none;border-top:1px solid #e5e3de;padding:16px 20px">
+      <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px">Actions</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <div style="flex:1;min-width:220px">
+          <div style="font-weight:500;font-size:13px;color:#0f172a">Sync Order History</div>
+          <div style="font-size:12px;color:#64748b;margin-top:2px">Import recent Amazon Business orders into inventory</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <select id="sync-days" class="select" style="width:auto">
+            <option value="30">Last 30 days</option>
+            <option value="90" selected>Last 90 days</option>
+            <option value="180">Last 180 days</option>
+            <option value="365">Last year</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="syncOrders()" id="sync-btn">Sync Orders</button>
+        </div>
+      </div>
+      <div id="sync-result" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px"></div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid #f5f4f1">
+        <div style="flex:1;min-width:220px">
+          <div style="font-weight:500;font-size:13px;color:#0f172a">Amazon Price Check</div>
+          <div style="font-size:12px;color:#64748b;margin-top:2px">Search Amazon Business catalog for a product</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="price-query" class="input" placeholder="e.g. ThinkPad X1 Carbon" style="width:220px">
+          <button class="btn btn-secondary btn-sm" onclick="priceCheck()">Check Price</button>
+        </div>
+      </div>
+      <div id="price-result" style="display:none;margin-top:10px"></div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid #f5f4f1">
+        <div style="flex:1;min-width:220px">
+          <div style="font-weight:500;font-size:13px;color:#0f172a">Punch-Out Shopping</div>
+          <div style="font-size:12px;color:#64748b;margin-top:2px">Open Amazon Business pre-authenticated; cart returns as a draft PO</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="startPunchout()">Open Amazon Business</button>
+      </div>
+      <div id="punchout-result" style="display:none;margin-top:8px;padding:8px 14px;border-radius:8px;font-size:13px"></div>
+    </div>
+  </div>
+
+  <!-- More integrations (placeholder) -->
+  <div style="margin-top:20px;padding:20px;background:#fafaf8;border:1px dashed #e5e3de;border-radius:10px;text-align:center;color:#94a3b8;font-size:13px">
+    More integrations coming soon — QuickBooks, Slack, Grainger, TD SYNNEX
+  </div>
+
+</div>
+
+<style>
+.int-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;overflow:hidden;margin-bottom:16px}
+.int-card-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px}
+.int-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.int-badge.connected{background:#dcfce7;color:#166534}
+.int-badge.disconnected{background:#f1f5f9;color:#64748b}
+.form-row{margin-bottom:12px}
+.form-label{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px}
+</style>
+
+<script>
+async function apiPost(url, body){
+  const headers = {'Content-Type':'application/json'};
+  const csrf = document.cookie.match(/csrf_token=([^;]+)/);
+  if(csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf[1]);
+  const r = await fetch(url, {method:'POST', headers, body: JSON.stringify(body)});
+  return r.json();
+}
+
+async function loadAmzStatus(){
+  const d = await fetch('/api/integrations/amazon').then(r=>r.json());
+  if(!d.ok) return;
+  const creds = d.credentials;
+  const badge  = document.getElementById('amz-status-badge');
+  const actions = document.getElementById('amz-actions');
+  if(d.configured){
+    badge.className = 'int-badge connected';
+    badge.textContent = 'Connected';
+    actions.style.display = 'block';
+  } else {
+    badge.className = 'int-badge disconnected';
+    badge.textContent = 'Not connected';
+    actions.style.display = 'none';
+  }
+  // Fill form fields with current (non-secret) values
+  if(creds.amz_lwa_client_id)    document.getElementById('amz-client-id').value      = creds.amz_lwa_client_id;
+  if(creds.amz_marketplace_id)   document.getElementById('amz-marketplace').value     = creds.amz_marketplace_id;
+  if(creds.amz_seller_id)        document.getElementById('amz-seller-id').value       = creds.amz_seller_id;
+  if(creds.amz_aws_access_key)   document.getElementById('amz-aws-key').value         = creds.amz_aws_access_key;
+  if(creds.amz_cxml_identity)    document.getElementById('amz-cxml-identity').value   = creds.amz_cxml_identity;
+  if(creds.amz_cxml_from_domain) document.getElementById('amz-from-domain').value     = creds.amz_cxml_from_domain;
+  if(creds.amz_buyer_id)         document.getElementById('amz-buyer-id').value        = creds.amz_buyer_id;
+}
+
+function toggleAmzForm(){
+  const form = document.getElementById('amz-form');
+  const btn  = document.getElementById('amz-configure-btn');
+  const show = form.style.display === 'none';
+  form.style.display = show ? 'block' : 'none';
+  btn.textContent    = show ? 'Done' : 'Configure';
+}
+
+async function saveAmzCreds(){
+  const payload = {
+    amz_lwa_client_id:      document.getElementById('amz-client-id').value.trim(),
+    amz_lwa_client_secret:  document.getElementById('amz-client-secret').value.trim(),
+    amz_lwa_refresh_token:  document.getElementById('amz-refresh-token').value.trim(),
+    amz_marketplace_id:     document.getElementById('amz-marketplace').value.trim(),
+    amz_seller_id:          document.getElementById('amz-seller-id').value.trim(),
+    amz_aws_access_key:     document.getElementById('amz-aws-key').value.trim(),
+    amz_aws_secret_key:     document.getElementById('amz-aws-secret').value.trim(),
+    amz_cxml_identity:      document.getElementById('amz-cxml-identity').value.trim(),
+    amz_cxml_secret:        document.getElementById('amz-cxml-secret').value.trim(),
+    amz_cxml_from_domain:   document.getElementById('amz-from-domain').value.trim(),
+    amz_buyer_id:           document.getElementById('amz-buyer-id').value.trim(),
+  };
+  // Don't overwrite secrets with empty strings (means "unchanged")
+  for(const [k,v] of Object.entries(payload)){
+    if(!v && ['amz_lwa_client_secret','amz_lwa_refresh_token','amz_aws_secret_key','amz_cxml_secret'].includes(k))
+      delete payload[k];
+  }
+  const d = await apiPost('/api/integrations/amazon', payload);
+  if(d.ok){ alert('Credentials saved.'); loadAmzStatus(); }
+  else alert(d.msg||'Error saving credentials.');
+}
+
+async function testAmzCreds(){
+  const btn = document.getElementById('amz-test-btn');
+  btn.disabled=true; btn.textContent='Testing…';
+  const d = await apiPost('/api/integrations/amazon/test', {});
+  btn.disabled=false; btn.textContent='Test Connection';
+  const res = document.getElementById('amz-test-result');
+  res.style.display='block';
+  if(d.ok){
+    res.style.background='#dcfce7'; res.style.color='#166534';
+    res.textContent = d.msg;
+    loadAmzStatus();
+  } else {
+    res.style.background='#fee2e2'; res.style.color='#991b1b';
+    res.textContent = d.msg;
+  }
+}
+
+async function syncOrders(){
+  const btn = document.getElementById('sync-btn');
+  btn.disabled=true; btn.textContent='Syncing…';
+  const days = parseInt(document.getElementById('sync-days').value)||90;
+  const d = await apiPost('/api/integrations/amazon/sync-orders', {days_back: days});
+  btn.disabled=false; btn.textContent='Sync Orders';
+  const res = document.getElementById('sync-result');
+  res.style.display='block';
+  if(d.ok){
+    res.style.background='#dcfce7'; res.style.color='#166534';
+    res.textContent = `Synced ${d.imported} order${d.imported!==1?'s':''} (${d.skipped} already imported).`;
+  } else {
+    res.style.background='#fee2e2'; res.style.color='#991b1b';
+    res.textContent = d.msg;
+  }
+}
+
+async function priceCheck(){
+  const q = document.getElementById('price-query').value.trim();
+  if(!q) return;
+  const res = document.getElementById('price-result');
+  res.style.display='block';
+  res.innerHTML='<div style="color:#94a3b8;font-size:13px">Searching Amazon…</div>';
+  const d = await apiPost('/api/integrations/amazon/price-check', {queries:[q]});
+  if(!d.ok){
+    res.innerHTML=`<div style="color:#b91c1c;font-size:13px">${d.msg}</div>`;
+    return;
+  }
+  if(!d.results.length){
+    res.innerHTML='<div style="color:#94a3b8;font-size:13px">No results found.</div>';
+    return;
+  }
+  res.innerHTML = d.results.map(r => r.error
+    ? `<div style="color:#b91c1c;font-size:13px">Error: ${r.error}</div>`
+    : `<div style="background:#f8fafc;border:1px solid #e5e3de;border-radius:8px;padding:12px 14px;font-size:13px">
+        <div style="font-weight:600">${r.title||r.query}</div>
+        <div style="color:#64748b;font-size:11px;margin-top:3px">${r.brand||''} · ASIN: ${r.asin||'—'}</div>
+        <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:18px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:#1d4ed8">
+            ${r.price!=null?'$'+Number(r.price).toFixed(2):'Price unavailable'}
+          </span>
+          ${r.asin?`<a href="${r.url}" target="_blank" class="btn btn-secondary btn-sm" style="font-size:11px">View on Amazon →</a>`:''}
+        </div>
+      </div>`
+  ).join('');
+}
+
+async function startPunchout(){
+  const res = document.getElementById('punchout-result');
+  res.style.display='block';
+  res.style.background='#eff6ff'; res.style.color='#1e40af';
+  res.textContent = 'Initiating punch-out session…';
+  const d = await apiPost('/api/integrations/amazon/punchout/initiate', {});
+  if(d.ok && d.punchout_url){
+    res.textContent = 'Opening Amazon Business…';
+    window.open(d.punchout_url, '_blank');
+    res.innerHTML = '<strong>Amazon Business opened.</strong> Complete your order there — when you check out, the cart will return as a draft PO in CountDepot.';
+  } else {
+    res.style.background='#fee2e2'; res.style.color='#991b1b';
+    res.textContent = d.error || d.msg || 'Error starting punch-out session.';
+  }
+}
+
+loadAmzStatus();
+</script>
+{% endblock %}

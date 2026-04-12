@@ -315,6 +315,13 @@ def procurement_analytics_page():
     return render_template("procurement_analytics.html")
 
 
+@bp.route("/integrations")
+@login_required
+@admin_required
+def integrations_page():
+    return render_template("integrations.html")
+
+
 # ── Low stock API (lives here because it's tightly coupled to the page) ───────
 
 @bp.route("/api/procurement/low-stock-orderables")

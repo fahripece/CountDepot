@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import threading
+import time
 from datetime import datetime, date as _date
 
 from flask import Blueprint, request, jsonify, session, send_file
@@ -5259,3 +5260,293 @@ def api_procurement_set_budget():
     execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
             ["monthly_po_budget", str(val)])
     return jsonify({"ok": True})
+
+
+# ── Amazon Business Integration ───────────────────────────────────────────────
+
+_AMZ_SETTING_KEYS = [
+    "amz_lwa_client_id", "amz_lwa_client_secret", "amz_lwa_refresh_token",
+    "amz_aws_access_key", "amz_aws_secret_key",
+    "amz_marketplace_id", "amz_seller_id", "amz_cxml_identity",
+    "amz_cxml_secret", "amz_cxml_from_domain", "amz_buyer_id",
+]
+
+
+def _amz_creds():
+    """Load Amazon credentials from settings. Returns dict."""
+    rows = query("SELECT key, value FROM settings WHERE key LIKE 'amz_%'")
+    return {r["key"]: r["value"] for r in rows}
+
+
+def _amz_save(d):
+    """Save Amazon credential key/values from a dict to settings."""
+    for k in _AMZ_SETTING_KEYS:
+        if k in d:
+            val = (d[k] or "").strip()
+            execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [k, val])
+
+
+@bp.route("/api/integrations/amazon", methods=["GET"])
+@login_required
+@admin_required
+def api_amz_get():
+    creds = _amz_creds()
+    # Return redacted versions (show whether they are set, not the values)
+    safe = {}
+    for k in _AMZ_SETTING_KEYS:
+        v = creds.get(k, "")
+        if k in ("amz_lwa_client_secret", "amz_aws_secret_key", "amz_cxml_secret",
+                 "amz_lwa_refresh_token"):
+            safe[k] = "***" if v else ""
+        else:
+            safe[k] = v
+    configured = bool(creds.get("amz_lwa_client_id") and creds.get("amz_lwa_refresh_token"))
+    return jsonify({"ok": True, "credentials": safe, "configured": configured})
+
+
+@bp.route("/api/integrations/amazon", methods=["POST"])
+@login_required
+@admin_required
+def api_amz_save():
+    d = request.json or {}
+    _amz_save(d)
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/amazon/test", methods=["POST"])
+@login_required
+@admin_required
+def api_amz_test():
+    """Test Amazon credentials by fetching an access token."""
+    creds = _amz_creds()
+    client_id     = creds.get("amz_lwa_client_id", "")
+    client_secret = creds.get("amz_lwa_client_secret", "")
+    refresh_token = creds.get("amz_lwa_refresh_token", "")
+    if not (client_id and client_secret and refresh_token):
+        return jsonify({"ok": False, "msg": "Amazon credentials are not fully configured."})
+    try:
+        from app.amazon import get_access_token
+        result = get_access_token(client_id, client_secret, refresh_token)
+        if result.get("access_token"):
+            return jsonify({"ok": True, "msg": "Connection successful. Access token received."})
+        return jsonify({"ok": False, "msg": f"Unexpected response: {result}"})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
+
+
+@bp.route("/api/integrations/amazon/sync-orders", methods=["POST"])
+@login_required
+@admin_required
+def api_amz_sync_orders():
+    """
+    Sync Amazon Business order history.
+    Creates invoice_import records + items from any orders not already imported.
+    """
+    creds = _amz_creds()
+    client_id     = creds.get("amz_lwa_client_id", "")
+    client_secret = creds.get("amz_lwa_client_secret", "")
+    refresh_token = creds.get("amz_lwa_refresh_token", "")
+    marketplace   = creds.get("amz_marketplace_id", "ATVPDKIKX0DER")
+    aws_key       = creds.get("amz_aws_access_key") or None
+    aws_secret    = creds.get("amz_aws_secret_key") or None
+    if not (client_id and client_secret and refresh_token):
+        return jsonify({"ok": False, "msg": "Amazon credentials not configured."})
+    d          = request.json or {}
+    days_back  = int(d.get("days_back", 90))
+    try:
+        from app.amazon import sync_orders, get_order_items
+        orders = sync_orders(marketplace, client_id, client_secret, refresh_token,
+                             aws_key, aws_secret, days_back)
+    except Exception as e:
+        return jsonify({"ok": False, "msg": f"Amazon API error: {e}"})
+
+    now      = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    imported = []
+    skipped  = []
+
+    for order in orders:
+        oid = order["amazon_order_id"]
+        # Check if already imported
+        existing = query("SELECT id FROM invoice_imports WHERE reference=?", [oid], one=True)
+        if existing:
+            skipped.append(oid)
+            continue
+        try:
+            items = get_order_items(oid, client_id, client_secret, refresh_token,
+                                    aws_key, aws_secret)
+        except Exception:
+            items = []
+
+        # Create one invoice_import per order
+        iid = execute(
+            "INSERT INTO invoice_imports (reference, vendor, imported_by, imported_at, line_count, notes) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [oid, "Amazon Business", session.get("username"), now,
+             len(items), f"Amazon order {oid} — {order['status']}"]
+        )
+
+        # Create items for each line
+        for li in items:
+            if not li.get("qty_ordered"):
+                continue
+            prod_name = (li.get("title") or li.get("seller_sku") or "Amazon Item")[:200]
+            qty       = li["qty_ordered"]
+            price     = li.get("unit_price")
+            vendor_sku= li.get("seller_sku") or li.get("asin") or None
+
+            # Find or create product
+            existing_prod = query(
+                "SELECT id FROM products WHERE LOWER(name)=LOWER(?) AND active=1 LIMIT 1",
+                [prod_name], one=True)
+            if existing_prod:
+                product_id = existing_prod["id"]
+                cat_id     = query("SELECT category_id FROM products WHERE id=?",
+                                   [product_id], one=True)["category_id"]
+            else:
+                # Find a generic category
+                cat = query("SELECT id FROM categories WHERE LOWER(name) IN "
+                            "('accessories','consumables','general','other') LIMIT 1", one=True)
+                cat_id = cat["id"] if cat else None
+                if not cat_id:
+                    # Use first category
+                    first = query("SELECT id FROM categories LIMIT 1", one=True)
+                    cat_id = first["id"] if first else None
+                product_id = execute(
+                    "INSERT INTO products (name, category_id, qty_tracked, serial_tracked, "
+                    "require_vendor_sku, require_internal_sku, vendor_sku, active, created_at) "
+                    "VALUES (?, ?, 1, 0, 1, 0, ?, 1, ?)",
+                    [prod_name, cat_id, vendor_sku, now]
+                )
+
+            item_id = execute(
+                "INSERT INTO items (product_id, name, sku, category_id, qty, cost_price, "
+                "purchased_from, po_number, extra_fields, active, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
+                [product_id, prod_name, vendor_sku, cat_id, qty, price,
+                 "Amazon Business", oid, json.dumps({"amazon_order_id": oid}), now]
+            )
+            log_action("AMAZON_IMPORT", item_id, prod_name,
+                       f"Amazon order {oid}: qty={qty}, price={price}")
+
+        imported.append(oid)
+
+    execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            ["amz_last_sync", now])
+    return jsonify({
+        "ok":      True,
+        "imported": len(imported),
+        "skipped":  len(skipped),
+        "orders":   imported,
+    })
+
+
+@bp.route("/api/integrations/amazon/price-check", methods=["POST"])
+@login_required
+@admin_required
+def api_amz_price_check():
+    """Look up Amazon Business prices for a list of queries."""
+    creds = _amz_creds()
+    client_id     = creds.get("amz_lwa_client_id", "")
+    client_secret = creds.get("amz_lwa_client_secret", "")
+    refresh_token = creds.get("amz_lwa_refresh_token", "")
+    marketplace   = creds.get("amz_marketplace_id", "ATVPDKIKX0DER")
+    aws_key       = creds.get("amz_aws_access_key") or None
+    aws_secret    = creds.get("amz_aws_secret_key") or None
+    if not (client_id and client_secret and refresh_token):
+        return jsonify({"ok": False, "msg": "Amazon credentials not configured."})
+    d = request.json or {}
+    queries = d.get("queries", [])
+    if not queries:
+        return jsonify({"ok": False, "msg": "No queries provided."}), 400
+    try:
+        from app.amazon import lookup_prices
+        results = lookup_prices(queries, marketplace, client_id, client_secret,
+                                refresh_token, aws_key, aws_secret)
+        return jsonify({"ok": True, "results": results})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
+
+
+@bp.route("/api/integrations/amazon/punchout/initiate", methods=["POST"])
+@login_required
+@admin_required
+def api_amz_punchout_initiate():
+    """Initiate an Amazon Business cXML punch-out session."""
+    creds       = _amz_creds()
+    identity    = creds.get("amz_cxml_identity", "")
+    secret      = creds.get("amz_cxml_secret", "")
+    from_domain = creds.get("amz_cxml_from_domain", "countdepot.com")
+    buyer_id    = creds.get("amz_buyer_id", "")
+    if not (identity and secret):
+        return jsonify({"ok": False, "msg": "cXML credentials not configured."})
+    d        = request.json or {}
+    order_id = d.get("po_id") or f"CD-{int(time.time())}"
+    # Return URL — browser will POST the cart XML here
+    from flask import g, request as _req
+    base_url    = _req.host_url.rstrip("/")
+    return_url  = f"{base_url}/api/integrations/amazon/punchout/return"
+    try:
+        from app.amazon import send_punchout_setup
+        result = send_punchout_setup(return_url, identity, secret, from_domain,
+                                     buyer_id, str(order_id))
+        if result["ok"]:
+            # Store the buyer_cookie → po_id mapping so we can match on return
+            execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                    [f"amz_punchout_{result['buyer_cookie']}", str(order_id)])
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
+
+
+@bp.route("/api/integrations/amazon/punchout/return", methods=["POST"])
+def api_amz_punchout_return():
+    """
+    Receive the cXML PunchOutOrderMessage when user checks out on Amazon Business.
+    Creates a draft PO from the cart items.
+    """
+    xml_body = request.get_data(as_text=True)
+    try:
+        from app.amazon import parse_punchout_order_message
+        cart = parse_punchout_order_message(xml_body)
+    except Exception as e:
+        return f"<cXML><Response><Status code='400' text='Bad Request'>{e}</Status></Response></cXML>", 400, {
+            "Content-Type": "text/xml"
+        }
+
+    buyer_cookie = cart.get("buyer_cookie", "")
+    po_id_row    = query("SELECT value FROM settings WHERE key=?",
+                         [f"amz_punchout_{buyer_cookie}"], one=True)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Create a draft PO from the cart
+    po_number = _po_number()  # use api.py's own _po_number helper
+
+    po_id = execute(
+        "INSERT INTO purchase_orders (po_number, vendor_name, status, created_by, created_at, notes) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [po_number, "Amazon Business", "draft", "amazon_punchout", now,
+         f"Created via Amazon Business punch-out (cookie: {buyer_cookie[:20]})"]
+    )
+    total = 0.0
+    for item in cart.get("items", []):
+        qty  = item.get("qty", 1)
+        price = item.get("unit_price", 0)
+        lt   = round(qty * price, 4)
+        total += lt
+        execute(
+            "INSERT INTO po_lines (po_id, description, vendor_sku, qty_ordered, unit_cost, total_cost) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [po_id, item.get("description", "Amazon Item"),
+             item.get("vendor_sku"), qty, price, lt]
+        )
+    execute("UPDATE purchase_orders SET total_cost=? WHERE id=?", [total, po_id])
+    log_action("PO_CREATE", None, po_number,
+               f"Draft PO created from Amazon Business punch-out; {len(cart.get('items',[]))} items")
+
+    # Clean up buyer_cookie mapping
+    execute("DELETE FROM settings WHERE key=?", [f"amz_punchout_{buyer_cookie}"])
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<cXML><Response><Status code="200" text="OK">PO {po_number} created</Status></Response></cXML>""", 200, {
+        "Content-Type": "text/xml"
+    }
