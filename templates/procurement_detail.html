@@ -153,6 +153,16 @@
         <div class="card-body" id="discrepancy-body"></div>
       </div>
 
+      <!-- Approval panel -->
+      <div class="card" id="approval-panel" style="display:none;margin-top:14px;border:2px solid #fde68a">
+        <div class="card-head" style="background:#fef3c7;color:#92400e">Pending Approval</div>
+        <div class="card-body" id="approval-body">
+          <p style="font-size:13px;color:#78350f;margin-bottom:14px;line-height:1.6">This PO is awaiting manager approval before it can be sent to the vendor.</p>
+          <button class="btn btn-primary" style="width:100%;margin-bottom:8px;background:#15803d;border-color:#15803d" onclick="approvePO()">Approve PO</button>
+          <button class="btn btn-secondary" style="width:100%;color:#b91c1c" onclick="rejectPO()">Reject</button>
+        </div>
+      </div>
+
       <div class="card" style="margin-top:{% if po.status not in ['sent','partial'] %}0{% else %}14px{% endif %}">
         <div class="card-head">Status</div>
         <div class="card-body" style="padding-bottom:10px">
@@ -352,6 +362,7 @@
 .po-table tbody tr:hover td{background:#fafaf8}
 .po-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .po-badge.draft{background:#f1f5f9;color:#475569}
+.po-badge.pending_approval{background:#fef3c7;color:#92400e}
 .po-badge.sent{background:#dbeafe;color:#1d4ed8}
 .po-badge.partial{background:#fef3c7;color:#92400e}
 .po-badge.received{background:#dcfce7;color:#166534}
@@ -383,8 +394,8 @@ let lines = [];
 
 function fmt$(n){return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
 
-const STATUS_ORDER = ['draft','sent','partial','received','closed'];
-const STATUS_LABELS = {draft:'Draft',sent:'Sent to Vendor',partial:'Partially Received',received:'Fully Received',closed:'Closed'};
+const STATUS_ORDER  = ['draft','pending_approval','sent','partial','received','closed'];
+const STATUS_LABELS = {draft:'Draft',pending_approval:'Pending Approval',sent:'Sent to Vendor',partial:'Partially Received',received:'Fully Received',closed:'Closed'};
 
 async function loadPO(){
   const data = await fetch(`/api/procurement/pos/${PO_ID}`).then(r=>r.json());
@@ -397,6 +408,9 @@ async function loadPO(){
   renderReceivePanel();
   renderDiscrepancies();
   document.getElementById('po-total').textContent = fmt$(poData.total_cost);
+  // Show approval panel when pending
+  const approvalPanel = document.getElementById('approval-panel');
+  if(approvalPanel) approvalPanel.style.display = poData.status==='pending_approval' ? '' : 'none';
   loadMatch();
 }
 
@@ -450,8 +464,13 @@ function renderActionBar(){
   if(s === 'draft'){
     html = `<a href="/api/procurement/pos/${PO_ID}/pdf" class="btn btn-secondary btn-sm" target="_blank">Download PDF</a>
             <button class="btn btn-secondary btn-sm" onclick="openEdit()">Edit Details</button>
+            <button class="btn btn-secondary btn-sm" onclick="submitForApproval()">Submit for Approval</button>
             <button class="btn btn-primary btn-sm" onclick="openSendModal()">Send PO</button>
             <button class="btn btn-secondary btn-sm" style="color:#b91c1c" onclick="deletePO()">Delete Draft</button>`;
+  } else if(s === 'pending_approval'){
+    html = `<a href="/api/procurement/pos/${PO_ID}/pdf" class="btn btn-secondary btn-sm" target="_blank">Download PDF</a>
+            <button class="btn btn-primary btn-sm" style="background:#15803d" onclick="approvePO()">Approve</button>
+            <button class="btn btn-secondary btn-sm" style="color:#b91c1c" onclick="rejectPO()">Reject</button>`;
   } else if(s === 'sent' || s === 'partial'){
     html = `<a href="/api/procurement/pos/${PO_ID}/pdf" class="btn btn-secondary btn-sm" target="_blank">Download PDF</a>
             <button class="btn btn-secondary btn-sm" onclick="openEdit()">Edit Details</button>
@@ -799,6 +818,33 @@ function pickCatalogRow(r){
   recalcLine();
   document.getElementById('l-catalog-results').style.display='none';
   document.getElementById('l-catalog-search').value='';
+}
+
+// ── Approval Workflow ─────────────────────────────────────────────────────────
+async function submitForApproval(){
+  const d = await api(`/api/procurement/pos/${PO_ID}/submit`, {});
+  if(!d.ok){ alert(d.msg||'Error'); return; }
+  if(d.requires_approval){
+    alert('PO submitted for approval. Admins have been notified by email.');
+    loadPO();
+  } else {
+    alert(d.msg || 'No approval required for this PO amount. Use "Send PO" to deliver it.');
+  }
+}
+
+async function approvePO(){
+  if(!confirm('Approve this PO? It will return to Draft status and can then be sent to the vendor.')) return;
+  const d = await api(`/api/procurement/pos/${PO_ID}/approve`, {});
+  if(!d.ok){ alert(d.msg||'Error'); return; }
+  loadPO();
+}
+
+async function rejectPO(){
+  const reason = prompt('Rejection reason (optional):') ?? null;
+  if(reason === null) return; // cancelled
+  const d = await api(`/api/procurement/pos/${PO_ID}/reject`, {reason: reason||null});
+  if(!d.ok){ alert(d.msg||'Error'); return; }
+  loadPO();
 }
 
 // ── 3-Way Match ───────────────────────────────────────────────────────────────

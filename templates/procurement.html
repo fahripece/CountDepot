@@ -11,11 +11,13 @@
     <select id="statusFilter" class="select" style="width:auto;min-width:130px" onchange="filterTable()">
       <option value="">All Statuses</option>
       <option value="draft">Draft</option>
+      <option value="pending_approval">Pending Approval</option>
       <option value="sent">Sent</option>
       <option value="partial">Partial</option>
       <option value="received">Received</option>
       <option value="closed">Closed</option>
     </select>
+    <button class="btn btn-secondary btn-sm" onclick="openProcSettings()" title="Approval threshold settings">⚙ Settings</button>
     <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ New PO</button>
   </div>
 </div>
@@ -94,6 +96,27 @@
   </div>
 </div>
 
+<!-- Procurement settings modal -->
+<div id="procSettingsModal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeProcSettings()">
+  <div class="modal-box" style="width:400px">
+    <div class="modal-head">
+      <span class="modal-title">Procurement Settings</span>
+      <button class="modal-close" onclick="closeProcSettings()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label class="form-label">Approval Threshold ($)</label>
+        <input id="ps-threshold" class="input" type="number" min="0" step="100" placeholder="e.g. 5000">
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px">POs at or above this amount will require admin approval before sending. Set to 0 to disable approval workflow.</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="closeProcSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveProcSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
 <style>
 .po-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
 .kcard{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:18px 20px}
@@ -106,6 +129,7 @@
 .po-table tbody tr:hover td{background:#fafaf8}
 .po-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .po-badge.draft{background:#f1f5f9;color:#475569}
+.po-badge.pending_approval{background:#fef3c7;color:#92400e}
 .po-badge.sent{background:#dbeafe;color:#1d4ed8}
 .po-badge.partial{background:#fef3c7;color:#92400e}
 .po-badge.received{background:#dcfce7;color:#166534}
@@ -140,7 +164,7 @@ async function loadPOs(){
 }
 
 function badgeHtml(status){
-  const labels={draft:'Draft',sent:'Sent',partial:'Partial',received:'Received',closed:'Closed'};
+  const labels={draft:'Draft',pending_approval:'Pending Approval',sent:'Sent',partial:'Partial',received:'Received',closed:'Closed'};
   return `<span class="po-badge ${status}">${labels[status]||status}</span>`;
 }
 
@@ -208,6 +232,25 @@ async function createPO(){
   if(!d.ok){alert(d.msg||'Error creating PO'); return;}
   closeCreate();
   window.location.href = '/procurement/' + d.id;
+}
+
+// ── Procurement Settings modal ───────────────────────────────────────────────
+async function openProcSettings(){
+  const d = await fetch('/api/procurement/settings').then(r=>r.json());
+  document.getElementById('ps-threshold').value = d.ok ? (d.po_approval_threshold || '') : '';
+  document.getElementById('procSettingsModal').style.display='flex';
+}
+function closeProcSettings(){ document.getElementById('procSettingsModal').style.display='none'; }
+async function saveProcSettings(){
+  const threshold = parseFloat(document.getElementById('ps-threshold').value) || 0;
+  const headers = {'Content-Type':'application/json'};
+  const csrf = document.cookie.match(/csrf_token=([^;]+)/);
+  if(csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf[1]);
+  const r = await fetch('/api/procurement/settings', {
+    method:'POST', headers, body: JSON.stringify({po_approval_threshold: threshold})
+  }).then(x=>x.json());
+  if(!r.ok){ alert(r.msg||'Error'); return; }
+  closeProcSettings();
 }
 
 loadPOs();

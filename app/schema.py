@@ -103,6 +103,11 @@ MIGRATIONS = [
     ("distributors", "contact_name", "TEXT"),
     ("distributors", "phone", "TEXT"),
 
+    # purchase_orders — approval workflow
+    ("purchase_orders", "rejected_by",     "TEXT"),
+    ("purchase_orders", "rejected_at",     "TEXT"),
+    ("purchase_orders", "rejection_reason","TEXT"),
+
     # po_invoices / po_invoice_lines — 3-way match
     # (these are new tables; added via CREATE TABLE IF NOT EXISTS in DDL)
 

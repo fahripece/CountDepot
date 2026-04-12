@@ -5128,6 +5128,122 @@ def api_procurement_analytics():
     })
 
 
+# ── PO Approval Workflow ──────────────────────────────────────────────────────
+
+@bp.route("/api/procurement/settings", methods=["GET"])
+@login_required
+@admin_required
+def api_procurement_settings_get():
+    row = query("SELECT value FROM settings WHERE key='po_approval_threshold'", one=True)
+    threshold = float(row["value"]) if row and row["value"] else 0
+    return jsonify({"ok": True, "po_approval_threshold": threshold})
+
+
+@bp.route("/api/procurement/settings", methods=["POST"])
+@login_required
+@admin_required
+def api_procurement_settings_save():
+    d = request.json or {}
+    threshold = d.get("po_approval_threshold")
+    if threshold is not None:
+        try:
+            threshold = float(threshold)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "msg": "Invalid threshold"}), 400
+        execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ["po_approval_threshold", str(threshold)])
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/submit", methods=["POST"])
+@login_required
+@admin_required
+def api_po_submit_approval(po_id):
+    """Submit a draft PO for approval. Auto-approves if below threshold."""
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    if po["status"] != "draft":
+        return jsonify({"ok": False, "msg": "Only draft POs can be submitted"}), 400
+
+    row       = query("SELECT value FROM settings WHERE key='po_approval_threshold'", one=True)
+    threshold = float(row["value"]) if row and row["value"] else 0
+    total     = po["total_cost"] or 0
+    now       = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    if threshold > 0 and total >= threshold:
+        # Needs approval
+        execute("UPDATE purchase_orders SET status='pending_approval', approval_required=1 WHERE id=?",
+                [po_id])
+        log_action("PO_SUBMITTED", None, po["po_number"],
+                   f"Submitted for approval; total=${total:.2f}; threshold=${threshold:.2f}")
+        # Email all admins
+        _notify_approvers(po, total, threshold)
+        return jsonify({"ok": True, "new_status": "pending_approval", "requires_approval": True})
+    else:
+        # Auto-approve: no threshold or below threshold — just send
+        return jsonify({"ok": True, "new_status": "draft", "requires_approval": False,
+                        "msg": "No approval required — use Send to deliver the PO."})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/approve", methods=["POST"])
+@login_required
+@admin_required
+def api_po_approve(po_id):
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    if po["status"] != "pending_approval":
+        return jsonify({"ok": False, "msg": "PO is not pending approval"}), 400
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    execute("UPDATE purchase_orders SET status='draft', approved_by=?, approved_at=?, "
+            "approval_required=0 WHERE id=?",
+            [session.get("username"), now, po_id])
+    log_action("PO_APPROVED", None, po["po_number"],
+               f"Approved by {session.get('username')}")
+    return jsonify({"ok": True, "new_status": "draft"})
+
+
+@bp.route("/api/procurement/pos/<int:po_id>/reject", methods=["POST"])
+@login_required
+@admin_required
+def api_po_reject(po_id):
+    po = query("SELECT * FROM purchase_orders WHERE id=?", [po_id], one=True)
+    if not po:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    if po["status"] != "pending_approval":
+        return jsonify({"ok": False, "msg": "PO is not pending approval"}), 400
+    d      = request.json or {}
+    reason = (d.get("reason") or "").strip() or None
+    now    = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    execute("UPDATE purchase_orders SET status='draft', rejected_by=?, rejected_at=?, "
+            "rejection_reason=?, approval_required=0 WHERE id=?",
+            [session.get("username"), now, reason, po_id])
+    log_action("PO_REJECTED", None, po["po_number"],
+               f"Rejected by {session.get('username')}; reason={reason}")
+    return jsonify({"ok": True, "new_status": "draft"})
+
+
+def _notify_approvers(po, total, threshold):
+    """Email all admin users to notify them a PO needs their approval."""
+    try:
+        from app.mailer import send_email
+        admins = query("SELECT email, username FROM users WHERE role='admin' AND email IS NOT NULL AND email != ''")
+        for admin in admins:
+            subject = f"PO Approval Needed: {po['po_number']} (${total:,.2f})"
+            body = (
+                f"A purchase order requires your approval before it can be sent.\n\n"
+                f"PO Number: {po['po_number']}\n"
+                f"Vendor:    {po['vendor_name'] or 'Unknown'}\n"
+                f"Total:     ${total:,.2f}\n"
+                f"Threshold: ${threshold:,.2f}\n\n"
+                f"Log in to CountDepot to review and approve or reject this PO."
+            )
+            send_email(admin["email"], subject, body)
+    except Exception:
+        pass  # email failure must not block the API response
+
+
 @bp.route("/api/procurement/analytics/budget", methods=["POST"])
 @login_required
 @admin_required
