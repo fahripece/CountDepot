@@ -4319,7 +4319,7 @@ def _normalize_catalog_row(raw):
 @bp.route("/api/procurement/catalog/template")
 @login_required
 @admin_required
-def api_catalog_template():
+def api_vc_template():
     output = io.StringIO()
     output.write("product_name,vendor_sku,unit_price,unit_of_measure,min_order_qty,lead_days\n")
     output.write("Example Product,SKU-001,29.99,EA,1,5\n")
@@ -4335,7 +4335,7 @@ def api_catalog_template():
 @bp.route("/api/procurement/catalog/upload", methods=["POST"])
 @login_required
 @admin_required
-def api_catalog_upload():
+def api_vc_upload():
     vendor_id = request.form.get("vendor_id")
     if not vendor_id:
         return jsonify({"ok": False, "msg": "vendor_id required"}), 400
@@ -4409,7 +4409,7 @@ def api_catalog_upload():
 @bp.route("/api/procurement/catalog", methods=["GET"])
 @login_required
 @admin_required
-def api_catalog_list():
+def api_vc_list():
     vendor_id = request.args.get("vendor_id")
     q = request.args.get("q", "").strip()
     sql = """
@@ -4440,7 +4440,7 @@ def api_catalog_list():
 @bp.route("/api/procurement/catalog/<int:entry_id>/link", methods=["POST"])
 @login_required
 @admin_required
-def api_catalog_link(entry_id):
+def api_vc_link(entry_id):
     entry = query("SELECT * FROM vendor_catalog WHERE id=? AND active=1", [entry_id], one=True)
     if not entry:
         return jsonify({"ok": False, "msg": "Entry not found"}), 404
@@ -4467,7 +4467,7 @@ def api_catalog_link(entry_id):
 @bp.route("/api/procurement/catalog/<int:entry_id>", methods=["DELETE"])
 @login_required
 @admin_required
-def api_catalog_delete(entry_id):
+def api_vc_delete(entry_id):
     entry = query("SELECT id FROM vendor_catalog WHERE id=?", [entry_id], one=True)
     if not entry:
         return jsonify({"ok": False, "msg": "Not found"}), 404
@@ -4478,7 +4478,7 @@ def api_catalog_delete(entry_id):
 @bp.route("/api/procurement/catalog/vendor/<int:vendor_id>/search")
 @login_required
 @admin_required
-def api_catalog_vendor_search(vendor_id):
+def api_vc_vendor_search(vendor_id):
     """Quick search a vendor catalog — used by PO line item picker."""
     q = request.args.get("q", "").strip()
     args = [vendor_id]
@@ -4494,7 +4494,7 @@ def api_catalog_vendor_search(vendor_id):
 @bp.route("/api/procurement/products/<int:product_id>/preferred-vendor", methods=["POST"])
 @login_required
 @admin_required
-def api_set_preferred_vendor(product_id):
+def api_vc_set_preferred_vendor(product_id):
     d = request.json or {}
     vendor_id = d.get("vendor_id")
     if not vendor_id:
