@@ -541,10 +541,12 @@
   <div class="modal" style="width:620px">
     <div class="modal-header"><div class="modal-title">Print Labels</div><button class="modal-close" onclick="closeModal('labelModal')">✕</button></div>
     <div class="modal-body">
+      <div id="label-batch-info" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:8px 12px;margin-bottom:12px;font-size:13px;color:#1e40af"></div>
       <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:13px;color:#475569">Format:</span>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="label-fmt" value="single" checked onchange="renderLabels()"> Single</label>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="label-fmt" value="sheet" onchange="renderLabels()"> Sheet (30-up)</label>
+        <span style="font-size:13px;color:#475569;font-weight:600">Format:</span>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="label-fmt" value="single" checked onchange="renderLabels()"> Single (3.5"×1.5")</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="label-fmt" value="sheet" onchange="renderLabels()"> Sheet (Avery 5160, 30-up)</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="label-fmt" value="thermal" onchange="renderLabels()"> Thermal Roll (2"×1")</label>
         <div style="margin-left:auto"><button class="btn btn-secondary btn-sm" onclick="doPrint()">🖨 Print</button></div>
       </div>
       <div id="labelPreview" style="background:#f0efec;border-radius:8px;padding:16px;min-height:200px;overflow:auto"></div>
@@ -1641,16 +1643,37 @@ async function confirmEbay(){const btn=document.getElementById('ebayBtn');btn.di
 
 // ── Labels ──
 let labelItems=[];
-function printLabel(id){const item=allItems.find(i=>i.id===id);if(!item)return;labelItems=[item];renderLabels();openModal('labelModal');}
-function printSelectedLabels(){labelItems=allItems.filter(i=>selectedIds.has(i.id));if(!labelItems.length){toast('Select items first','warn');return}renderLabels();openModal('labelModal');}
+function _updateLabelBatchInfo(){
+  const el=document.getElementById('label-batch-info');
+  if(!el)return;
+  if(labelItems.length>1){el.style.display='';el.textContent=`Printing ${labelItems.length} labels in bulk`;}
+  else{el.style.display='none';}
+}
+function printLabel(id){const item=allItems.find(i=>i.id===id);if(!item)return;labelItems=[item];_updateLabelBatchInfo();renderLabels();openModal('labelModal');}
+function printSelectedLabels(){labelItems=allItems.filter(i=>selectedIds.has(i.id));if(!labelItems.length){toast('Select items first','warn');return}_updateLabelBatchInfo();renderLabels();openModal('labelModal');}
 function renderLabels(){
   const fmt=document.querySelector('input[name="label-fmt"]:checked')?.value||'single';
   const preview=document.getElementById('labelPreview');
   if(!labelItems.length){preview.innerHTML='<div style="color:#94a3b8;text-align:center;padding:30px">No items selected</div>';return}
-  const makeLabel=(item,size)=>{const code=item.serial||item.sku||item.internal_sku||('ID-'+String(item.id));const isSingle=size==='single';const bcId='bc-'+item.id+'-'+Math.random().toString(36).slice(2,6);const bcH=isSingle?36:22;return `<div class="label-box ${isSingle?'label-single-box':''}"><div class="label-top"><div class="label-info"><div class="label-name">${item.name}</div>${item.manufacturer?`<div class="label-mfr">${item.manufacturer}${item.model?' · '+item.model:''}</div>`:''}<div class="label-meta">${item.serial?`<span>SN: <strong>${item.serial}</strong></span>`:''}${item.sku?`<span>SKU: <strong>${item.sku}</strong></span>`:''}${!item.serial&&!item.sku&&item.internal_sku?`<span>SKU: <strong>${item.internal_sku}</strong></span>`:''}${item.shelf?`<span>📍 ${item.shelf}</span>`:''}</div><div class="label-brand">CountDepot</div></div></div><div class="label-barcode-wrap"><svg id="${bcId}" class="label-barcode"></svg></div></div><script>(function(){var a=0;function t(){try{JsBarcode('#${bcId}','${code.replace(/'/g,"\\'")}',{format:'CODE128',width:${isSingle?2:1.3},height:${bcH},displayValue:true,fontSize:${isSingle?11:7},margin:0,background:'#ffffff',lineColor:'#0f172a',font:'IBM Plex Mono, monospace'});}catch(e){if(a++<10)setTimeout(t,100);}}t();})()</`+`script>`;};
-  const styles=`<style>.label-sheet{display:flex;flex-wrap:wrap;gap:0;padding:8px}.label-box{width:2.625in;height:1in;border:1px dashed #ccc;padding:4px 5px 3px;box-sizing:border-box;display:flex;flex-direction:column;background:#fff;overflow:hidden}.label-top{display:flex;align-items:flex-start;gap:4px;flex:1}.label-info{flex:1;min-width:0}.label-name{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:sans-serif}.label-mfr{font-size:6.5px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.label-meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:1px}.label-meta span{font-size:6.5px;color:#333;font-family:monospace}.label-brand{font-size:5.5px;color:#bbb;margin-top:2px}.label-barcode{width:100%;height:22px;display:block;margin-top:2px}.label-barcode-wrap{width:100%;flex-shrink:0}.label-wrap-single{display:flex;justify-content:center;padding:20px}.label-single-box{width:3.5in!important;height:1.5in!important;padding:8px 10px 6px!important;border:2px solid #0f172a!important;border-radius:6px!important}.label-single-box .label-name{font-size:13px!important}.label-single-box .label-mfr{font-size:9px!important}.label-single-box .label-meta span{font-size:9px!important}.label-single-box .label-brand{font-size:8px!important}.label-single-box .label-barcode{height:36px!important}</style>`;
-  if(fmt==='sheet'){const labels=labelItems.map(i=>makeLabel(i,'sheet'));preview.innerHTML=`${styles}<div id="printArea"><div class="label-sheet">${labels.slice(0,30).join('')}</div></div>`;}
-  else preview.innerHTML=`${styles}<div id="printArea"><div class="label-wrap-single">${makeLabel(labelItems[0],'single')}</div></div>`;
+  const makeLabel=(item,size)=>{
+    const code=item.serial||item.sku||item.internal_sku||('ID-'+String(item.id));
+    const isSingle=size==='single';const isThermal=size==='thermal';
+    const bcId='bc-'+item.id+'-'+Math.random().toString(36).slice(2,6);
+    const bcH=isSingle?36:isThermal?20:22;
+    const bcW=isSingle?2:isThermal?1.5:1.3;
+    const cls=isSingle?'label-single-box':isThermal?'label-thermal-box':'';
+    return `<div class="label-box ${cls}"><div class="label-top"><div class="label-info"><div class="label-name">${item.name}</div>${item.manufacturer?`<div class="label-mfr">${item.manufacturer}${item.model?' · '+item.model:''}</div>`:''}<div class="label-meta">${item.serial?`<span>SN: <strong>${item.serial}</strong></span>`:''}${item.sku?`<span>SKU: <strong>${item.sku}</strong></span>`:''}${!item.serial&&!item.sku&&item.internal_sku?`<span>SKU: <strong>${item.internal_sku}</strong></span>`:''}${item.shelf?`<span>📍 ${item.shelf}</span>`:''}</div><div class="label-brand">CountDepot</div></div></div><div class="label-barcode-wrap"><svg id="${bcId}" class="label-barcode"></svg></div></div><script>(function(){var a=0;function t(){try{JsBarcode('#${bcId}','${code.replace(/'/g,"\\'")}',{format:'CODE128',width:${bcW},height:${bcH},displayValue:true,fontSize:${isSingle?11:isThermal?8:7},margin:0,background:'#ffffff',lineColor:'#0f172a',font:'IBM Plex Mono, monospace'});}catch(e){if(a++<10)setTimeout(t,100);}}t();})()</`+`script>`;
+  };
+  const styles=`<style>.label-sheet{display:flex;flex-wrap:wrap;gap:0;padding:8px}.label-roll{display:flex;flex-direction:column;align-items:flex-start;gap:0;padding:8px}.label-box{width:2.625in;height:1in;border:1px dashed #ccc;padding:4px 5px 3px;box-sizing:border-box;display:flex;flex-direction:column;background:#fff;overflow:hidden}.label-top{display:flex;align-items:flex-start;gap:4px;flex:1}.label-info{flex:1;min-width:0}.label-name{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:sans-serif}.label-mfr{font-size:6.5px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.label-meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:1px}.label-meta span{font-size:6.5px;color:#333;font-family:monospace}.label-brand{font-size:5.5px;color:#bbb;margin-top:2px}.label-barcode{width:100%;height:22px;display:block;margin-top:2px}.label-barcode-wrap{width:100%;flex-shrink:0}.label-wrap-single{display:flex;justify-content:center;padding:20px}.label-single-box{width:3.5in!important;height:1.5in!important;padding:8px 10px 6px!important;border:2px solid #0f172a!important;border-radius:6px!important}.label-single-box .label-name{font-size:13px!important}.label-single-box .label-mfr{font-size:9px!important}.label-single-box .label-meta span{font-size:9px!important}.label-single-box .label-brand{font-size:8px!important}.label-single-box .label-barcode{height:36px!important}.label-thermal-box{width:2in!important;height:1in!important;padding:4px 6px 3px!important;border:1px solid #ccc!important;border-radius:0!important}.label-thermal-box .label-name{font-size:8px!important}.label-thermal-box .label-mfr{font-size:6px!important}.label-thermal-box .label-meta span{font-size:6px!important}@media print{body{margin:0}.label-roll{padding:0}.label-thermal-box{border:none!important;margin:0}}</style>`;
+  if(fmt==='sheet'){
+    const labels=labelItems.map(i=>makeLabel(i,'sheet'));
+    preview.innerHTML=`${styles}<div id="printArea"><div class="label-sheet">${labels.slice(0,30).join('')}</div></div>`;
+  }else if(fmt==='thermal'){
+    const labels=labelItems.map(i=>makeLabel(i,'thermal'));
+    preview.innerHTML=`${styles}<div id="printArea"><div class="label-roll">${labels.join('')}</div></div>`;
+  }else{
+    preview.innerHTML=`${styles}<div id="printArea"><div class="label-wrap-single">${makeLabel(labelItems[0],'single')}</div></div>`;
+  }
 }
 function doPrint(){const content=document.getElementById('labelPreview').innerHTML;const w=window.open('','_blank','width=950,height=750');w.document.write(`<!DOCTYPE html><html><head><title>Labels</title><script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"><\/script></head><body>${content}</body></html>`);w.document.close();}
 
