@@ -151,7 +151,17 @@ def run_migrations_only():
     Called on every request after the first so new columns are never missed
     when the server stays up across code deploys."""
     try:
-        _run_migrations(get_db())
+        db = get_db()
+        _run_migrations(db)
+        # Also ensure any tables added after initial schema creation exist.
+        # Using CREATE TABLE IF NOT EXISTS is always safe.
+        db.executescript("""
+            CREATE TABLE IF NOT EXISTS user_locations (
+                user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+                PRIMARY KEY (user_id, location_id)
+            );
+        """)
     except Exception:
         pass
 

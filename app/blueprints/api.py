@@ -902,44 +902,70 @@ def api_checkin():
 @login_required
 def api_get_locations():
     allowed_ids = session.get("location_ids") or []
-    # Correlated subqueries avoid cross-product from joining items + user_locations simultaneously
-    sql = """
-        SELECT l.*,
-               (SELECT COUNT(*) FROM items WHERE location_id=l.id AND active=1)                             AS item_count,
-               (SELECT COUNT(*) FROM items WHERE location_id=l.id AND active=1
-                                             AND checked_out=0 AND sold=0)                                  AS available_count,
-               (SELECT COUNT(*) FROM user_locations WHERE location_id=l.id)                                 AS member_count
-        FROM locations l
-    """
-    if allowed_ids:
-        sql += f" WHERE l.id IN ({','.join('?'*len(allowed_ids))})"
-    sql += " ORDER BY l.name"
-    rows = query(sql, allowed_ids if allowed_ids else [])
-    result = [dict(r) for r in rows]
+    try:
+        # Correlated subqueries avoid cross-product from joining items + user_locations
+        sql = """
+            SELECT l.*,
+                   (SELECT COUNT(*) FROM items
+                    WHERE location_id=l.id AND active=1)                          AS item_count,
+                   (SELECT COUNT(*) FROM items
+                    WHERE location_id=l.id AND active=1
+                      AND checked_out=0 AND sold=0)                               AS available_count,
+                   (SELECT COUNT(*) FROM user_locations
+                    WHERE location_id=l.id)                                       AS member_count
+            FROM locations l
+        """
+        if allowed_ids:
+            sql += f" WHERE l.id IN ({','.join('?'*len(allowed_ids))})"
+        sql += " ORDER BY l.name"
+        rows = query(sql, allowed_ids if allowed_ids else [])
+        result = [dict(r) for r in rows]
+    except Exception:
+        # user_locations table may not exist yet on older tenant DBs —
+        # fall back to a simpler query without member_count
+        sql = """
+            SELECT l.*,
+                   (SELECT COUNT(*) FROM items
+                    WHERE location_id=l.id AND active=1)                          AS item_count,
+                   (SELECT COUNT(*) FROM items
+                    WHERE location_id=l.id AND active=1
+                      AND checked_out=0 AND sold=0)                               AS available_count,
+                   0                                                               AS member_count
+            FROM locations l
+        """
+        if allowed_ids:
+            sql += f" WHERE l.id IN ({','.join('?'*len(allowed_ids))})"
+        sql += " ORDER BY l.name"
+        rows = query(sql, allowed_ids if allowed_ids else [])
+        result = [dict(r) for r in rows]
 
-    # Fetch member names for all locations in one query (avoids N+1)
-    if result:
-        loc_ids = [r["id"] for r in result]
-        placeholders = ",".join("?" * len(loc_ids))
-        member_rows = query(
-            f"SELECT ul.location_id, u.username "
-            f"FROM user_locations ul "
-            f"JOIN users u ON u.id=ul.user_id AND u.active=1 "
-            f"WHERE ul.location_id IN ({placeholders}) "
-            f"ORDER BY u.username",
-            loc_ids)
-        members_by_loc = {}
-        for mr in member_rows:
-            lid = mr["location_id"]
-            if lid not in members_by_loc:
-                members_by_loc[lid] = []
-            if len(members_by_loc[lid]) < 5:
-                members_by_loc[lid].append(mr["username"])
+    # Attach member usernames (up to 5 per site)
+    try:
+        if result:
+            loc_ids = [r["id"] for r in result]
+            placeholders = ",".join("?" * len(loc_ids))
+            member_rows = query(
+                f"SELECT ul.location_id, u.username "
+                f"FROM user_locations ul "
+                f"JOIN users u ON u.id=ul.user_id AND u.active=1 "
+                f"WHERE ul.location_id IN ({placeholders}) "
+                f"ORDER BY u.username",
+                loc_ids)
+            members_by_loc = {}
+            for mr in member_rows:
+                lid = mr["location_id"]
+                if lid not in members_by_loc:
+                    members_by_loc[lid] = []
+                if len(members_by_loc[lid]) < 5:
+                    members_by_loc[lid].append(mr["username"])
+            for loc in result:
+                loc["member_names"] = members_by_loc.get(loc["id"], [])
+        else:
+            for loc in result:
+                loc["member_names"] = []
+    except Exception:
         for loc in result:
-            loc["member_names"] = members_by_loc.get(loc["id"], [])
-    else:
-        for loc in result:
-            loc["member_names"] = []
+            loc.setdefault("member_names", [])
 
     return jsonify(result)
 
