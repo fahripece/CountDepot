@@ -864,6 +864,108 @@ def api_delete_photo(photo_id):
     return jsonify({"ok": True})
 
 
+# ── Item History Timeline ─────────────────────────────────────────────────────
+
+@bp.route("/api/item/<int:item_id>/timeline")
+@login_required
+def api_item_timeline(item_id):
+    if not _item_location_allowed(item_id):
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+
+    events = []
+
+    # ── Audit log entries for this item ──────────────────────────────────────
+    for r in query("""SELECT ts, action, detail, username, before_state, after_state
+                      FROM audit_log WHERE item_id=? ORDER BY ts""", [item_id]):
+        events.append({
+            "ts":       r["ts"],
+            "type":     "audit",
+            "action":   r["action"],
+            "detail":   r["detail"] or "",
+            "actor":    r["username"] or "",
+            "before":   r["before_state"],
+            "after":    r["after_state"],
+        })
+
+    # ── Checkout log ─────────────────────────────────────────────────────────
+    for r in query("""SELECT checkout_date, checkin_date, checked_out_by, job_ref,
+                             checkin_by, checkin_note, expected_return_date
+                      FROM checkout_log WHERE item_id=? ORDER BY checkout_date""", [item_id]):
+        events.append({
+            "ts":     r["checkout_date"] or "",
+            "type":   "checkout",
+            "action": "CHECKOUT",
+            "detail": f"Checked out to {r['checked_out_by'] or '?'}"
+                      + (f" · Job: {r['job_ref']}" if r["job_ref"] else "")
+                      + (f" · Due: {r['expected_return_date'][:10]}" if r["expected_return_date"] else ""),
+            "actor":  r["checked_out_by"] or "",
+        })
+        if r["checkin_date"]:
+            events.append({
+                "ts":     r["checkin_date"],
+                "type":   "checkin",
+                "action": "CHECKIN",
+                "detail": f"Returned by {r['checkin_by'] or '?'}"
+                          + (f" · {r['checkin_note']}" if r["checkin_note"] else ""),
+                "actor":  r["checkin_by"] or "",
+            })
+
+    # ── Field edits ──────────────────────────────────────────────────────────
+    for r in query("""SELECT ts, modified_by, field_changed, old_value, new_value, notes
+                      FROM item_modifications WHERE item_id=? ORDER BY ts""", [item_id]):
+        label = r["field_changed"].replace("_", " ").title()
+        events.append({
+            "ts":     r["ts"],
+            "type":   "edit",
+            "action": "EDIT",
+            "detail": f"{label}: {r['old_value'] or '—'} → {r['new_value'] or '—'}"
+                      + (f" · {r['notes']}" if r["notes"] else ""),
+            "actor":  r["modified_by"] or "",
+        })
+
+    # ── Notes ────────────────────────────────────────────────────────────────
+    for r in query("""SELECT created_at, username, note
+                      FROM item_notes WHERE item_id=? ORDER BY created_at""", [item_id]):
+        events.append({
+            "ts":     r["created_at"],
+            "type":   "note",
+            "action": "NOTE",
+            "detail": r["note"] or "",
+            "actor":  r["username"] or "",
+        })
+
+    # ── Service log ──────────────────────────────────────────────────────────
+    for r in query("""SELECT service_date, service_type, performed_by, provider,
+                             notes, next_service_date, created_by
+                      FROM service_log WHERE item_id=? ORDER BY service_date""", [item_id]):
+        events.append({
+            "ts":     r["service_date"],
+            "type":   "service",
+            "action": "SERVICE",
+            "detail": f"{r['service_type']}"
+                      + (f" · by {r['performed_by']}" if r["performed_by"] else "")
+                      + (f" · {r['provider']}" if r["provider"] else "")
+                      + (f" · {r['notes']}" if r["notes"] else "")
+                      + (f" · Next: {r['next_service_date']}" if r["next_service_date"] else ""),
+            "actor":  r["created_by"] or r["performed_by"] or "",
+        })
+
+    # ── Photos ───────────────────────────────────────────────────────────────
+    for r in query("""SELECT created_at, uploaded_by, caption
+                      FROM item_photos WHERE item_id=? ORDER BY created_at""", [item_id]):
+        events.append({
+            "ts":     r["created_at"],
+            "type":   "photo",
+            "action": "PHOTO",
+            "detail": f"Photo added" + (f": {r['caption']}" if r["caption"] else ""),
+            "actor":  r["uploaded_by"] or "",
+        })
+
+    # Sort all events by timestamp, most recent last
+    events.sort(key=lambda e: e["ts"] or "")
+    return jsonify({"ok": True, "events": events})
+
+
 # ── Import history ────────────────────────────────────────────────────────────
 
 @bp.route("/api/import-history")

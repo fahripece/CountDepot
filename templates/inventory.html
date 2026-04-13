@@ -183,6 +183,12 @@
           <button class="btn btn-secondary btn-sm" id="dp-photo-upload-btn" onclick="uploadPhoto()">Upload</button>
         </div>
       </div>
+    <div id="dp-timeline-section" style="margin-top:12px">
+      <div class="section-hdr" style="margin-top:0">🕒 History</div>
+      <div id="dp-timeline-list" style="margin-bottom:4px">
+        <div style="color:#94a3b8;font-size:12px;text-align:center;padding:16px">Loading…</div>
+      </div>
+    </div>
     </div>
   </div>
   <div class="detail-foot" id="dp-actions"></div>
@@ -896,6 +902,7 @@ function showDetail(item){
   loadNotes(item.id);
   loadReservations(item.id);
   loadPhotos(item.id);
+  loadTimeline(item.id);
   document.getElementById('detailPanel').classList.add('open');
 }
 function closeDetail(){document.getElementById('detailPanel').classList.remove('open');currentDetailId=null;}
@@ -1485,6 +1492,31 @@ async function deletePhoto(photoId,itemId){
   const res=await fetch('/api/photo/'+photoId,{method:'DELETE',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken}}).then(r=>r.json());
   if(res.ok){toast('Photo deleted','warn');loadPhotos(itemId);}
   else toast(res.msg||'Error','err');
+}
+
+// ── Timeline ──
+const TL_COLORS={checkout:'#1d4ed8',checkin:'#16a34a',edit:'#7c3aed',note:'#d97706',service:'#0891b2',photo:'#be185d',audit:'#64748b'};
+const TL_ICONS={checkout:'📤',checkin:'📥',edit:'✏️',note:'📝',service:'🔧',photo:'📷',audit:'⚙️'};
+async function loadTimeline(itemId){
+  const el=document.getElementById('dp-timeline-list');
+  if(!el)return;
+  el.innerHTML='<div style="color:#94a3b8;font-size:12px;text-align:center;padding:16px">Loading…</div>';
+  const res=await fetch('/api/item/'+itemId+'/timeline').then(r=>r.json()).catch(()=>({ok:false}));
+  if(!res.ok||!res.events||!res.events.length){el.innerHTML='<div style="color:#94a3b8;font-size:12px;text-align:center;padding:16px">No history yet</div>';return;}
+  const evs=[...res.events].reverse();
+  el.innerHTML='<div style="position:relative;padding-left:20px">'+evs.map((e,i)=>{
+    const col=TL_COLORS[e.type]||'#64748b';
+    const ico=TL_ICONS[e.type]||'•';
+    const ts=e.ts?e.ts.replace('T',' ').slice(0,16):'';
+    const actor=e.actor?`<span style="color:#64748b"> · ${escHtml(e.actor)}</span>`:'';
+    return `<div style="position:relative;margin-bottom:12px;padding-left:12px">
+      <div style="position:absolute;left:-19px;top:3px;width:10px;height:10px;border-radius:50%;background:${col};border:2px solid #fff;box-shadow:0 0 0 1px ${col}"></div>
+      ${i<evs.length-1?`<div style="position:absolute;left:-14px;top:13px;bottom:-12px;width:1px;background:#e5e7eb"></div>`:''}
+      <div style="font-size:11px;font-weight:600;color:${col}">${ico} ${e.action.replace(/_/g,' ')}</div>
+      <div style="font-size:12px;color:#374151;margin-top:1px">${escHtml(e.detail||'')}</div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:1px">${ts}${actor}</div>
+    </div>`;
+  }).join('')+'</div>';
 }
 
 async function jumpToItem(id){await loadItems();const item=allItems.find(i=>i.id===id);if(item){showDetail(item);toast('Jumped to: '+item.name,'ok');}else toast('Item not found (may be inactive)','warn');}
