@@ -895,16 +895,27 @@ def api_get_locations():
     allowed_ids = session.get("location_ids") or []
     sql = """
         SELECT l.*,
-               COUNT(i.id) as item_count,
-               SUM(CASE WHEN i.checked_out=0 AND i.sold=0 THEN 1 ELSE 0 END) as available_count
+               COUNT(DISTINCT i.id) as item_count,
+               SUM(CASE WHEN i.checked_out=0 AND i.sold=0 AND i.active=1 THEN 1 ELSE 0 END) as available_count,
+               COUNT(DISTINCT ul.user_id) as member_count
         FROM locations l
         LEFT JOIN items i ON i.location_id=l.id AND i.active=1
+        LEFT JOIN user_locations ul ON ul.location_id=l.id
     """
     if allowed_ids:
         sql += f" WHERE l.id IN ({','.join('?'*len(allowed_ids))})"
     sql += " GROUP BY l.id ORDER BY l.name"
     rows = query(sql, allowed_ids if allowed_ids else [])
-    return jsonify([dict(r) for r in rows])
+    result = [dict(r) for r in rows]
+    # Attach member names for display (up to 5 per site)
+    for loc in result:
+        members = query(
+            "SELECT u.username FROM user_locations ul "
+            "JOIN users u ON u.id=ul.user_id AND u.active=1 "
+            "WHERE ul.location_id=? ORDER BY u.username LIMIT 5",
+            [loc["id"]])
+        loc["member_names"] = [m["username"] for m in members]
+    return jsonify(result)
 
 
 @bp.route("/api/location/<int:loc_id>/items")

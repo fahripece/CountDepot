@@ -12,13 +12,13 @@
 </div>
 
 <div style="flex:1;overflow-y:auto;padding:22px 24px">
-  <div id="site-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px"></div>
+  <div id="site-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px"></div>
 </div>
 
 {% if session.get('role') == 'admin' %}
-<!-- ADD / EDIT SITE MODAL -->
+<!-- ── ADD / EDIT SITE MODAL ──────────────────────────────── -->
 <div class="overlay" id="siteModal">
-  <div class="modal" style="max-width:480px">
+  <div class="modal" style="max-width:460px">
     <div class="modal-header">
       <div class="modal-title" id="siteModalTitle">Add Site</div>
       <button class="modal-close" onclick="closeModal('siteModal')">✕</button>
@@ -29,17 +29,8 @@
       <div class="field"><label class="label">Description</label><input class="input" id="site-desc" placeholder="Optional notes"></div>
       <div class="field">
         <label class="label">Alert Email</label>
-        <input class="input" id="site-email" type="email" placeholder="e.g. warehouse@company.com — receives low-stock alerts for this site">
-        <div style="font-size:11px;color:#94a3b8;margin-top:4px">Overrides global alert email for items at this site.</div>
-      </div>
-
-      <!-- Assigned users — only shown when editing an existing site -->
-      <div id="site-users-section" style="display:none;margin-top:4px">
-        <label class="label" style="margin-bottom:6px">Assigned Users</label>
-        <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">Assigned users can only see items at this site. Leave everyone unchecked for unrestricted access.</div>
-        <div id="site-users-list" style="display:flex;flex-direction:column;border:1px solid #e5e3de;border-radius:8px;overflow:hidden;max-height:220px;overflow-y:auto">
-          <div style="padding:12px;font-size:12px;color:#94a3b8">Loading…</div>
-        </div>
+        <input class="input" id="site-email" type="email" placeholder="e.g. warehouse@company.com">
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px">Overrides the global alert email for low-stock notifications at this site.</div>
       </div>
     </div>
     <div class="modal-footer" style="justify-content:space-between">
@@ -51,29 +42,67 @@
     </div>
   </div>
 </div>
+
+<!-- ── MANAGE MEMBERS MODAL ───────────────────────────────── -->
+<div class="overlay" id="membersModal">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="membersModalTitle">Manage Members</div>
+        <div id="membersModalSub" style="font-size:12px;color:#94a3b8;margin-top:2px"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('membersModal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding-top:14px">
+      <div style="font-size:12px;color:#64748b;margin-bottom:12px;padding:10px 12px;background:#f8f7f5;border-radius:8px;border-left:3px solid #94a3b8">
+        Assigned members can <strong>only</strong> see items at this site. Leave everyone unchecked for unrestricted access.
+      </div>
+      <div id="members-list" style="display:flex;flex-direction:column;border:1px solid #e5e3de;border-radius:8px;overflow:hidden;max-height:320px;overflow-y:auto">
+        <div style="padding:16px;font-size:12px;color:#94a3b8;text-align:center">Loading…</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('membersModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMembers()">Save Members</button>
+    </div>
+  </div>
+</div>
 {% endif %}
 
 <style>
-.site-card{background:#fff;border:1.5px solid #e5e3de;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px;cursor:pointer;transition:box-shadow .15s,border-color .15s;text-decoration:none;color:inherit}
+.site-card{background:#fff;border:1.5px solid #e5e3de;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px;text-decoration:none;color:inherit;transition:box-shadow .15s,border-color .15s}
 .site-card:hover{box-shadow:0 4px 18px rgba(0,0,0,.08);border-color:#94a3b8}
-.site-icon{width:44px;height:44px;border-radius:10px;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;flex-shrink:0}
+.site-icon{width:42px;height:42px;border-radius:10px;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;flex-shrink:0}
 .site-stat{display:flex;flex-direction:column;align-items:center;flex:1}
 .site-stat-val{font-size:22px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:#0f172a}
 .site-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;font-weight:600;margin-top:2px}
+.site-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:500;white-space:nowrap}
+.site-badge-restricted{background:#fef3c7;color:#92400e}
+.site-badge-open{background:#f0fdf4;color:#166534}
 body.dark .site-card{background:#1e293b;border-color:#334155;color:#e2e8f0}
 body.dark .site-card:hover{border-color:#64748b}
 body.dark .site-stat-val{color:#e2e8f0}
 body.dark .site-icon{background:#334155}
+body.dark .site-badge-restricted{background:#451a03;color:#fde68a}
+body.dark .site-badge-open{background:#052e16;color:#86efac}
+.member-avatar{width:26px;height:26px;border-radius:50%;background:#e2e8f0;color:#475569;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;border:2px solid #fff;margin-left:-6px}
+.member-avatar:first-child{margin-left:0}
+body.dark .member-avatar{background:#334155;color:#94a3b8;border-color:#1e293b}
+.members-row{display:flex;align-items:center;gap:6px;padding:9px 14px;border-bottom:1px solid #f1f0ee;cursor:pointer;transition:background .08s}
+.members-row:last-child{border-bottom:none}
+.members-row:hover{background:#fafaf9}
+body.dark .members-row:hover{background:#162032}
+body.dark .members-row{border-bottom-color:#334155}
 </style>
 
 <script>
 let allSites=[];
+let _membersLocId=null;
 
 async function loadSites(){
   allSites=await fetch('/api/locations').then(r=>r.json());
   const locIds={{ session.get('location_ids', [])|tojson }};
-  // If user has site restrictions, only show their sites
-  const visible = locIds.length ? allSites.filter(s=>locIds.includes(s.id)) : allSites;
+  const visible=locIds.length?allSites.filter(s=>locIds.includes(s.id)):allSites;
   document.getElementById('site-count').textContent=visible.length+' site'+(visible.length!==1?'s':'');
   renderSites(visible);
 }
@@ -88,12 +117,31 @@ function renderSites(sites){
     </div>`;
     return;
   }
+  const isAdmin={{ 'true' if session.get('role') == 'admin' else 'false' }};
   grid.innerHTML=sites.map(s=>{
     const initial=(s.name||'?')[0].toUpperCase();
     const out=s.item_count-(s.available_count||0);
     const pct=s.item_count?Math.round(((s.available_count||0)/s.item_count)*100):100;
     const barColor=pct>66?'#15803d':pct>33?'#d97706':'#b91c1c';
-    const adminEdit=`{% if session.get('role') == 'admin' %}<button class="btn btn-secondary btn-sm" style="font-size:11px" onclick="event.preventDefault();event.stopPropagation();openEditSite(${s.id})">Edit</button>{% endif %}`;
+    const memberCount=s.member_count||0;
+    const memberNames=s.member_names||[];
+
+    // Member avatars (up to 4 shown)
+    const shownNames=memberNames.slice(0,4);
+    const overflow=memberCount>4?memberCount-4:0;
+    const avatars=shownNames.map(n=>`<span class="member-avatar" title="${n}">${n[0].toUpperCase()}</span>`).join('');
+    const overflowBadge=overflow>0?`<span class="member-avatar" title="${overflow} more">+${overflow}</span>`:'';
+
+    const accessBadge=memberCount>0
+      ? `<span class="site-badge site-badge-restricted">🔒 ${memberCount} member${memberCount!==1?'s':''}</span>`
+      : `<span class="site-badge site-badge-open">🌐 Open access</span>`;
+
+    const adminActions=isAdmin?`
+      <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+        <button class="btn btn-secondary btn-sm" style="font-size:11px" onclick="event.preventDefault();event.stopPropagation();openMembers(${s.id})">👥 Members</button>
+        <button class="btn btn-secondary btn-sm" style="font-size:11px" onclick="event.preventDefault();event.stopPropagation();openEditSite(${s.id})">Edit</button>
+      </div>`:'';
+
     return `<a href="/sites/${s.id}" class="site-card">
       <div style="display:flex;align-items:center;gap:12px">
         <div class="site-icon">${initial}</div>
@@ -101,8 +149,14 @@ function renderSites(sites){
           <div style="font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}</div>
           ${s.description?`<div style="font-size:12px;color:#94a3b8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.description}</div>`:''}
         </div>
-        ${adminEdit}
+        ${adminActions}
       </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        ${accessBadge}
+        ${memberCount>0&&shownNames.length?`<div style="display:flex;align-items:center;padding-left:6px">${avatars}${overflowBadge}</div>`:''}
+      </div>
+
       <div style="display:flex;gap:0;border:1.5px solid #e5e3de;border-radius:8px;overflow:hidden">
         <div class="site-stat" style="padding:10px 0;border-right:1px solid #e5e3de">
           <div class="site-stat-val">${s.item_count||0}</div>
@@ -126,8 +180,8 @@ function renderSites(sites){
 }
 
 {% if session.get('role') == 'admin' %}
-let _siteUsers = [];   // users loaded for the currently-open site
 
+// ── Site add/edit ─────────────────────────────────────────
 function openAddSite(){
   document.getElementById('site-id').value='';
   document.getElementById('site-name').value='';
@@ -135,13 +189,11 @@ function openAddSite(){
   document.getElementById('site-email').value='';
   document.getElementById('siteModalTitle').textContent='Add Site';
   document.getElementById('site-delete-btn').style.display='none';
-  document.getElementById('site-users-section').style.display='none';
-  _siteUsers=[];
   openModal('siteModal');
   setTimeout(()=>document.getElementById('site-name').focus(),100);
 }
 
-async function openEditSite(id){
+function openEditSite(id){
   const s=allSites.find(x=>x.id===id); if(!s)return;
   document.getElementById('site-id').value=s.id;
   document.getElementById('site-name').value=s.name;
@@ -149,34 +201,7 @@ async function openEditSite(id){
   document.getElementById('site-email').value=s.email||'';
   document.getElementById('siteModalTitle').textContent='Edit Site';
   document.getElementById('site-delete-btn').style.display='';
-  document.getElementById('site-users-section').style.display='';
-  document.getElementById('site-users-list').innerHTML='<div style="padding:12px;font-size:12px;color:#94a3b8">Loading…</div>';
   openModal('siteModal');
-  // Load users for this site
-  const users = await fetch('/api/location/'+id+'/users').then(r=>r.json()).catch(()=>[]);
-  _siteUsers = users;
-  _renderSiteUsers(users);
-}
-
-function _renderSiteUsers(users){
-  const el = document.getElementById('site-users-list');
-  if(!users.length){
-    el.innerHTML='<div style="padding:12px;font-size:12px;color:#94a3b8">No users found.</div>';
-    return;
-  }
-  el.innerHTML = users.map((u,i)=>{
-    const border = i<users.length-1 ? 'border-bottom:1px solid #f1f0ee' : '';
-    const badge = u.role==='admin'
-      ? '<span style="font-size:10px;background:#0f172a;color:#fff;border-radius:10px;padding:1px 7px;margin-left:5px">admin</span>'
-      : '<span style="font-size:10px;background:#e2e8f0;color:#475569;border-radius:10px;padding:1px 7px;margin-left:5px">worker</span>';
-    return `<label style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;${border}">
-      <input type="checkbox" data-uid="${u.id}" ${u.assigned?'checked':''} style="width:15px;height:15px;accent-color:#0f172a">
-      <div style="flex:1;min-width:0">
-        <span style="font-size:13px;font-weight:500">${u.username}</span>${badge}
-        ${u.email?`<div style="font-size:11px;color:#64748b;margin-top:1px">${u.email}</div>`:'<div style="font-size:11px;color:#94a3b8;margin-top:1px">No email</div>'}
-      </div>
-    </label>`;
-  }).join('');
 }
 
 async function saveSite(){
@@ -186,17 +211,12 @@ async function saveSite(){
   const payload={name,description:document.getElementById('site-desc').value.trim(),email:document.getElementById('site-email').value.trim()};
   let res;
   if(id){
-    res=await fetch('/api/location/'+id,{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify(payload)}).then(r=>r.json());
-    if(res.ok){
-      // Save user assignments
-      const checkedIds=Array.from(document.querySelectorAll('#site-users-list input[type=checkbox]:checked')).map(cb=>parseInt(cb.dataset.uid));
-      await fetch('/api/location/'+id+'/users',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify({user_ids:checkedIds})});
-    }
+    res=await fetch('/api/location/'+id,{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify(payload)}).then(r=>r.json()).catch(()=>({ok:false,msg:'Network error'}));
   } else {
-    res=await api('/api/locations',payload);
+    res=await fetch('/api/locations',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},body:JSON.stringify(payload)}).then(r=>r.json()).catch(()=>({ok:false,msg:'Network error'}));
   }
   if(res.ok){toast(id?'Site updated ✓':'Site added ✓','ok');closeModal('siteModal');loadSites();}
-  else toast(res.msg||'Error','err');
+  else toast(res.msg||'Error saving site','err');
 }
 
 async function deleteSite(){
@@ -207,6 +227,66 @@ async function deleteSite(){
   if(res.ok){toast('Site deleted','warn');closeModal('siteModal');loadSites();}
   else toast(res.msg||'Error','err');
 }
+
+// ── Member management ─────────────────────────────────────
+async function openMembers(locId){
+  _membersLocId=locId;
+  const s=allSites.find(x=>x.id===locId);
+  document.getElementById('membersModalTitle').textContent='Members — '+(s?s.name:'Site');
+  document.getElementById('membersModalSub').textContent=
+    s&&s.member_count>0
+      ? s.member_count+' user'+(s.member_count!==1?'s':'')+' restricted to this site'
+      : 'No restrictions — all users can see this site';
+  document.getElementById('members-list').innerHTML='<div style="padding:16px;font-size:12px;color:#94a3b8;text-align:center">Loading…</div>';
+  openModal('membersModal');
+  const users=await fetch('/api/location/'+locId+'/users').then(r=>r.json()).catch(()=>null);
+  if(!users){
+    document.getElementById('members-list').innerHTML='<div style="padding:16px;font-size:13px;color:#b91c1c;text-align:center">Failed to load users.</div>';
+    return;
+  }
+  renderMembersList(users);
+}
+
+function renderMembersList(users){
+  const el=document.getElementById('members-list');
+  if(!users.length){
+    el.innerHTML='<div style="padding:16px;font-size:12px;color:#94a3b8;text-align:center">No users found.</div>';
+    return;
+  }
+  el.innerHTML=users.map((u,i)=>{
+    const isLast=i===users.length-1;
+    const badge=u.role==='admin'
+      ? '<span style="font-size:10px;background:#0f172a;color:#fff;border-radius:10px;padding:1px 7px;margin-left:5px">admin</span>'
+      : '<span style="font-size:10px;background:#e2e8f0;color:#475569;border-radius:10px;padding:1px 7px;margin-left:5px">worker</span>';
+    return `<label class="members-row${isLast?' last':''}">
+      <input type="checkbox" data-uid="${u.id}" ${u.assigned?'checked':''} style="width:15px;height:15px;accent-color:#0f172a;flex-shrink:0;cursor:pointer">
+      <div style="width:32px;height:32px;border-radius:50%;background:#e2e8f0;color:#475569;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${u.username[0].toUpperCase()}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500">${u.username}${badge}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:1px">${u.email||'No email'}</div>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+async function saveMembers(){
+  if(!_membersLocId)return;
+  const checkedIds=Array.from(document.querySelectorAll('#members-list input[type=checkbox]:checked')).map(cb=>parseInt(cb.dataset.uid));
+  const res=await fetch('/api/location/'+_membersLocId+'/users',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body:JSON.stringify({user_ids:checkedIds})
+  }).then(r=>r.json()).catch(()=>({ok:false,msg:'Network error'}));
+  if(res.ok){
+    const count=checkedIds.length;
+    toast(count===0?'Site access unrestricted ✓':`${count} member${count!==1?'s':''} saved ✓`,'ok');
+    closeModal('membersModal');
+    loadSites();
+  } else {
+    toast(res.msg||'Error saving members','err');
+  }
+}
+
 {% endif %}
 
 loadSites();
