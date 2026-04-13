@@ -449,6 +449,26 @@ def sync_item_task(item_id, item_name, missing_fields):
                     [now, existing["id"]])
 
 
+# ── Notifications ─────────────────────────────────────────────────────────────
+
+def push_notification(event_type, title, body=None, link=None, user_id=None):
+    """Insert a notification row for a specific user (or user_id=None for all admins)."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if user_id is not None:
+        execute(
+            "INSERT INTO notifications (user_id,event_type,title,body,link,read,created_at) "
+            "VALUES (?,?,?,?,?,0,?)",
+            [user_id, event_type, title, body, link, now])
+    else:
+        # Fan out to all admin users
+        admins = query("SELECT id FROM users WHERE role='admin'")
+        for admin in admins:
+            execute(
+                "INSERT INTO notifications (user_id,event_type,title,body,link,read,created_at) "
+                "VALUES (?,?,?,?,?,0,?)",
+                [admin["id"], event_type, title, body, link, now])
+
+
 # ── Report helpers ────────────────────────────────────────────────────────────
 
 def _parse_date_range(req):

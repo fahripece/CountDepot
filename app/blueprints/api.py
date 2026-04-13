@@ -3173,6 +3173,101 @@ def _check_item_limit():
     return True, None
 
 
+# ── Notifications ─────────────────────────────────────────────────────────────
+
+@bp.route("/api/notifications")
+@login_required
+def api_notifications_list():
+    uid  = session["user_id"]
+    rows = query(
+        "SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 50", [uid])
+    unread = sum(1 for r in rows if not r["read"])
+    return jsonify({"ok": True, "notifications": [dict(r) for r in rows], "unread": unread})
+
+
+@bp.route("/api/notifications/read-all", methods=["POST"])
+@login_required
+def api_notifications_read_all():
+    execute("UPDATE notifications SET read=1 WHERE user_id=? AND read=0", [session["user_id"]])
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/notifications/<int:nid>/read", methods=["POST"])
+@login_required
+def api_notification_read(nid):
+    execute("UPDATE notifications SET read=1 WHERE id=? AND user_id=?",
+            [nid, session["user_id"]])
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/notifications/dismiss-all", methods=["POST"])
+@login_required
+def api_notifications_dismiss_all():
+    execute("DELETE FROM notifications WHERE user_id=? AND read=1", [session["user_id"]])
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/notifications/generate", methods=["POST"])
+@login_required
+@admin_required
+def api_notifications_generate():
+    """Scan for low stock, overdue checkouts, expiring warranties and push notifications."""
+    from app.helpers import push_notification
+    from datetime import date, timedelta
+    today = date.today()
+    count = 0
+
+    # Low stock
+    low = query("""
+        SELECT p.id, p.name, p.low_stock_threshold,
+               COALESCE(SUM(i.qty),0)-COALESCE(SUM(i.qty_out),0) AS avail
+        FROM products p
+        JOIN items i ON i.product_id=p.id
+        WHERE p.low_stock_threshold IS NOT NULL AND p.low_stock_threshold>0
+          AND COALESCE(i.sold,0)=0 AND COALESCE(i.retired,0)=0
+        GROUP BY p.id
+        HAVING avail < p.low_stock_threshold
+    """)
+    for row in low:
+        push_notification("low_stock",
+                          f"Low stock: {row['name']}",
+                          f"Only {int(row['avail'])} available (threshold {row['low_stock_threshold']})",
+                          "/inventory")
+        count += 1
+
+    # Overdue checkouts (checked out, no due date or due date past)
+    overdue = query("""
+        SELECT cl.id, i.name, cl.checked_out_by, cl.due_date
+        FROM checkout_log cl
+        JOIN items i ON i.id=cl.item_id
+        WHERE cl.returned_at IS NULL
+          AND cl.due_date IS NOT NULL AND cl.due_date < ?
+    """, [today.isoformat()])
+    for row in overdue:
+        push_notification("overdue_checkout",
+                          f"Overdue checkout: {row['name']}",
+                          f"Checked out by {row['checked_out_by']}, due {row['due_date']}",
+                          "/inventory")
+        count += 1
+
+    # Warranties expiring within 30 days
+    in_30 = (today + timedelta(days=30)).isoformat()
+    expiring = query("""
+        SELECT id, name, warranty_expiry FROM items
+        WHERE warranty_expiry IS NOT NULL
+          AND warranty_expiry >= ? AND warranty_expiry <= ?
+          AND COALESCE(sold,0)=0 AND COALESCE(retired,0)=0
+    """, [today.isoformat(), in_30])
+    for row in expiring:
+        push_notification("warranty_expiry",
+                          f"Warranty expiring: {row['name']}",
+                          f"Warranty expires {row['warranty_expiry']}",
+                          "/report/warranties")
+        count += 1
+
+    return jsonify({"ok": True, "pushed": count})
+
+
 # ── Login Activity ────────────────────────────────────────────────────────────
 
 @bp.route("/api/login-activity")

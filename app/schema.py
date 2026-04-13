@@ -430,6 +430,27 @@ def _init_db_conn(db):
             created_by  TEXT,
             created_at  TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS login_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER,
+            username   TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            result     TEXT NOT NULL DEFAULT 'ok',
+            ts         TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_login_log_user ON login_log(username, ts);
+        CREATE TABLE IF NOT EXISTS notifications (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER,
+            event_type TEXT NOT NULL,
+            title      TEXT NOT NULL,
+            body       TEXT,
+            link       TEXT,
+            read       INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, created_at);
         CREATE TABLE IF NOT EXISTS user_locations (
             user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
