@@ -5,6 +5,7 @@
   <span class="topbar-title">To Do</span>
   <span class="topbar-sub" id="taskCount"></span>
   <div class="topbar-right">
+    <button class="btn btn-secondary btn-sm" id="clearDoneBtn" onclick="clearDone()" style="display:none">Clear Done</button>
     <button class="btn btn-primary" onclick="openAddTask()">+ Add Task</button>
   </div>
 </div>
@@ -53,9 +54,12 @@
       </div>
       <div class="field"><label class="label">Notes</label><textarea class="input" id="task-notes" rows="3" style="resize:vertical" placeholder="Optional details…"></textarea></div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('taskModal')">Cancel</button>
-      <button class="btn btn-primary" id="taskSaveBtn" onclick="saveTask()">Add Task</button>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn btn-danger btn-sm" id="task-delete-btn" style="display:none" onclick="deleteTask()">Delete</button>
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn btn-secondary" onclick="closeModal('taskModal')">Cancel</button>
+        <button class="btn btn-primary" id="taskSaveBtn" onclick="saveTask()">Add Task</button>
+      </div>
     </div>
   </div>
 </div>
@@ -66,11 +70,13 @@
 .kanban-hdr{padding:12px 14px;font-size:13px;font-weight:700;border-top:3px solid;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:8px;color:inherit}
 .kanban-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .kanban-cnt{font-size:11px;font-weight:500;color:#94a3b8;margin-left:auto}
-.kanban-body{flex:1;padding:8px 10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.kanban-body{flex:1;padding:8px 10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:calc(100vh - 200px)}
 .task-card{background:#fff;border:1px solid #e5e3de;border-radius:8px;padding:10px 12px;cursor:pointer;transition:box-shadow .15s}
 .task-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08)}
 .task-title{font-size:13px;font-weight:600;line-height:1.4;color:inherit}
-.task-meta{font-size:11px;color:#94a3b8;margin-top:4px;display:flex;align-items:center;gap:8px}
+.task-meta{font-size:11px;color:#94a3b8;margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.task-item-link{font-size:11px;color:#1d4ed8;font-weight:500;display:flex;align-items:center;gap:3px;margin-top:4px;text-decoration:none}
+.task-item-link:hover{text-decoration:underline}
 .urg-high{border-left:3px solid #b91c1c}
 .urg-medium{border-left:3px solid #d97706}
 .urg-low{border-left:3px solid #15803d}
@@ -78,19 +84,17 @@
 .task-actions{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
 .task-actions button{font-size:10px;padding:2px 8px}
 @media(max-width:900px){.kanban{grid-template-columns:1fr}}
-
-/* Dark mode */
 body.dark .kanban-col{background:#162032}
 body.dark .kanban-hdr{color:#e2e8f0}
 body.dark .task-card{background:#1e293b;border-color:#334155;color:#e2e8f0}
 body.dark .task-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.3)}
 body.dark .item-task{background:#1a2a3e}
 body.dark .task-title{color:#e2e8f0}
+body.dark .task-item-link{color:#60a5fa}
 </style>
 <script>
 let allTasks=[];
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
+
 function openAddTask(){
   document.getElementById('task-id').value='';
   document.getElementById('task-title').value='';
@@ -99,9 +103,11 @@ function openAddTask(){
   document.getElementById('task-notes').value='';
   document.getElementById('taskModalTitle').textContent='Add Task';
   document.getElementById('taskSaveBtn').textContent='Add Task';
+  document.getElementById('task-delete-btn').style.display='none';
   openModal('taskModal');
   setTimeout(()=>document.getElementById('task-title').focus(),100);
 }
+
 function editTask(id){
   const t=allTasks.find(x=>x.id===id);if(!t)return;
   document.getElementById('task-id').value=t.id;
@@ -111,8 +117,10 @@ function editTask(id){
   document.getElementById('task-notes').value=t.notes||'';
   document.getElementById('taskModalTitle').textContent='Edit Task';
   document.getElementById('taskSaveBtn').textContent='Save Changes';
+  document.getElementById('task-delete-btn').style.display='';
   openModal('taskModal');
 }
+
 async function saveTask(){
   const id=document.getElementById('task-id').value;
   const payload={
@@ -128,33 +136,74 @@ async function saveTask(){
   if(res.ok){toast(id?'Task updated ✓':'Task added ✓','ok');closeModal('taskModal');loadTasks();}
   else toast(res.msg||'Error','err');
 }
+
+async function deleteTask(){
+  const id=document.getElementById('task-id').value;
+  if(!id)return;
+  const res=await api('/api/task/delete',{id:parseInt(id)});
+  if(res.ok){toast('Task deleted','warn');closeModal('taskModal');loadTasks();}
+  else toast(res.msg||'Error','err');
+}
+
 async function moveTask(id,newStatus){
   const res=await api('/api/task/update',{id,status:newStatus});
   if(res.ok) loadTasks();
 }
+
+async function clearDone(){
+  if(!confirm('Remove all completed manual tasks? Auto-tasks linked to items are not affected.'))return;
+  const res=await api('/api/tasks/clear-done',{});
+  if(res.ok){toast('Done tasks cleared ✓','ok');loadTasks();}
+  else toast(res.msg||'Error','err');
+}
+
 function renderCard(t){
-  const urgLabel={high:'🔴',medium:'🟡',low:'🟢'}[t.urgency]||'';
+  const urgLabel={high:'🔴 High',medium:'🟡 Medium',low:'🟢 Low'}[t.urgency]||'';
   const isItemTask=!!t.item_id;
   const moves=[];
-  if(t.status!=='todo') moves.push(`<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();moveTask(${t.id},'todo')">← To Do</button>`);
-  if(t.status!=='progress') moves.push(`<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();moveTask(${t.id},'progress')">⟳ Progress</button>`);
-  // Item-linked tasks can't be manually marked Done — only the system closes them when item is complete
+  if(t.status!=='todo')    moves.push(`<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();moveTask(${t.id},'todo')">← To Do</button>`);
+  if(t.status!=='progress')moves.push(`<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();moveTask(${t.id},'progress')">⟳ Progress</button>`);
   if(t.status!=='done'&&!isItemTask) moves.push(`<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();moveTask(${t.id},'done')">✓ Done</button>`);
-  // No delete button for anyone — tasks must be completed not deleted
-  const itemLink=isItemTask?`<a href="/?item=${t.item_id}" onclick="event.stopPropagation()" class="btn btn-secondary btn-sm" style="font-size:10px">→ View Item #${t.item_id}</a>`:'';
-  const systemBadge=isItemTask?`<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:4px;opacity:.7">AUTO</span>`:'';
-  return `<div class="task-card urg-${t.urgency}${isItemTask?' item-task':''}" onclick="${isItemTask?'':'editTask('+t.id+')'}">
-    <div class="task-title">${t.title}${systemBadge}</div>
+  if(!isItemTask) moves.push(`<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();quickDelete(${t.id})">✕</button>`);
+
+  const itemSection=isItemTask
+    ? `<a href="/?item=${t.item_id}" onclick="event.stopPropagation()" class="task-item-link">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+         ${t.item_name||('Item #'+t.item_id)}
+       </a>`
+    : '';
+
+  const autoBadge=isItemTask?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1e40af;margin-left:4px">AUTO</span>`:'';
+
+  return `<div class="task-card urg-${t.urgency}${isItemTask?' item-task':''}" onclick="${isItemTask?'void(0)':'editTask('+t.id+')'}">
+    <div class="task-title">${t.title}${autoBadge}</div>
     ${t.notes?`<div style="font-size:11px;color:#666;margin-top:3px;line-height:1.4">${t.notes.substring(0,80)}${t.notes.length>80?'…':''}</div>`:''}
-    <div class="task-meta">${urgLabel} ${t.urgency}${!isItemTask?' · '+(t.created_by||'—'):'·system'} · ${(t.created_at||'').substring(0,10)}</div>
-    <div class="task-actions">${moves.join('')}${itemLink}</div>
+    ${itemSection}
+    <div class="task-meta">${urgLabel}${!isItemTask?' · '+(t.created_by||'—'):''}${t.created_at?' · '+(t.created_at||'').substring(0,10):''}</div>
+    <div class="task-actions">${moves.join('')}</div>
   </div>`;
 }
+
+async function quickDelete(id){
+  const res=await api('/api/task/delete',{id});
+  if(res.ok) loadTasks();
+  else toast(res.msg||'Error','err');
+}
+
 async function loadTasks(){
-  allTasks=await fetch('/api/tasks').then(r=>r.json());
+  try{
+    allTasks=await fetch('/api/tasks').then(r=>{
+      if(!r.ok) throw new Error('status '+r.status);
+      return r.json();
+    });
+  }catch(e){
+    document.getElementById('kanban').innerHTML='<div style="grid-column:1/-1;padding:40px;text-align:center;color:#b91c1c;font-size:13px">Failed to load tasks. Please refresh.</div>';
+    return;
+  }
   const todo=allTasks.filter(t=>t.status==='todo');
   const progress=allTasks.filter(t=>t.status==='progress');
   const done=allTasks.filter(t=>t.status==='done');
+  const doneManual=done.filter(t=>!t.item_id);
   document.getElementById('col-todo').innerHTML=todo.map(renderCard).join('')||'<div style="color:#ccc;font-size:12px;text-align:center;padding:20px">No tasks</div>';
   document.getElementById('col-progress').innerHTML=progress.map(renderCard).join('')||'<div style="color:#ccc;font-size:12px;text-align:center;padding:20px">No tasks</div>';
   document.getElementById('col-done').innerHTML=done.map(renderCard).join('')||'<div style="color:#ccc;font-size:12px;text-align:center;padding:20px">No tasks</div>';
@@ -162,7 +211,9 @@ async function loadTasks(){
   document.getElementById('cnt-progress').textContent=progress.length;
   document.getElementById('cnt-done').textContent=done.length;
   document.getElementById('taskCount').textContent=allTasks.length+' task'+(allTasks.length===1?'':'s');
+  document.getElementById('clearDoneBtn').style.display=doneManual.length>0?'':'none';
 }
+
 loadTasks();
 </script>
 {% endblock %}

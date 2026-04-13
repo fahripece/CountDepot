@@ -100,7 +100,15 @@ let allSites=[];
 let _membersLocId=null;
 
 async function loadSites(){
-  allSites=await fetch('/api/locations').then(r=>r.json());
+  try{
+    allSites=await fetch('/api/locations').then(r=>{
+      if(!r.ok) throw new Error('status '+r.status);
+      return r.json();
+    });
+  }catch(e){
+    document.getElementById('site-grid').innerHTML='<div style="grid-column:1/-1;padding:40px;text-align:center;color:#b91c1c;font-size:13px">Failed to load sites. Please refresh the page.</div>';
+    return;
+  }
   const locIds={{ session.get('location_ids', [])|tojson }};
   const visible=locIds.length?allSites.filter(s=>locIds.includes(s.id)):allSites;
   document.getElementById('site-count').textContent=visible.length+' site'+(visible.length!==1?'s':'');
