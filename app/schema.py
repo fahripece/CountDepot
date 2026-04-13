@@ -353,6 +353,21 @@ def _init_db_conn(db):
             created_at      TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_departments_name ON departments(name);
+        CREATE TABLE IF NOT EXISTS reservations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id         INTEGER NOT NULL REFERENCES items(id),
+            user_id         INTEGER,
+            reserved_by     TEXT NOT NULL,
+            start_date      TEXT NOT NULL,
+            end_date        TEXT NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'confirmed',
+            notes           TEXT,
+            checkout_log_id INTEGER,
+            created_at      TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_reservations_item    ON reservations(item_id, start_date, end_date);
+        CREATE INDEX IF NOT EXISTS idx_reservations_status  ON reservations(status);
+        CREATE INDEX IF NOT EXISTS idx_reservations_user    ON reservations(user_id);
         CREATE TABLE IF NOT EXISTS item_notes (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             item_id    INTEGER NOT NULL REFERENCES items(id),

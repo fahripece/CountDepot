@@ -3891,6 +3891,109 @@ def import_excel():
         return jsonify({"ok": False, "msg": str(e)})
 
 
+# ── Asset Reservations ───────────────────────────────────────────────────────
+
+@bp.route("/api/reservations")
+@login_required
+def api_reservations_list():
+    from_d = request.args.get("from", "")
+    to_d   = request.args.get("to", "")
+    item_id = request.args.get("item_id", "")
+    user_id = request.args.get("user_id", "")
+    sql  = """SELECT r.*, i.name as item_name, i.serial, i.sku, i.internal_sku,
+                     c.name as category, c.color
+              FROM reservations r
+              JOIN items i ON i.id=r.item_id
+              LEFT JOIN categories c ON c.id=i.category_id
+              WHERE r.status != 'cancelled'"""
+    args = []
+    if item_id: sql += " AND r.item_id=?"; args.append(item_id)
+    if user_id: sql += " AND r.user_id=?"; args.append(user_id)
+    if from_d:  sql += " AND r.end_date>=?"; args.append(from_d)
+    if to_d:    sql += " AND r.start_date<=?"; args.append(to_d)
+    sql += " ORDER BY r.start_date ASC"
+    rows = query(sql, args)
+    return jsonify({"ok": True, "reservations": [dict(r) for r in rows]})
+
+
+@bp.route("/api/reservations", methods=["POST"])
+@login_required
+def api_reservations_create():
+    d          = request.json or {}
+    item_id    = int(d.get("item_id", 0))
+    start_date = (d.get("start_date") or "").strip()
+    end_date   = (d.get("end_date") or "").strip()
+    reserved_by = (d.get("reserved_by") or session.get("username", "")).strip()
+    notes      = (d.get("notes") or "").strip()
+    if not item_id or not start_date or not end_date or not reserved_by:
+        return jsonify({"ok": False, "msg": "item_id, start_date, end_date, reserved_by required"})
+    if end_date < start_date:
+        return jsonify({"ok": False, "msg": "end_date must be on or after start_date"})
+
+    item = query("SELECT * FROM items WHERE id=? AND active=1", [item_id], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Item not found"})
+
+    # Conflict check — for serial/non-qty items: any overlap blocks booking
+    # For qty-tracked items: sum reserved qty and compare to available qty
+    if item.get("qty_tracked") and item.get("qty"):
+        reserved_qty = query(
+            "SELECT COALESCE(SUM(1),0) FROM reservations "
+            "WHERE item_id=? AND status NOT IN ('cancelled') "
+            "AND NOT (end_date<? OR start_date>?)",
+            [item_id, start_date, end_date], one=True)[0]
+        available = (item["qty"] or 0) - (item["qty_out"] or 0)
+        if reserved_qty >= available:
+            return jsonify({"ok": False, "msg": f"No available units for that date range (available: {available}, already reserved: {reserved_qty})"})
+    else:
+        conflict = query(
+            "SELECT 1 FROM reservations WHERE item_id=? AND status NOT IN ('cancelled') "
+            "AND NOT (end_date<? OR start_date>?) LIMIT 1",
+            [item_id, start_date, end_date], one=True)
+        if conflict:
+            return jsonify({"ok": False, "msg": "This item is already reserved for those dates"})
+
+    now    = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    new_id = execute(
+        "INSERT INTO reservations (item_id,user_id,reserved_by,start_date,end_date,status,notes,created_at) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        [item_id, session.get("user_id"), reserved_by, start_date, end_date, "confirmed", notes, now])
+    log_action("RESERVATION_CREATE", item_id=item_id, item_name=item["name"],
+               detail=f"Reserved {start_date} → {end_date} for {reserved_by}")
+    return jsonify({"ok": True, "id": new_id})
+
+
+@bp.route("/api/reservations/<int:res_id>/cancel", methods=["POST"])
+@login_required
+def api_reservations_cancel(res_id):
+    res = query("SELECT r.*, i.name as item_name FROM reservations r JOIN items i ON i.id=r.item_id WHERE r.id=?",
+                [res_id], one=True)
+    if not res:
+        return jsonify({"ok": False, "msg": "Not found"})
+    # Workers can only cancel their own; admins can cancel any
+    if session.get("role") != "admin" and res["user_id"] != session.get("user_id"):
+        return jsonify({"ok": False, "msg": "Not authorised"}), 403
+    execute("UPDATE reservations SET status='cancelled' WHERE id=?", [res_id])
+    log_action("RESERVATION_CANCEL", item_id=res["item_id"], item_name=res["item_name"],
+               detail=f"Reservation cancelled for {res['reserved_by']}")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/reservations/availability")
+@login_required
+def api_reservations_availability():
+    """Return booked date ranges for an item — used to highlight unavailable dates in the picker."""
+    item_id = request.args.get("item_id", "")
+    if not item_id:
+        return jsonify({"ok": False, "msg": "item_id required"})
+    rows = query(
+        "SELECT start_date, end_date, reserved_by, status FROM reservations "
+        "WHERE item_id=? AND status NOT IN ('cancelled') AND end_date>=DATE('now') "
+        "ORDER BY start_date",
+        [item_id])
+    return jsonify({"ok": True, "booked": [dict(r) for r in rows]})
+
+
 # ── Departments ──────────────────────────────────────────────────────────────
 
 @bp.route("/api/departments")

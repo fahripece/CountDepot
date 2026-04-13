@@ -714,3 +714,15 @@ def importer_page():
 def invoice_import_redirect():
     from flask import redirect
     return redirect("/importer")
+
+
+@bp.route("/reservations")
+@login_required
+def reservations_page():
+    items = query("""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
+                            c.name as category, c.color
+                     FROM items i
+                     LEFT JOIN categories c ON c.id=i.category_id
+                     WHERE i.active=1 AND i.sold=0 AND COALESCE(i.retired,0)=0
+                     ORDER BY i.name""")
+    return render_template("reservations.html", items=items)
