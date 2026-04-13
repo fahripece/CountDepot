@@ -243,13 +243,17 @@ async function openMembers(locId){
   document.getElementById('membersModalTitle').textContent='Members — '+(s?s.name:'Site');
   document.getElementById('membersModalSub').textContent=
     s&&s.member_count>0
-      ? s.member_count+' user'+(s.member_count!==1?'s':'')+' restricted to this site'
+      ? s.member_count+' user'+(s.member_count!==1?'s':'')+' assigned to this site'
       : 'No restrictions — all users can see this site';
   document.getElementById('members-list').innerHTML='<div style="padding:16px;font-size:12px;color:#94a3b8;text-align:center">Loading…</div>';
   openModal('membersModal');
-  const users=await fetch('/api/location/'+locId+'/users').then(r=>r.json()).catch(()=>null);
-  if(!users){
-    document.getElementById('members-list').innerHTML='<div style="padding:16px;font-size:13px;color:#b91c1c;text-align:center">Failed to load users.</div>';
+  let users;
+  try{
+    const r=await fetch('/api/location/'+locId+'/users');
+    users=await r.json();
+    if(!r.ok||users.ok===false) throw new Error(users.msg||'Server error '+r.status);
+  }catch(e){
+    document.getElementById('members-list').innerHTML=`<div style="padding:16px;font-size:13px;color:#b91c1c;text-align:center">Failed to load users: ${e.message}</div>`;
     return;
   }
   renderMembersList(users);
@@ -287,7 +291,8 @@ async function saveMembers(){
   }).then(r=>r.json()).catch(()=>({ok:false,msg:'Network error'}));
   if(res.ok){
     const count=checkedIds.length;
-    toast(count===0?'Site access unrestricted ✓':`${count} member${count!==1?'s':''} saved ✓`,'ok');
+    const msg=count===0?'Access unrestricted — all users can see this site ✓':`${count} member${count!==1?'s':''} assigned ✓`;
+    toast(msg,'ok');
     closeModal('membersModal');
     loadSites();
   } else {

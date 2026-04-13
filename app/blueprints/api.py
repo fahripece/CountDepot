@@ -995,27 +995,41 @@ def api_location_items(loc_id):
 @admin_required
 def api_get_location_users(loc_id):
     """Return all active users with a flag for whether they're assigned to this location."""
-    rows = query(
-        "SELECT u.id, u.username, u.email, u.role, "
-        "  CASE WHEN ul.location_id IS NOT NULL THEN 1 ELSE 0 END AS assigned "
-        "FROM users u "
-        "LEFT JOIN user_locations ul ON ul.user_id=u.id AND ul.location_id=? "
-        "WHERE u.active=1 ORDER BY u.role DESC, u.username",
-        [loc_id])
-    return jsonify([dict(r) for r in rows])
+    try:
+        rows = query(
+            "SELECT u.id, u.username, u.email, u.role, "
+            "  CASE WHEN ul.location_id IS NOT NULL THEN 1 ELSE 0 END AS assigned "
+            "FROM users u "
+            "LEFT JOIN user_locations ul ON ul.user_id=u.id AND ul.location_id=? "
+            "WHERE u.active=1 ORDER BY u.role DESC, u.username",
+            [loc_id])
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        return jsonify({"ok": False, "msg": f"Could not load users: {e}"}), 500
 
 
 @bp.route("/api/location/<int:loc_id>/users", methods=["POST"])
 @login_required
 @admin_required
 def api_set_location_users(loc_id):
-    """Replace user assignments for a location. Send user_ids: [] to clear all."""
+    """Replace user assignments for a location. Send user_ids: [] to clear all.
+    Invalidates sessions of all affected users so their location_ids refresh on next login."""
     if not query("SELECT id FROM locations WHERE id=?", [loc_id], one=True):
         return jsonify({"ok": False, "msg": "Location not found"}), 404
     user_ids = (request.json or {}).get("user_ids", [])
+    # Find all users currently or newly assigned — their sessions need refreshing
+    old_ids = {r["user_id"] for r in query("SELECT user_id FROM user_locations WHERE location_id=?", [loc_id])}
+    new_ids = set(int(u) for u in user_ids)
+    affected = old_ids | new_ids
     execute("DELETE FROM user_locations WHERE location_id=?", [loc_id])
     for uid in user_ids:
         execute("INSERT OR IGNORE INTO user_locations (user_id, location_id) VALUES (?,?)", [uid, loc_id])
+    # Invalidate sessions for affected users (excluding the current admin) so their
+    # location_ids are refreshed on next login
+    current_uid = session.get("user_id")
+    for uid in affected:
+        if uid != current_uid:
+            execute("UPDATE users SET session_token=NULL WHERE id=?", [uid])
     log_action("SITE_USERS_UPDATE", detail=f"location_id={loc_id} users={user_ids}")
     return jsonify({"ok": True})
 
@@ -1032,7 +1046,8 @@ def api_get_user_locations(uid):
 @login_required
 @admin_required
 def api_set_user_locations(uid):
-    """Replace the user's site assignments. Send location_ids: [] for unrestricted."""
+    """Replace the user's site assignments. Send location_ids: [] for unrestricted.
+    Invalidates the affected user's session so location_ids refresh on next login."""
     user = query("SELECT id FROM users WHERE id=?", [uid], one=True)
     if not user:
         return jsonify({"ok": False, "msg": "User not found"}), 404
@@ -1040,6 +1055,9 @@ def api_set_user_locations(uid):
     execute("DELETE FROM user_locations WHERE user_id=?", [uid])
     for lid in loc_ids:
         execute("INSERT OR IGNORE INTO user_locations (user_id, location_id) VALUES (?,?)", [uid, lid])
+    # Invalidate the user's session so they re-login and pick up the new location_ids
+    if uid != session.get("user_id"):
+        execute("UPDATE users SET session_token=NULL WHERE id=?", [uid])
     log_action("USER_SITES_UPDATE", detail=f"user_id={uid} sites={loc_ids}")
     return jsonify({"ok": True})
 
