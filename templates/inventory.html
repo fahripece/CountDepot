@@ -10,6 +10,7 @@
     <button class="smt" onclick="setScanMode('checkin')">📥 Check In</button>
   </div>
   <input id="scanInput" placeholder="Scan barcode or type serial / model / SKU…" autocomplete="off" onkeydown="if(event.key==='Enter')doScan(this.value)">
+  <button title="Scan with camera" onclick="openCameraScanner(c=>{document.getElementById('scanInput').value=c;doScan(c);})" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:5px 9px;cursor:pointer;flex-shrink:0;display:flex;align-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
   <div id="scanResult" class="scan-result" style="display:none"></div>
   <button class="btn btn-sm" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2)" onclick="toggleScan()">✕ Close</button>
 </div>
@@ -414,6 +415,7 @@
         <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:6px">⚠️ Scan Required — scan the item barcode before checkout</div>
         <div style="display:flex;gap:6px">
           <input class="input" id="co-scan-input" placeholder="Scan or type serial / SKU…" style="font-family:monospace;font-size:13px" autocomplete="off">
+          <button title="Scan with camera" onclick="openCameraScanner(c=>{document.getElementById('co-scan-input').value=c;verifyScanCheckout();})" style="background:#f8f7f4;border:1px solid #ddd9d2;border-radius:6px;padding:5px 9px;cursor:pointer;display:flex;align-items:center;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
           <button class="btn btn-secondary btn-sm" onclick="verifyScanCheckout()">Verify</button>
         </div>
         <div id="co-scan-status" style="font-size:12px;margin-top:6px;display:none"></div>
@@ -1890,7 +1892,10 @@ window.refreshAlertBadge = async function(){
         <div style="font-size:13px;color:#475569;margin-bottom:14px;line-height:1.6">
           Scan the barcode on the physical label attached to this item, or type the SKU/serial below to confirm it matches.
         </div>
-        <input class="input mono" id="inv-scan-input" placeholder="Scan barcode or type SKU…" style="font-size:14px;width:100%;margin-bottom:10px" onkeydown="if(event.key==='Enter')doInvConfirmScan()">
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <input class="input mono" id="inv-scan-input" placeholder="Scan barcode or type SKU…" style="font-size:14px;flex:1" onkeydown="if(event.key==='Enter')doInvConfirmScan()">
+          <button title="Scan with camera" onclick="openCameraScanner(c=>{document.getElementById('inv-scan-input').value=c;doInvConfirmScan();})" style="background:#f8f7f4;border:1px solid #ddd9d2;border-radius:6px;padding:5px 10px;cursor:pointer;display:flex;align-items:center;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+        </div>
         <div id="inv-scan-status" style="display:none;padding:10px 12px;border-radius:7px;font-size:13px;font-weight:500;line-height:1.4"></div>
       </div>
       <div class="modal-footer" style="justify-content:space-between">

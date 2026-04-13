@@ -465,6 +465,18 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         <span>Help &amp; Support</span>
       </a>
+      <!-- Onboarding checklist (admin only, auto-hides when complete) -->
+      {% if session.get('role') == 'admin' %}
+      <div id="onboardingWidget" style="display:none;margin:0 0 4px">
+        <button onclick="toggleOnboarding()" style="width:100%;background:none;border:none;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:8px;color:#94a3b8;font-size:12px">
+          <div style="flex:1;background:#334155;border-radius:4px;height:4px;overflow:hidden">
+            <div id="onboardingBar" style="height:100%;background:#7c3aed;width:0%;transition:width .4s"></div>
+          </div>
+          <span id="onboardingPct" style="font-size:11px;min-width:28px;text-align:right">0%</span>
+        </button>
+        <div id="onboardingList" style="display:none;padding:4px 0 8px"></div>
+      </div>
+      {% endif %}
       <button class="navlink" id="darkToggle" onclick="toggleDark()" style="color:#94a3b8;font-size:12px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z"/></svg>
         <span id="darkLabel">Dark mode</span>
@@ -514,6 +526,43 @@ function closeModal(id){document.getElementById(id).classList.remove('open')}
 async function refreshAlertBadge(){try{const a=await fetch('/api/alerts').then(r=>r.json());const b=document.getElementById('alert-badge');if(b){b.textContent=a.length;b.style.display=a.length>0?'':'none'}}catch(e){}}
 refreshAlertBadge();setInterval(refreshAlertBadge,60000);
 // ── Notifications ──
+// ── Onboarding checklist ───────────────────────────────────────────────────
+let _onboardingOpen=false;
+async function loadOnboarding(){
+  try{
+    const d=await fetch('/api/onboarding/progress').then(r=>r.json());
+    if(!d.ok||d.dismissed||!d.steps||!d.steps.length)return;
+    const widget=document.getElementById('onboardingWidget');
+    if(!widget)return;
+    widget.style.display='block';
+    document.getElementById('onboardingBar').style.width=d.pct+'%';
+    document.getElementById('onboardingPct').textContent=d.pct+'%';
+    const list=document.getElementById('onboardingList');
+    list.innerHTML=d.steps.map(s=>`
+      <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;opacity:${s.done?0.5:1}">
+        <div style="width:16px;height:16px;border-radius:50%;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;${s.done?'background:#15803d':'background:none;border:2px solid #334155'}">
+          ${s.done?'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>':''}
+        </div>
+        <div>
+          <div style="font-size:11.5px;color:${s.done?'#64748b':'#cbd5e1'};font-weight:${s.done?400:500};text-decoration:${s.done?'line-through':'none'}">${s.label}</div>
+          ${!s.done?`<div style="font-size:10px;color:#475569">${s.hint}</div>`:''}
+        </div>
+      </div>`).join('')+
+      `<button onclick="dismissOnboarding()" style="margin-top:6px;font-size:10px;color:#475569;background:none;border:none;cursor:pointer;padding:0">Dismiss checklist ×</button>`;
+  }catch(e){}
+}
+function toggleOnboarding(){
+  _onboardingOpen=!_onboardingOpen;
+  const l=document.getElementById('onboardingList');
+  if(l)l.style.display=_onboardingOpen?'block':'none';
+}
+async function dismissOnboarding(){
+  await fetch('/api/onboarding/dismiss',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name=csrf-token]')?.content||''},body:'{}'});
+  const w=document.getElementById('onboardingWidget');
+  if(w)w.style.display='none';
+}
+loadOnboarding();
+
 let _notifOpen=false;
 const NOTIF_ICONS={low_stock:'📦',overdue_checkout:'📤',warranty_expiry:'🛡',po_approved:'📋',default:'🔔'};
 async function refreshNotifBadge(){
@@ -639,7 +688,122 @@ function toggleAccordion(hdr,id){
 })();
 function openMobSidebar(){document.getElementById('mobSidebar').classList.add('open');document.getElementById('mobSidebarOverlay').style.display='flex';}
 function closeMobSidebar(){document.getElementById('mobSidebar').classList.remove('open');document.getElementById('mobSidebarOverlay').style.display='none';}
+
+// ── Camera barcode scanner (global, reusable) ─────────────────────────────────
+// Usage: openCameraScanner(code => doSomethingWith(code))
+// Works on any page — feeds into whatever callback is passed.
+let _camScanCb=null,_camReader=null,_camStream=null;
+
+function openCameraScanner(cb){
+  _camScanCb=cb;
+  document.getElementById('camScanOverlay').style.display='flex';
+  _startCamera();
+}
+function closeCameraScanner(){
+  document.getElementById('camScanOverlay').style.display='none';
+  _stopCamera();
+  _camScanCb=null;
+}
+function _stopCamera(){
+  if(_camReader){try{_camReader.reset();}catch(e){}}_camReader=null;
+  if(_camStream){_camStream.getTracks().forEach(t=>t.stop());}_camStream=null;
+  const v=document.getElementById('camScanVideo');if(v)v.srcObject=null;
+}
+async function _startCamera(){
+  const status=document.getElementById('camScanStatus');
+  status.textContent='Starting camera…';status.style.color='#94a3b8';
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    status.textContent='Camera not available on this browser.';status.style.color='#b91c1c';return;
+  }
+  // Load ZXing lazily
+  if(typeof ZXing==='undefined'){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/umd/index.min.js';
+      s.onload=res;s.onerror=rej;document.head.appendChild(s);
+    });
+  }
+  try{
+    // Prefer rear camera on mobile
+    _camStream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}
+    });
+    const video=document.getElementById('camScanVideo');
+    video.srcObject=_camStream;
+    await video.play();
+    status.textContent='Point camera at barcode…';status.style.color='#15803d';
+    // Populate camera selector
+    const devices=await ZXing.BrowserCodeReader.listVideoInputDevices();
+    const sel=document.getElementById('camDeviceSelect');
+    sel.innerHTML='';
+    devices.forEach((d,i)=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||`Camera ${i+1}`;sel.appendChild(o);});
+    sel.style.display=devices.length>1?'block':'none';
+    // Start decoding
+    _camReader=new ZXing.BrowserMultiFormatReader();
+    _camReader.decodeFromStream(_camStream,video,(result,err)=>{
+      if(!result)return;
+      const code=result.getText();
+      // Flash feedback
+      status.textContent=`✓ ${code}`;status.style.color='#15803d';
+      document.getElementById('camScanFlash').style.opacity='1';
+      setTimeout(()=>document.getElementById('camScanFlash').style.opacity='0',200);
+      // Deliver to callback, close
+      if(_camScanCb)_camScanCb(code);
+      setTimeout(closeCameraScanner,300);
+    });
+  }catch(err){
+    status.textContent=err.name==='NotAllowedError'?'Camera permission denied.':'Could not access camera.';
+    status.style.color='#b91c1c';
+  }
+}
+async function _switchCamera(){
+  const sel=document.getElementById('camDeviceSelect');
+  const deviceId=sel.value;
+  _stopCamera();
+  const status=document.getElementById('camScanStatus');
+  try{
+    _camStream=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId}}});
+    const video=document.getElementById('camScanVideo');
+    video.srcObject=_camStream;await video.play();
+    _camReader=new ZXing.BrowserMultiFormatReader();
+    _camReader.decodeFromStream(_camStream,video,(result)=>{
+      if(!result)return;
+      const code=result.getText();
+      status.textContent=`✓ ${code}`;status.style.color='#15803d';
+      if(_camScanCb)_camScanCb(code);
+      setTimeout(closeCameraScanner,300);
+    });
+  }catch(e){status.textContent='Could not switch camera.';status.style.color='#b91c1c';}
+}
 </script>
+
+<!-- ── Camera scanner overlay (global) ──────────────────────────────────────── -->
+<div id="camScanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:10000;align-items:center;justify-content:center;flex-direction:column">
+  <!-- Flash feedback -->
+  <div id="camScanFlash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .15s"></div>
+  <!-- Video container -->
+  <div style="position:relative;width:min(92vw,420px);aspect-ratio:4/3;border-radius:12px;overflow:hidden;background:#000;margin-bottom:16px">
+    <video id="camScanVideo" style="width:100%;height:100%;object-fit:cover" playsinline muted></video>
+    <!-- Targeting reticle -->
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+      <div style="width:72%;height:40%;position:relative">
+        <div style="position:absolute;top:0;left:0;width:22px;height:22px;border-top:3px solid #3b82f6;border-left:3px solid #3b82f6;border-radius:2px 0 0 0"></div>
+        <div style="position:absolute;top:0;right:0;width:22px;height:22px;border-top:3px solid #3b82f6;border-right:3px solid #3b82f6;border-radius:0 2px 0 0"></div>
+        <div style="position:absolute;bottom:0;left:0;width:22px;height:22px;border-bottom:3px solid #3b82f6;border-left:3px solid #3b82f6;border-radius:0 0 0 2px"></div>
+        <div style="position:absolute;bottom:0;right:0;width:22px;height:22px;border-bottom:3px solid #3b82f6;border-right:3px solid #3b82f6;border-radius:0 0 2px 0"></div>
+        <!-- Scan line -->
+        <div style="position:absolute;left:0;right:0;height:2px;background:rgba(59,130,246,.7);animation:camScanLine 1.8s ease-in-out infinite;top:50%"></div>
+      </div>
+    </div>
+  </div>
+  <div id="camScanStatus" style="color:#94a3b8;font-size:13px;margin-bottom:10px;text-align:center;padding:0 16px">Starting camera…</div>
+  <select id="camDeviceSelect" style="display:none;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 10px;font-size:12px;margin-bottom:10px" onchange="_switchCamera()"></select>
+  <button onclick="closeCameraScanner()" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:7px;padding:8px 24px;font-size:13px;cursor:pointer">Cancel</button>
+</div>
+<style>
+@keyframes camScanLine{0%,100%{top:10%}50%{top:88%}}
+</style>
+
 {% block scripts %}{% endblock %}
 </body>
 </html>

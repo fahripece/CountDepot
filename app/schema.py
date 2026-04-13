@@ -131,6 +131,12 @@ MIGRATIONS = [
     # users — per-user low stock alert opt-in
     ("users", "low_stock_alerts", "INTEGER NOT NULL DEFAULT 0"),
 
+    # departments — user + item assignment
+    ("users", "department_id",            "INTEGER"),
+    ("items", "department_id",            "INTEGER"),
+    # users — restrict to own department items only
+    ("users", "restrict_to_department",   "INTEGER NOT NULL DEFAULT 0"),
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
 ]
 
@@ -338,6 +344,15 @@ def _init_db_conn(db):
             description TEXT,
             created_at  TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS departments (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT UNIQUE NOT NULL,
+            color           TEXT NOT NULL DEFAULT '#64748b',
+            manager_user_id INTEGER,
+            budget          REAL,
+            created_at      TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_departments_name ON departments(name);
         CREATE TABLE IF NOT EXISTS item_notes (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             item_id    INTEGER NOT NULL REFERENCES items(id),

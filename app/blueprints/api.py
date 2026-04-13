@@ -653,14 +653,16 @@ def api_items():
     no_paginate = request.args.get("hide_out", "1") == "0"
 
     loc_id   = request.args.get("loc", "")
+    dept_id  = request.args.get("dept", "")
     tag      = request.args.get("tag", "").strip()
     cond_f   = request.args.get("cond", "").strip()
     show_retired = (status == "retired")
     base_where = """FROM items i
-             LEFT JOIN categories c  ON c.id=i.category_id
-             LEFT JOIN products p    ON p.id=i.product_id
-             LEFT JOIN companies co  ON co.id=i.company_id
-             LEFT JOIN locations l   ON l.id=i.location_id
+             LEFT JOIN categories c   ON c.id=i.category_id
+             LEFT JOIN products p     ON p.id=i.product_id
+             LEFT JOIN companies co   ON co.id=i.company_id
+             LEFT JOIN locations l    ON l.id=i.location_id
+             LEFT JOIN departments d  ON d.id=i.department_id
              LEFT JOIN (SELECT item_id, COUNT(*) as photo_count FROM item_photos GROUP BY item_id) ph ON ph.item_id=i.id
              WHERE i.active=1 AND COALESCE(i.retired,0)=""" + ("1" if show_retired else "0")
     sql  = """SELECT i.*, c.name as category, c.color,
@@ -672,6 +674,7 @@ def api_items():
                     p.print_scan_label as product_print_scan,
                     co.name as company_name,
                     l.name as location_name,
+                    d.name as department_name, d.color as department_color,
                     COALESCE(ph.photo_count, 0) as photo_count
              """ + base_where
     args = []
@@ -689,8 +692,14 @@ def api_items():
     sql += loc_sql; args += loc_args
     if cat_id:  sql += " AND i.category_id=?"; args.append(cat_id)
     if prod_id: sql += " AND i.product_id=?";  args.append(prod_id)
-    if loc_id:  sql += " AND i.location_id=?"; args.append(loc_id)
-    if cond_f:  sql += " AND i.condition=?";   args.append(cond_f)
+    if loc_id:  sql += " AND i.location_id=?";   args.append(loc_id)
+    if dept_id: sql += " AND i.department_id=?"; args.append(dept_id)
+    if cond_f:  sql += " AND i.condition=?";     args.append(cond_f)
+    # Restrict worker to own department if flag is set
+    user_dept = query("SELECT department_id, restrict_to_department FROM users WHERE id=?",
+                      [session.get("user_id")], one=True) if session.get("role") != "admin" else None
+    if user_dept and user_dept["restrict_to_department"] and user_dept["department_id"]:
+        sql += " AND i.department_id=?"; args.append(user_dept["department_id"])
     if tag:     sql += " AND (',' || i.tags || ',') LIKE ?"; args.append(f"%,{tag},%")
     if status == "out":
         sql += " AND i.checked_out=1"
@@ -3880,6 +3889,131 @@ def import_excel():
         return jsonify({"ok": True, "added": added, "skipped": skipped, "errors": errors[:10]})
     except Exception as e:
         return jsonify({"ok": False, "msg": str(e)})
+
+
+# ── Departments ──────────────────────────────────────────────────────────────
+
+@bp.route("/api/departments")
+@login_required
+def api_departments_list():
+    rows = query("""SELECT d.*, u.username as manager_name
+                    FROM departments d
+                    LEFT JOIN users u ON u.id=d.manager_user_id
+                    ORDER BY d.name""")
+    return jsonify({"ok": True, "departments": [dict(r) for r in rows]})
+
+
+@bp.route("/api/departments", methods=["POST"])
+@login_required
+@admin_required
+def api_departments_create():
+    d    = request.json or {}
+    name = (d.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "msg": "Name required"})
+    color   = (d.get("color") or "#64748b").strip()
+    manager = int(d["manager_user_id"]) if d.get("manager_user_id") else None
+    budget  = float(d["budget"]) if d.get("budget") not in (None, "") else None
+    now     = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        new_id = execute(
+            "INSERT INTO departments (name,color,manager_user_id,budget,created_at) VALUES (?,?,?,?,?)",
+            [name, color, manager, budget, now])
+        log_action("DEPT_CREATE", detail=f"Department created: {name}")
+        return jsonify({"ok": True, "id": new_id})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
+
+
+@bp.route("/api/departments/<int:dept_id>", methods=["POST"])
+@login_required
+@admin_required
+def api_departments_update(dept_id):
+    d    = request.json or {}
+    name = (d.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "msg": "Name required"})
+    color   = (d.get("color") or "#64748b").strip()
+    manager = int(d["manager_user_id"]) if d.get("manager_user_id") else None
+    budget  = float(d["budget"]) if d.get("budget") not in (None, "") else None
+    execute("UPDATE departments SET name=?,color=?,manager_user_id=?,budget=? WHERE id=?",
+            [name, color, manager, budget, dept_id])
+    log_action("DEPT_UPDATE", detail=f"Department updated: {name}")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/departments/<int:dept_id>/delete", methods=["POST"])
+@login_required
+@admin_required
+def api_departments_delete(dept_id):
+    dept = query("SELECT name FROM departments WHERE id=?", [dept_id], one=True)
+    if not dept:
+        return jsonify({"ok": False, "msg": "Not found"})
+    # Clear department from users and items before deleting
+    execute("UPDATE users SET department_id=NULL WHERE department_id=?", [dept_id])
+    execute("UPDATE items SET department_id=NULL WHERE department_id=?", [dept_id])
+    execute("DELETE FROM departments WHERE id=?", [dept_id])
+    log_action("DEPT_DELETE", detail=f"Department deleted: {dept['name']}")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/departments/<int:dept_id>/assign-user", methods=["POST"])
+@login_required
+@admin_required
+def api_departments_assign_user(dept_id):
+    d = request.json or {}
+    user_id = int(d.get("user_id", 0))
+    execute("UPDATE users SET department_id=? WHERE id=?", [dept_id or None, user_id])
+    return jsonify({"ok": True})
+
+
+# ── Onboarding checklist ─────────────────────────────────────────────────────
+
+ONBOARDING_STEPS = [
+    ("add_item",       "Add your first item",              "Add at least one item to inventory"),
+    ("checkout",       "Check out an item",                "Use the checkout flow to assign an item"),
+    ("invite_user",    "Invite a team member",             "Add a second user account"),
+    ("low_stock",      "Set a low stock threshold",        "Set a threshold on any product"),
+    ("alert_email",    "Configure alert emails",           "Add an email in Settings → Alerts"),
+]
+
+@bp.route("/api/onboarding/progress")
+@login_required
+def api_onboarding_progress():
+    """Returns completion state of each onboarding step. Computed from live DB."""
+    from flask import g
+    from app.platform import get_platform_db as _gpdb
+    from datetime import datetime as _dt, timedelta as _td
+
+    # Only show checklist for tenants < 60 days old or not dismissed
+    dismissed = query("SELECT value FROM settings WHERE key='onboarding_dismissed'", one=True)
+    if dismissed and dismissed["value"] == "1":
+        return jsonify({"ok": True, "dismissed": True, "steps": []})
+
+    done = {
+        "add_item":    bool(query("SELECT 1 FROM items WHERE active=1 LIMIT 1", one=True)),
+        "checkout":    bool(query("SELECT 1 FROM checkout_log LIMIT 1", one=True)),
+        "invite_user": (query("SELECT COUNT(*) FROM users WHERE active=1", one=True) or [0])[0] > 1,
+        "low_stock":   bool(query("SELECT 1 FROM products WHERE low_stock_threshold>0 LIMIT 1", one=True)),
+        "alert_email": bool(query("SELECT 1 FROM settings WHERE key='low_stock_alert_email' AND value!='' LIMIT 1", one=True)),
+    }
+    steps = [{"key": k, "label": lbl, "hint": hint, "done": done[k]}
+             for k, lbl, hint in ONBOARDING_STEPS]
+    all_done = all(s["done"] for s in steps)
+    # Auto-dismiss when everything is complete
+    if all_done:
+        execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('onboarding_dismissed','1')")
+    return jsonify({"ok": True, "dismissed": False, "steps": steps,
+                    "all_done": all_done,
+                    "pct": int(sum(1 for s in steps if s["done"]) / len(steps) * 100)})
+
+
+@bp.route("/api/onboarding/dismiss", methods=["POST"])
+@login_required
+@admin_required
+def api_onboarding_dismiss():
+    execute("INSERT OR REPLACE INTO settings (key,value) VALUES ('onboarding_dismissed','1')")
+    return jsonify({"ok": True})
 
 
 # ── Backward-compat aliases ───────────────────────────────────────────────────
