@@ -299,9 +299,10 @@ def build_punchout_setup_request(return_url: str, buyer_cookie: str,
 
 
 def send_punchout_setup(return_url: str, identity: str, secret: str,
-                         from_domain: str, buyer_id: str, order_id: str) -> dict:
+                         from_domain: str, buyer_id: str, order_id: str,
+                         endpoint_url: str = None) -> dict:
     """
-    POST a PunchOutSetupRequest to Amazon Business.
+    POST a PunchOutSetupRequest to a cXML-compatible distributor endpoint.
     Returns: {"ok": True, "punchout_url": "..."} or {"ok": False, "error": "..."}
     """
     import urllib.request as ureq
@@ -309,9 +310,10 @@ def send_punchout_setup(return_url: str, identity: str, secret: str,
     xml_body     = build_punchout_setup_request(
         return_url, buyer_cookie, identity, secret, from_domain, buyer_id, order_id
     )
+    target_url = endpoint_url or AMAZON_PUNCHOUT_URL
     try:
         req = ureq.Request(
-            AMAZON_PUNCHOUT_URL,
+            target_url,
             data=xml_body.encode(),
             headers={
                 "Content-Type": "text/xml",

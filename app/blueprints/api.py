@@ -6641,3 +6641,149 @@ def api_amz_punchout_return():
 <cXML><Response><Status code="200" text="OK">PO {po_number} created</Status></Response></cXML>""", 200, {
         "Content-Type": "text/xml"
     }
+
+
+# ── Distributor cXML Punch-out (Grainger, TD SYNNEX, Ingram Micro, Henry Schein) ──
+
+# Registry of supported distributors and their cXML endpoint templates.
+# Credentials are stored in settings as: punchout_{key}_identity, punchout_{key}_secret,
+# punchout_{key}_from_domain, punchout_{key}_url
+CXML_DISTRIBUTORS = {
+    "grainger": {
+        "name":     "Grainger",
+        "url":      "https://www.grainger.com/punchout/cxml",
+        "logo":     "https://www.grainger.com/favicon.ico",
+        "note":     "Contact Grainger eProcurement to obtain your cXML credentials.",
+    },
+    "tdsysnex": {
+        "name":     "TD SYNNEX",
+        "url":      "https://www.tdsynnex.com/punchout/cxml",
+        "logo":     "",
+        "note":     "Contact TD SYNNEX to obtain your cXML buyer identity and shared secret.",
+    },
+    "ingram": {
+        "name":     "Ingram Micro",
+        "url":      "https://ec.ingrammicro.com/Punchout/cxml",
+        "logo":     "",
+        "note":     "Contact Ingram Micro eProcurement to get cXML access.",
+    },
+    "henryschein": {
+        "name":     "Henry Schein",
+        "url":      "https://www.henryschein.com/punchout/cxml",
+        "logo":     "",
+        "note":     "Contact Henry Schein eProcurement to get your cXML account.",
+    },
+}
+
+
+@bp.route("/api/integrations/punchout/distributors")
+@login_required
+@admin_required
+def api_punchout_distributors():
+    """Return the list of supported distributors and their configuration status."""
+    result = []
+    for key, info in CXML_DISTRIBUTORS.items():
+        identity = query("SELECT value FROM settings WHERE key=?",
+                         [f"punchout_{key}_identity"], one=True)
+        result.append({
+            "key":       key,
+            "name":      info["name"],
+            "note":      info["note"],
+            "configured": bool(identity and identity["value"]),
+        })
+    return jsonify({"ok": True, "distributors": result})
+
+
+@bp.route("/api/integrations/punchout/<dist_key>/save", methods=["POST"])
+@login_required
+@admin_required
+def api_punchout_save(dist_key):
+    if dist_key not in CXML_DISTRIBUTORS:
+        return jsonify({"ok": False, "msg": "Unknown distributor"}), 404
+    d = request.json or {}
+    for field in ("identity", "secret", "from_domain", "url"):
+        val = d.get(field, "").strip()
+        if val:
+            execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
+                    [f"punchout_{dist_key}_{field}", val])
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/punchout/<dist_key>/initiate", methods=["POST"])
+@login_required
+@admin_required
+def api_punchout_initiate(dist_key):
+    if dist_key not in CXML_DISTRIBUTORS:
+        return jsonify({"ok": False, "msg": "Unknown distributor"}), 404
+    dist_info = CXML_DISTRIBUTORS[dist_key]
+
+    def _gs(key):
+        row = query("SELECT value FROM settings WHERE key=?", [key], one=True)
+        return row["value"] if row else ""
+
+    identity    = _gs(f"punchout_{dist_key}_identity")
+    secret      = _gs(f"punchout_{dist_key}_secret")
+    from_domain = _gs(f"punchout_{dist_key}_from_domain") or "countdepot.com"
+    url_override = _gs(f"punchout_{dist_key}_url") or dist_info["url"]
+
+    if not (identity and secret):
+        return jsonify({"ok": False,
+                        "msg": f"{dist_info['name']} credentials not configured."})
+
+    d        = request.json or {}
+    order_id = d.get("po_id") or f"CD-{int(time.time())}"
+    base_url = request.host_url.rstrip("/")
+    return_url = f"{base_url}/api/integrations/punchout/{dist_key}/return"
+
+    try:
+        from app.amazon import send_punchout_setup
+        result = send_punchout_setup(return_url, identity, secret, from_domain,
+                                     "", str(order_id), endpoint_url=url_override)
+        if result.get("ok"):
+            execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
+                    [f"punchout_{dist_key}_{result['buyer_cookie']}", str(order_id)])
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
+
+
+@bp.route("/api/integrations/punchout/<dist_key>/return", methods=["POST"])
+def api_punchout_return(dist_key):
+    """Generic cXML PunchOutOrderMessage return handler for any distributor."""
+    if dist_key not in CXML_DISTRIBUTORS:
+        return "<cXML><Response><Status code='404' text='Not Found'/></Response></cXML>", 404, {"Content-Type": "text/xml"}
+    dist_info = CXML_DISTRIBUTORS[dist_key]
+    xml_body  = request.get_data(as_text=True)
+    try:
+        from app.amazon import parse_punchout_order_message
+        cart = parse_punchout_order_message(xml_body)
+    except Exception as e:
+        return f"<cXML><Response><Status code='400' text='Bad Request'>{e}</Status></Response></cXML>", 400, {"Content-Type": "text/xml"}
+
+    buyer_cookie = cart.get("buyer_cookie", "")
+    now          = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    po_number    = _po_number()
+    po_id        = execute(
+        "INSERT INTO purchase_orders (po_number, vendor_name, status, created_by, created_at, notes) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [po_number, dist_info["name"], "draft", f"{dist_key}_punchout", now,
+         f"Created via {dist_info['name']} punch-out"])
+    total = 0.0
+    for item in cart.get("items", []):
+        qty   = item.get("qty", 1)
+        price = item.get("unit_price", 0)
+        lt    = round(qty * price, 4)
+        total += lt
+        execute(
+            "INSERT INTO po_lines (po_id, description, vendor_sku, qty_ordered, unit_cost, total_cost) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [po_id, item.get("description", f"{dist_info['name']} Item"),
+             item.get("vendor_sku"), qty, price, lt])
+    execute("UPDATE purchase_orders SET total_cost=? WHERE id=?", [total, po_id])
+    log_action("PO_CREATE", None, po_number,
+               f"Draft PO via {dist_info['name']} punch-out; {len(cart.get('items', []))} items")
+    execute("DELETE FROM settings WHERE key=?", [f"punchout_{dist_key}_{buyer_cookie}"])
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<cXML><Response><Status code="200" text="OK">PO {po_number} created</Status></Response></cXML>""", 200, {
+        "Content-Type": "text/xml"
+    }

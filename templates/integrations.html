@@ -305,5 +305,52 @@ async function startPunchout(){
 }
 
 loadAmzStatus();
+
+// ── Distributor Punch-out ──
+async function loadDistributors(){
+  const data=await fetch('/api/integrations/punchout/distributors').then(r=>r.json()).catch(()=>({ok:false}));
+  if(!data.ok) return;
+  const wrap=document.getElementById('dist-list');
+  if(!wrap) return;
+  wrap.innerHTML=data.distributors.map(d=>`
+    <div style="background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <div style="flex:1">
+        <div style="font-size:13.5px;font-weight:600">${d.name}</div>
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:2px">${d.note}</div>
+      </div>
+      <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;${d.configured?'background:#dcfce7;color:#15803d':'background:#f1f5f9;color:#64748b'}">
+        ${d.configured?'Configured':'Not set up'}
+      </span>
+      <button class="btn btn-secondary btn-sm" onclick="configDist('${d.key}','${d.name}')">Configure</button>
+      ${d.configured?`<button class="btn btn-secondary btn-sm" onclick="startDistPunchout('${d.key}','${d.name}')">Open →</button>`:''}
+    </div>`).join('');
+}
+function configDist(key,name){
+  const identity=prompt(`${name} — cXML Buyer Identity:`,'');
+  if(identity===null) return;
+  const secret=prompt(`${name} — Shared Secret:`,'');
+  if(secret===null) return;
+  const domain=prompt(`${name} — Your domain (e.g. countdepot.com):`,'countdepot.com');
+  if(domain===null) return;
+  fetch(`/api/integrations/punchout/${key}/save`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name="csrf-token"]')?.content||''},body:JSON.stringify({identity,secret,from_domain:domain})})
+    .then(()=>{loadDistributors();alert(`${name} configured!`);}).catch(e=>alert('Error: '+e));
+}
+async function startDistPunchout(key,name){
+  const res=await fetch(`/api/integrations/punchout/${key}/initiate`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name="csrf-token"]')?.content||''},body:'{}'}).then(r=>r.json()).catch(e=>({ok:false,msg:String(e)}));
+  if(res.ok&&res.punchout_url){window.open(res.punchout_url,'_blank');alert(`${name} opened. Complete your order there — the cart will return as a draft PO.`);}
+  else alert('Error: '+(res.msg||'Could not start punch-out'));
+}
+loadDistributors();
 </script>
+
+<!-- Distributor Punch-out -->
+<div style="padding:0 24px 20px">
+  <div style="font-size:14px;font-weight:600;margin-bottom:12px;margin-top:4px">Other Distributor Punch-outs</div>
+  <div style="font-size:12.5px;color:#64748b;margin-bottom:14px">
+    Grainger, TD SYNNEX, Ingram Micro, and Henry Schein all use the same cXML protocol as Amazon Business.
+    Configure each with the buyer identity and shared secret from your distributor account.
+  </div>
+  <div id="dist-list"><div style="color:#94a3b8;font-size:13px">Loading…</div></div>
+</div>
+
 {% endblock %}
