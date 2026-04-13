@@ -17,10 +17,6 @@ input:focus{border-color:#1d4ed8;background:#fff}
 .btn{width:100%;background:#0f172a;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s;font-family:inherit}
 .btn:hover{background:#1d4ed8}
 .error{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:16px}
-.btn-google{width:100%;background:#fff;color:#374151;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:10px;transition:border-color .15s,box-shadow .15s;margin-bottom:14px}
-.btn-google:hover{border-color:#94a3b8;box-shadow:0 2px 6px rgba(0,0,0,.08)}
-.divider{display:flex;align-items:center;gap:10px;margin:14px 0;color:#94a3b8;font-size:12px}
-.divider::before,.divider::after{content:'';flex:1;height:1px;background:#e2e8f0}
 </style>
 </head>
 <body>
@@ -30,16 +26,6 @@ input:focus{border-color:#1d4ed8;background:#fff}
     <div class="logo-sub">Inventory Storage &amp; Management</div>
   </div>
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
-
-  <!-- Google sign-in button — hidden until JS confirms it's configured -->
-  <a href="/auth/google" id="google-btn" style="display:none;text-decoration:none">
-    <button type="button" class="btn-google">
-      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-      Continue with Google
-    </button>
-  </a>
-  <div id="google-divider" class="divider" style="display:none">or</div>
-
   {% if unverified %}
   <form method="POST" action="/resend-verification" style="margin-bottom:18px">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -62,10 +48,6 @@ input:focus{border-color:#1d4ed8;background:#fff}
   </div>
 <script>
 fetch('/api/auth/providers').then(r=>r.json()).then(d=>{
-  if(d.google){
-    document.getElementById('google-btn').style.display='block';
-    document.getElementById('google-divider').style.display='flex';
-  }
   if(d.saml)document.getElementById('sso-link').style.display='inline';
 }).catch(()=>{});
 </script>
