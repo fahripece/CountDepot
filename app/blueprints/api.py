@@ -376,7 +376,8 @@ def api_items():
                     p.require_internal_sku as product_req_internal_sku,
                     p.print_scan_label as product_print_scan,
                     co.name as company_name,
-                    l.name as location_name
+                    l.name as location_name,
+                    (SELECT COUNT(*) FROM item_photos ip WHERE ip.item_id=i.id) as photo_count
              """ + base_where
     args = []
     if search:

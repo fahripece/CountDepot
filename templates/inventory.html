@@ -168,14 +168,19 @@
     <div id="dp-photos-section" style="margin-top:12px">
       <div class="section-hdr" style="margin-top:0">📷 Photos</div>
       <div id="dp-photos-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <input type="file" id="dp-photo-file" accept="image/*" style="font-size:12px;flex:1" onchange="photoFileChanged()">
-        <button class="btn btn-secondary btn-sm" id="dp-photo-upload-btn" style="display:none" onclick="uploadPhoto()">Upload</button>
+      <div id="dp-photo-drop-zone" style="border:2px dashed #e5e3de;border-radius:8px;padding:12px;text-align:center;cursor:pointer;transition:border-color .2s"
+           ondragover="event.preventDefault();this.style.borderColor='#1d4ed8'"
+           ondragleave="this.style.borderColor='#e5e3de'"
+           ondrop="photoDrop(event)"
+           onclick="document.getElementById('dp-photo-file').click()">
+        <div style="font-size:12px;color:#94a3b8">Drop photo here or <span style="color:#1d4ed8;text-decoration:underline">browse</span></div>
+        <input type="file" id="dp-photo-file" accept="image/*" style="display:none" onchange="photoFileChanged()">
       </div>
       <div id="dp-photo-preview" style="margin-top:8px;display:none">
         <img id="dp-photo-preview-img" style="max-width:100%;max-height:160px;border-radius:6px;border:1px solid #e5e3de;object-fit:cover">
         <div style="display:flex;gap:6px;margin-top:6px">
           <input class="input" id="dp-photo-caption" placeholder="Caption (optional)" style="flex:1;font-size:12px">
+          <button class="btn btn-secondary btn-sm" id="dp-photo-upload-btn" onclick="uploadPhoto()">Upload</button>
         </div>
       </div>
     </div>
@@ -789,11 +794,12 @@ function renderTable(items){
     }
     const prodLabel=item.product_name?`<div style="font-size:10.5px;color:#15803d;margin-top:1px">📦 ${item.product_name}</div>`:'';
     const incLabel=item.is_incomplete?`<span class="tag-incomplete" title="Missing: ${item.missing_fields.join(', ')}">⚠ Incomplete</span>`:'';
+    const photoIcon=item.photo_count>0?`<span title="${item.photo_count} photo${item.photo_count!==1?'s':''}" style="font-size:11px;color:#64748b;margin-left:4px;opacity:.7">📷${item.photo_count>1?'<sup style=font-size:9px>'+item.photo_count+'</sup>':''}</span>`:'';
     const cbCol=IS_ADMIN?`<td style="padding:10px 8px 10px 14px" onclick="event.stopPropagation()"><input type="checkbox" class="row-cb" data-id="${item.id}" onchange="onRowCheck(this)" ${selectedIds.has(item.id)?'checked':''}></td>`:'';
     return `<tr class="${item.is_low?'low-row':''}${selectedIds.has(item.id)?' selected':''}" onclick="showDetail(allItems.find(i=>i.id===${item.id}))">
       ${cbCol}
       <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#94a3b8;white-space:nowrap">#${item.id}</td>
-      <td><div style="font-weight:500;font-size:13px">${item.name} ${incLabel}</div>${item.manufacturer?`<div style="font-size:11px;color:#aaa">${item.manufacturer}</div>`:''}${prodLabel}</td>
+      <td><div style="font-weight:500;font-size:13px">${item.name} ${incLabel}${photoIcon}</div>${item.manufacturer?`<div style="font-size:11px;color:#aaa">${item.manufacturer}</div>`:''}${prodLabel}</td>
       <td>${catPill}</td>
       <td>${serialSku}</td>
       <td>${shelf}</td>
@@ -1358,19 +1364,27 @@ async function cancelReservation(resId,itemId){
 
 // ── Photos ──
 let _photoFile=null;
-function photoFileChanged(){
-  const inp=document.getElementById('dp-photo-file');
-  const f=inp.files[0];
-  const preview=document.getElementById('dp-photo-preview');
-  const uploadBtn=document.getElementById('dp-photo-upload-btn');
-  if(!f){preview.style.display='none';uploadBtn.style.display='none';_photoFile=null;return;}
+function _setPhotoFile(f){
+  if(!f) return;
   _photoFile=f;
   const reader=new FileReader();
   reader.onload=e=>{
     document.getElementById('dp-photo-preview-img').src=e.target.result;
-    preview.style.display='';uploadBtn.style.display='';
+    document.getElementById('dp-photo-preview').style.display='';
+    document.getElementById('dp-photo-drop-zone').style.borderColor='#e5e3de';
   };
   reader.readAsDataURL(f);
+}
+function photoFileChanged(){
+  const f=document.getElementById('dp-photo-file').files[0];
+  if(!f){document.getElementById('dp-photo-preview').style.display='none';_photoFile=null;return;}
+  _setPhotoFile(f);
+}
+function photoDrop(e){
+  e.preventDefault();
+  document.getElementById('dp-photo-drop-zone').style.borderColor='#e5e3de';
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type.startsWith('image/')) _setPhotoFile(f);
 }
 async function uploadPhoto(){
   const itemId=parseInt(document.getElementById('dp-note-input').dataset.itemId);
@@ -1387,27 +1401,30 @@ async function uploadPhoto(){
       toast('Photo uploaded ✓','ok');
       document.getElementById('dp-photo-file').value='';
       document.getElementById('dp-photo-preview').style.display='none';
-      btn.style.display='none';_photoFile=null;
+      document.getElementById('dp-photo-caption').value='';
+      _photoFile=null;
       loadPhotos(itemId);
     } else toast(res.msg||'Upload failed','err');
   }finally{btn.disabled=false;btn.textContent='Upload';}
 }
+let _currentPhotos = [];
 async function loadPhotos(itemId){
   const list=document.getElementById('dp-photos-list');
   try{
     const rows=await fetch('/api/item/'+itemId+'/photos').then(r=>r.json());
+    _currentPhotos = rows;
     if(!rows.length){list.innerHTML='<div style="color:#94a3b8;font-size:12px">No photos yet.</div>';return;}
-    list.innerHTML=rows.map(p=>`
+    list.innerHTML=rows.map((p,i)=>`
       <div style="position:relative;display:inline-block">
         <img data-photo-id="${p.id}" data-item-id="${itemId}"
              src="" loading="lazy"
              style="width:90px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e5e3de;cursor:pointer"
-             onclick="viewPhoto(${p.id})" title="${escHtml(p.caption||'')}">
+             onclick="viewPhoto(${p.id}, _currentPhotos)" title="${escHtml(p.caption||'')}">
         <button onclick="deletePhoto(${p.id},${itemId})"
           style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1;padding:0">✕</button>
         ${p.caption?`<div style="font-size:10px;color:#94a3b8;margin-top:2px;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.caption)}</div>`:''}
       </div>`).join('');
-    // Lazy-load photo data
+    // Lazy-load thumbnails
     list.querySelectorAll('img[data-photo-id]').forEach(async img=>{
       const pid=img.dataset.photoId;
       const d=await fetch('/api/photo/'+pid+'/data').then(r=>r.json());
@@ -1415,12 +1432,52 @@ async function loadPhotos(itemId){
     });
   }catch(e){list.innerHTML='';}
 }
-async function viewPhoto(photoId){
-  const d=await fetch('/api/photo/'+photoId+'/data').then(r=>r.json());
-  if(!d.ok)return;
-  const w=window.open('','_blank','width=900,height=700');
-  w.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${d.data_url}" style="max-width:100%;max-height:100vh;object-fit:contain"></body></html>`);
-  w.document.close();
+// ── Photo lightbox ──────────────────────────────────────────────────────────
+let _lbPhotos=[], _lbIdx=0;
+
+async function viewPhoto(photoId, allPhotos){
+  // allPhotos = array of {id, caption} from current item's photo list
+  if(allPhotos && allPhotos.length){
+    _lbPhotos = allPhotos;
+    _lbIdx    = allPhotos.findIndex(p=>p.id===photoId);
+    if(_lbIdx<0) _lbIdx=0;
+  } else {
+    _lbPhotos = [{id: photoId, caption: ''}];
+    _lbIdx    = 0;
+  }
+  document.getElementById('photoLightbox').style.display='flex';
+  document.addEventListener('keydown', _lbKeydown);
+  await _lbLoad();
+}
+
+async function _lbLoad(){
+  const photo = _lbPhotos[_lbIdx];
+  const img   = document.getElementById('lb-img');
+  const cap   = document.getElementById('lb-caption');
+  const ctr   = document.getElementById('lb-counter');
+  img.src = '';
+  cap.textContent = '';
+  ctr.textContent = _lbPhotos.length > 1 ? `${_lbIdx+1} / ${_lbPhotos.length}` : '';
+  document.getElementById('lb-prev').style.display = _lbPhotos.length>1?'flex':'none';
+  document.getElementById('lb-next').style.display = _lbPhotos.length>1?'flex':'none';
+  const d = await fetch('/api/photo/'+photo.id+'/data').then(r=>r.json());
+  if(d.ok){ img.src=d.data_url; cap.textContent=photo.caption||''; }
+}
+
+async function lbNav(dir){
+  _lbIdx = (_lbIdx + dir + _lbPhotos.length) % _lbPhotos.length;
+  await _lbLoad();
+}
+
+function closeLightbox(){
+  document.getElementById('photoLightbox').style.display='none';
+  document.removeEventListener('keydown', _lbKeydown);
+}
+
+function _lbKeydown(e){
+  if(e.key==='ArrowLeft') lbNav(-1);
+  else if(e.key==='ArrowRight') lbNav(1);
+  else if(e.key==='Escape') closeLightbox();
 }
 async function deletePhoto(photoId,itemId){
   if(!confirm('Delete this photo?'))return;
@@ -1722,6 +1779,16 @@ async function doInvConfirmScan(){
   }
 }
 </script>
+
+<!-- ══ PHOTO LIGHTBOX ══ -->
+<div id="photoLightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99999;align-items:center;justify-content:center;flex-direction:column" onclick="if(event.target===this)closeLightbox()">
+  <button onclick="closeLightbox()" style="position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;line-height:1;opacity:.8">✕</button>
+  <button id="lb-prev" onclick="lbNav(-1)" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;font-size:28px;cursor:pointer;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center">‹</button>
+  <button id="lb-next" onclick="lbNav(1)"  style="position:absolute;right:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;font-size:28px;cursor:pointer;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center">›</button>
+  <img id="lb-img" src="" style="max-width:calc(100vw - 120px);max-height:calc(100vh - 100px);object-fit:contain;border-radius:6px;display:block">
+  <div id="lb-caption" style="color:#e2e8f0;font-size:13px;margin-top:12px;text-align:center;min-height:20px"></div>
+  <div id="lb-counter" style="color:#64748b;font-size:12px;margin-top:4px"></div>
+</div>
 
 <!-- ERROR MODAL -->
 <div class="overlay" id="errModal">
