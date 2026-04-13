@@ -3173,6 +3173,32 @@ def _check_item_limit():
     return True, None
 
 
+# ── Login Activity ────────────────────────────────────────────────────────────
+
+@bp.route("/api/login-activity")
+@login_required
+@admin_required
+def api_login_activity():
+    """Return recent login log entries for this tenant."""
+    limit  = min(int(request.args.get("limit", 200)), 1000)
+    result = request.args.get("result", "").strip()
+    user_f = request.args.get("username", "").strip()
+    wheres = []
+    args   = []
+    if result:
+        wheres.append("result=?")
+        args.append(result)
+    if user_f:
+        wheres.append("LOWER(username) LIKE ?")
+        args.append(f"%{user_f.lower()}%")
+    where_sql = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+    rows = query(
+        f"SELECT * FROM login_log {where_sql} ORDER BY id DESC LIMIT ?",
+        args + [limit]
+    )
+    return jsonify({"ok": True, "entries": [dict(r) for r in rows]})
+
+
 # ── Export / Import ───────────────────────────────────────────────────────────
 
 @bp.route("/export/full-data")

@@ -99,12 +99,18 @@ def login_page():
             sess = _build_session(user, perms)
             session.clear()
             session.update(sess)
+            now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
-                    [datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), sess["session_token"], user["id"]])
+                    [now_str, sess["session_token"], user["id"]])
+            execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
+                    [user["id"], user["username"], ip, request.user_agent.string, "ok", now_str])
             log_auth_event("LOGIN_OK", username=user["username"], ip=ip,
                            tenant=getattr(g, "tenant_slug", ""))
             return redirect(url_for("main.inventory"))
         error = "Invalid username or password."
+        execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
+                [None, username, ip, request.user_agent.string, "fail",
+                 datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")])
         log_auth_event("LOGIN_FAIL", username=username, ip=ip,
                        tenant=getattr(g, "tenant_slug", ""))
     return render_template("login.html", error=error)
@@ -112,10 +118,16 @@ def login_page():
 
 @bp.route("/logout")
 def logout():
-    log_auth_event("LOGOUT", username=session.get("username", ""),
-                   ip=request.remote_addr or "",
-                   tenant=getattr(g, "tenant_slug", ""))
-    uid = session.get("user_id")
+    username = session.get("username", "")
+    uid      = session.get("user_id")
+    ip       = request.remote_addr or ""
+    log_auth_event("LOGOUT", username=username, ip=ip, tenant=getattr(g, "tenant_slug", ""))
+    try:
+        execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
+                [uid, username, ip, request.user_agent.string, "logout",
+                 datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")])
+    except Exception:
+        pass
     session.clear()
     if uid:
         try:
@@ -181,12 +193,18 @@ def verify_2fa():
             sess = _build_session(user, perms)
             session.clear()
             session.update(sess)
+            now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
-                    [datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), sess["session_token"], user["id"]])
+                    [now_str, sess["session_token"], user["id"]])
+            execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
+                    [user["id"], user["username"], ip, request.user_agent.string, "ok", now_str])
             log_auth_event("LOGIN_OK_2FA", username=user["username"], ip=ip,
                            tenant=getattr(g, "tenant_slug", ""))
             return redirect(url_for("main.inventory"))
         error = "Invalid or expired code. Please try again."
+        execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
+                [uid, str(uid), ip, request.user_agent.string, "2fa_fail",
+                 datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")])
         log_auth_event("2FA_FAIL", username=str(uid), ip=ip,
                        tenant=getattr(g, "tenant_slug", ""))
     return render_template("verify_2fa.html", error=error)

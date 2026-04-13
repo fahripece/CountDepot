@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Login Activity · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Login Activity</span>
+  <div class="topbar-right">
+    <select id="resultFilter" class="select" style="width:auto;min-width:120px" onchange="loadLog()">
+      <option value="">All Events</option>
+      <option value="ok">Successful</option>
+      <option value="fail">Failed</option>
+      <option value="logout">Logouts</option>
+      <option value="2fa_fail">2FA Failures</option>
+    </select>
+    <input id="userFilter" class="input" style="width:160px" placeholder="Filter by user…" oninput="loadLog()">
+  </div>
+</div>
+<div style="flex:1;overflow-y:auto;padding:20px 24px">
+  <div class="rpt-grid" id="cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>User</th>
+          <th>Result</th>
+          <th>IP Address</th>
+          <th>Browser / Device</th>
+        </tr>
+      </thead>
+      <tbody id="logBody"><tr class="empty-row"><td colspan="5">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <div style="margin-top:10px;font-size:12px;color:#94a3b8" id="entryCount"></div>
+</div>
+<style>
+.kcard{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:14px 16px}
+.kcard-l{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:#94a3b8;margin-bottom:6px}
+.kcard-v{font-size:22px;font-weight:700;font-family:'IBM Plex Mono',monospace;letter-spacing:-1px}
+.result-ok{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+.result-fail{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca}
+.result-logout{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+.result-2fa_fail{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+.ua-str{font-size:11px;color:#94a3b8;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+<script>
+let allEntries=[];
+async function loadLog(){
+  const result=document.getElementById('resultFilter').value;
+  const user=document.getElementById('userFilter').value.trim();
+  const params=new URLSearchParams();
+  if(result) params.set('result',result);
+  if(user)   params.set('username',user);
+  params.set('limit','500');
+  const data=await fetch('/api/login-activity?'+params).then(r=>r.json());
+  allEntries=data.entries||[];
+  renderCards();
+  renderTable();
+}
+function renderCards(){
+  const ok    =allEntries.filter(e=>e.result==='ok').length;
+  const fail  =allEntries.filter(e=>e.result==='fail'||e.result==='2fa_fail').length;
+  const logout=allEntries.filter(e=>e.result==='logout').length;
+  const uniq  =new Set(allEntries.filter(e=>e.result==='fail'||e.result==='2fa_fail').map(e=>e.ip_address)).size;
+  document.getElementById('cards').innerHTML=`
+    <div class="kcard"><div class="kcard-l">Successful Logins</div><div class="kcard-v" style="color:#15803d">${ok}</div></div>
+    <div class="kcard"><div class="kcard-l">Failed Attempts</div><div class="kcard-v" style="color:${fail?'#b91c1c':'#94a3b8'}">${fail}</div></div>
+    <div class="kcard"><div class="kcard-l">Logouts</div><div class="kcard-v" style="color:#475569">${logout}</div></div>
+    <div class="kcard"><div class="kcard-l">Unique Fail IPs</div><div class="kcard-v" style="color:${uniq?'#92400e':'#94a3b8'}">${uniq}</div></div>`;
+}
+function resultBadge(r){
+  const labels={ok:'✓ Success',fail:'✗ Failed',logout:'→ Logout','2fa_fail':'✗ 2FA Fail'};
+  const cls='result-'+(r||'fail');
+  return `<span class="${cls}">${labels[r]||r}</span>`;
+}
+function parseUA(ua){
+  if(!ua) return '—';
+  // Extract browser and OS hints
+  let browser='Unknown';
+  if(/Edg\//.test(ua)) browser='Edge';
+  else if(/OPR\/|Opera/.test(ua)) browser='Opera';
+  else if(/Chrome\//.test(ua)) browser='Chrome';
+  else if(/Firefox\//.test(ua)) browser='Firefox';
+  else if(/Safari\//.test(ua)&&!/Chrome/.test(ua)) browser='Safari';
+  let os='';
+  if(/Windows NT/.test(ua)) os='Windows';
+  else if(/Mac OS X/.test(ua)) os='macOS';
+  else if(/Android/.test(ua)) os='Android';
+  else if(/iPhone|iPad/.test(ua)) os='iOS';
+  else if(/Linux/.test(ua)) os='Linux';
+  return os?`${browser} / ${os}`:browser;
+}
+function renderTable(){
+  const tb=document.getElementById('logBody');
+  document.getElementById('entryCount').textContent=allEntries.length+' event'+(allEntries.length===1?'':'s');
+  if(!allEntries.length){tb.innerHTML='<tr class="empty-row"><td colspan="5">No events.</td></tr>';return;}
+  tb.innerHTML=allEntries.map(e=>{
+    const ts=e.ts?e.ts.substring(0,19).replace('T',' '):'—';
+    return `<tr>
+      <td class="mono" style="font-size:11.5px;white-space:nowrap">${ts}</td>
+      <td style="font-weight:500">${e.username||'—'}</td>
+      <td>${resultBadge(e.result)}</td>
+      <td class="mono" style="font-size:11.5px">${e.ip_address||'—'}</td>
+      <td><span class="ua-str" title="${(e.user_agent||'').replace(/"/g,'&quot;')}">${parseUA(e.user_agent)}</span></td>
+    </tr>`;
+  }).join('');
+}
+loadLog();
+</script>
+{% endblock %}

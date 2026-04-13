@@ -263,6 +263,13 @@ def report_depreciation():
     return render_template("report_depreciation.html")
 
 
+@bp.route("/report/login-activity")
+@login_required
+@admin_required
+def report_login_activity():
+    return render_template("report_login_activity.html")
+
+
 # ── Procurement helpers ───────────────────────────────────────────────────────
 
 def _po_number():
