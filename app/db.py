@@ -3,9 +3,10 @@ import os
 from flask import g
 from config import Config
 
-# Track which tenant DBs have had their schema initialized in this process.
-# Avoids re-running DDL on every single request (it's a no-op but wastes time).
-_initialized_tenants: set = set()
+# Track which tenant DBs have had their schema + migrations run in this process.
+# Avoids re-running expensive DDL/PRAGMA table_info on every request.
+_initialized_tenants: set  = set()
+_migrated_tenants: set     = set()
 
 
 class Row(dict):
@@ -35,6 +36,9 @@ def get_db():
         g.db.execute("PRAGMA journal_mode=WAL")
         g.db.execute("PRAGMA foreign_keys=ON")
         g.db.execute("PRAGMA synchronous=NORMAL")
+        g.db.execute("PRAGMA cache_size=-10000")   # 10 MB page cache per connection
+        g.db.execute("PRAGMA temp_store=MEMORY")   # temp tables + indexes in RAM
+        g.db.execute("PRAGMA mmap_size=268435456") # 256 MB memory-mapped I/O
     return g.db
 
 

@@ -18,6 +18,13 @@ def create_app():
     app.config.from_object(Config)
     app.secret_key = Config.SECRET_KEY
 
+    # Gzip compression for HTML/JSON/CSS responses
+    try:
+        from flask_compress import Compress
+        Compress(app)
+    except ImportError:
+        pass  # flask-compress not installed yet; harmless
+
     # Ensure platform.db (tenant registry) exists on startup
     init_platform_db()
 
@@ -87,13 +94,16 @@ def create_app():
         # Full schema init (CREATE TABLE etc.) runs once per tenant per process.
         # Migrations run on every request so new columns are never missed when
         # the server stays up across deploys.
-        from app.db import _initialized_tenants
+        from app.db import _initialized_tenants, _migrated_tenants
         from app.schema import run_migrations_only
         if g.tenant_slug not in _initialized_tenants:
             init_db()
             _initialized_tenants.add(g.tenant_slug)
-        else:
+            _migrated_tenants.add(g.tenant_slug)
+        elif g.tenant_slug not in _migrated_tenants:
+            # Run migrations once per tenant per process (not on every request)
             run_migrations_only()
+            _migrated_tenants.add(g.tenant_slug)
 
         # ── Resolve API key after tenant is set ──────────────────────────────
         if getattr(g, "pending_api_key", None):
@@ -112,16 +122,17 @@ def create_app():
                 _ex("UPDATE api_keys SET last_used=? WHERE id=?",
                     [_dt2.now().strftime("%Y-%m-%d %H:%M:%S"), row["id"]])
 
-        # ── Load brand settings ───────────────────────────────────────────────
+        # ── Load brand settings (single query for all keys) ───────────────────
         if getattr(g, "tenant_slug", None):
             try:
                 from app.db import query as _bq
-                brand_name_row  = _bq("SELECT value FROM settings WHERE key='brand_name'",  one=True)
-                brand_color_row = _bq("SELECT value FROM settings WHERE key='brand_color'", one=True)
-                g.brand_name  = (brand_name_row["value"]  if brand_name_row  else None) or g.tenant.get("name")
-                g.brand_color = (brand_color_row["value"] if brand_color_row else None) or "#0f172a"
-                banner_row    = _bq("SELECT value FROM settings WHERE key='banner_message'", one=True)
-                g.banner_message = banner_row["value"] if banner_row else None
+                _settings_rows = _bq(
+                    "SELECT key, value FROM settings WHERE key IN ('brand_name','brand_color','banner_message')"
+                )
+                _settings = {r["key"]: r["value"] for r in _settings_rows}
+                g.brand_name     = _settings.get("brand_name") or g.tenant.get("name")
+                g.brand_color    = _settings.get("brand_color") or "#0f172a"
+                g.banner_message = _settings.get("banner_message")
                 # Trial countdown banner (overrides manual banner when trial is expiring soon)
                 if not g.banner_message:
                     sub_st = g.tenant.get("subscription_status", "") if g.tenant else ""
@@ -210,6 +221,9 @@ def create_app():
         response.headers["X-Frame-Options"]         = "SAMEORIGIN"
         response.headers["X-XSS-Protection"]        = "1; mode=block"
         response.headers["Referrer-Policy"]          = "strict-origin-when-cross-origin"
+        # Long-lived cache for static assets (versioned by Flask's url_for ?v=...)
+        if request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
 
     @app.errorhandler(404)

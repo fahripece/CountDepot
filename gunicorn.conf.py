@@ -5,9 +5,9 @@ import os
 # ── Bind & workers ───────────────────────────────────────────────────────────
 
 bind         = f"0.0.0.0:{os.environ.get('PORT', '5000')}"
-workers      = int(os.environ.get("WEB_CONCURRENCY", 4))
-worker_class = "sync"
-threads      = 2
+workers      = int(os.environ.get("WEB_CONCURRENCY", 2))
+worker_class = "gthread"   # thread-per-request; better SQLite I/O concurrency than sync
+threads      = int(os.environ.get("WEB_THREADS", 4))
 timeout      = 60
 keepalive    = 5
 

@@ -403,6 +403,7 @@ def _init_db_conn(db):
             uploaded_by TEXT,
             created_at  TEXT NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS idx_item_photos_item ON item_photos(item_id);
         CREATE TABLE IF NOT EXISTS service_log (
             id                INTEGER PRIMARY KEY AUTOINCREMENT,
             item_id           INTEGER NOT NULL REFERENCES items(id),

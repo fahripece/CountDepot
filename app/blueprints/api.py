@@ -661,6 +661,7 @@ def api_items():
              LEFT JOIN products p    ON p.id=i.product_id
              LEFT JOIN companies co  ON co.id=i.company_id
              LEFT JOIN locations l   ON l.id=i.location_id
+             LEFT JOIN (SELECT item_id, COUNT(*) as photo_count FROM item_photos GROUP BY item_id) ph ON ph.item_id=i.id
              WHERE i.active=1 AND COALESCE(i.retired,0)=""" + ("1" if show_retired else "0")
     sql  = """SELECT i.*, c.name as category, c.color,
                     p.name as product_name, p.serial_tracked, p.qty_tracked,
@@ -671,7 +672,7 @@ def api_items():
                     p.print_scan_label as product_print_scan,
                     co.name as company_name,
                     l.name as location_name,
-                    (SELECT COUNT(*) FROM item_photos ip WHERE ip.item_id=i.id) as photo_count
+                    COALESCE(ph.photo_count, 0) as photo_count
              """ + base_where
     args = []
     if search:
@@ -728,14 +729,16 @@ def api_items():
     # Strip SELECT clause, keep from FROM onward (without ORDER BY)
     where_part = sql[sql.index("FROM"):]
     if "ORDER" in where_part: where_part = where_part[:where_part.rindex("ORDER")]
-    total = query("SELECT COUNT(*) " + where_part, args, one=True)[0]
 
-    # Aggregate totals (all matching rows, not just current page)
-    checked_out_count = query("SELECT COUNT(*) " + where_part + " AND i.checked_out=1", args, one=True)[0]
-    stock_value_row = query(
-        "SELECT COALESCE(SUM(COALESCE(i.cost_price,0)*CASE WHEN i.qty IS NULL THEN 1 ELSE COALESCE(i.qty,0) END),0) "
+    # Single aggregate query replaces the previous 3 separate COUNT/SUM queries
+    agg = query(
+        "SELECT COUNT(*) as total,"
+        " SUM(CASE WHEN i.checked_out=1 THEN 1 ELSE 0 END) as checked_out_count,"
+        " COALESCE(SUM(COALESCE(i.cost_price,0)*CASE WHEN i.qty IS NULL THEN 1 ELSE COALESCE(i.qty,0) END),0) as stock_value "
         + where_part, args, one=True)
-    stock_value = round(float(stock_value_row[0] or 0), 2)
+    total             = agg["total"] or 0
+    checked_out_count = agg["checked_out_count"] or 0
+    stock_value       = round(float(agg["stock_value"] or 0), 2)
 
     sql += f" ORDER BY {order}"
     if not no_paginate:

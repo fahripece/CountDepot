@@ -1649,8 +1649,16 @@ function _updateLabelBatchInfo(){
   if(labelItems.length>1){el.style.display='';el.textContent=`Printing ${labelItems.length} labels in bulk`;}
   else{el.style.display='none';}
 }
-function printLabel(id){const item=allItems.find(i=>i.id===id);if(!item)return;labelItems=[item];_updateLabelBatchInfo();renderLabels();openModal('labelModal');}
-function printSelectedLabels(){labelItems=allItems.filter(i=>selectedIds.has(i.id));if(!labelItems.length){toast('Select items first','warn');return}_updateLabelBatchInfo();renderLabels();openModal('labelModal');}
+let _jsBarcodeLoaded=false;
+function _loadJsBarcode(cb){
+  if(_jsBarcodeLoaded||typeof JsBarcode!=='undefined'){_jsBarcodeLoaded=true;cb();return;}
+  const s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js';
+  s.onload=()=>{_jsBarcodeLoaded=true;cb();};
+  document.head.appendChild(s);
+}
+function printLabel(id){const item=allItems.find(i=>i.id===id);if(!item)return;labelItems=[item];_updateLabelBatchInfo();_loadJsBarcode(()=>{renderLabels();openModal('labelModal');});}
+function printSelectedLabels(){labelItems=allItems.filter(i=>selectedIds.has(i.id));if(!labelItems.length){toast('Select items first','warn');return}_updateLabelBatchInfo();_loadJsBarcode(()=>{renderLabels();openModal('labelModal');});}
 function renderLabels(){
   const fmt=document.querySelector('input[name="label-fmt"]:checked')?.value||'single';
   const preview=document.getElementById('labelPreview');
@@ -1860,7 +1868,6 @@ window.refreshAlertBadge = async function(){
   }catch(e){}
 };
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
 <style>@media print{body>*{display:none!important}#labelPrintArea{display:block!important}.overlay{display:none!important}}</style>
 
 <!-- ══ SCAN TO CONFIRM — injected onto body so it clears all stacking contexts ══ -->
