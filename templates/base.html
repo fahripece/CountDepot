@@ -228,6 +228,49 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
   .sidebar{width:56px}.sb-brand,.sb-sub,.sb-section,.navlink span:not(.nb){display:none}
   .stats{grid-template-columns:1fr 1fr}
 }
+/* ── Mobile (≤640px) ── */
+@media(max-width:640px){
+  /* Hide desktop sidebar entirely; show hamburger */
+  .sidebar{display:none!important}
+  .mob-sidebar-overlay{display:flex!important}
+  .mob-sidebar{display:flex!important}
+  .mob-hamburger{display:flex!important}
+  /* Full-width layout */
+  .layout{flex-direction:column}
+  .main{width:100%;min-width:0}
+  /* Topbar: tighter on mobile */
+  .topbar{padding:10px 14px;gap:8px;flex-wrap:wrap}
+  .topbar-right{gap:6px;flex-wrap:wrap}
+  .topbar-right .btn-sm{font-size:11px;padding:5px 9px}
+  /* Stats: 2-col */
+  .stats{grid-template-columns:1fr 1fr;gap:8px}
+  .stat{padding:12px 14px}
+  .stat-v{font-size:20px}
+  /* Modals: full-screen on mobile */
+  .modal{width:100%!important;max-width:100%!important;height:100%;max-height:100%!important;border-radius:0!important;margin:0}
+  .modal-sm{width:100%!important}
+  .overlay{align-items:flex-end!important;padding:0}
+  .modal-header{border-radius:0!important}
+  .modal-footer{border-radius:0!important}
+  /* Detail panel: full screen */
+  .detail-inner{width:100%!important;max-width:100%!important;max-height:100%!important;height:100%!important;border-radius:0!important}
+  /* Field rows: stack on mobile */
+  .field-row{grid-template-columns:1fr!important}
+  /* Scan bar: wrap on mobile */
+  .scan-bar{flex-wrap:wrap;gap:8px;padding:10px 14px}
+  .scan-mode-tabs{flex:1 1 100%;order:-1}
+  .scan-bar input{min-width:0;flex:1}
+  /* Content padding */
+  .content{padding:14px}
+  /* Card padding */
+  .card{padding:14px}
+}
+/* Mobile sidebar drawer */
+.mob-sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;backdrop-filter:blur(2px)}
+.mob-sidebar{display:none;position:fixed;top:0;left:0;bottom:0;width:240px;background:var(--sidebar-bg,#0f172a);z-index:501;flex-direction:column;overflow-y:auto;transform:translateX(-100%);transition:transform 0.22s ease}
+.mob-sidebar.open{transform:translateX(0)}
+.mob-hamburger{display:none;background:none;border:none;color:#111;cursor:pointer;padding:6px;border-radius:6px;align-items:center;justify-content:center;margin-right:4px}
+.mob-hamburger svg{display:block}
 </style>
 {% block extra_head %}{% endblock %}
 <script>if(localStorage.getItem('darkMode')==='1')document.documentElement.classList.add('dark-init');</script>
@@ -237,8 +280,11 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
 <style>:root{--sidebar-bg:{{ brand_color }}}</style>
 {% endif %}
 <body>
+<!-- Mobile sidebar drawer -->
+<div class="mob-sidebar-overlay" id="mobSidebarOverlay" onclick="closeMobSidebar()"></div>
+<aside class="mob-sidebar" id="mobSidebar"></aside>
 <div class="layout">
-  <aside class="sidebar">
+  <aside class="sidebar" id="desktopSidebar">
     <div class="sb-logo">
       <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:16px;color:#f1f5f9;padding:0 10px">{{ brand_name or 'CountDepot' }}</div>
       {% if g.get('tenant') %}<div class="sb-sub" style="color:#64748b;font-size:11px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 10px">{{ g.tenant.get('name','') }}</div>{% endif %}
@@ -398,7 +444,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
       </a>
     </div>
   </aside>
-  <div class="main">
+  <div class="main" id="mainContent">
     {% if banner_message %}
     <div style="background:#78350f;color:#fef3c7;padding:10px 20px;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:12px">
       <span>📢 {{ banner_message }}</span>
@@ -422,6 +468,34 @@ refreshAlertBadge();setInterval(refreshAlertBadge,60000);
 (function(){const dark=localStorage.getItem('darkMode')==='1';if(dark)document.body.classList.add('dark');})();
 function toggleDark(){const on=document.body.classList.toggle('dark');localStorage.setItem('darkMode',on?'1':'0');document.getElementById('darkLabel').textContent=on?'Light mode':'Dark mode';}
 (function(){const on=localStorage.getItem('darkMode')==='1';const lbl=document.getElementById('darkLabel');if(lbl)lbl.textContent=on?'Light mode':'Dark mode';})();
+
+// ── Mobile sidebar ──
+(function(){
+  const desk=document.getElementById('desktopSidebar');
+  const mob=document.getElementById('mobSidebar');
+  if(desk&&mob){
+    mob.innerHTML=desk.innerHTML;
+    // Add close button at top of mobile sidebar
+    const closeRow=document.createElement('div');
+    closeRow.style.cssText='display:flex;justify-content:flex-end;padding:10px 12px 0';
+    closeRow.innerHTML='<button onclick="closeMobSidebar()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:20px;line-height:1;padding:4px">✕</button>';
+    mob.insertBefore(closeRow,mob.firstChild);
+    // Close sidebar when a nav link is clicked
+    mob.querySelectorAll('a.navlink').forEach(a=>a.addEventListener('click',()=>closeMobSidebar()));
+  }
+  // Inject hamburger into every .topbar
+  const topbar=document.querySelector('.topbar');
+  if(topbar){
+    const btn=document.createElement('button');
+    btn.className='mob-hamburger';
+    btn.setAttribute('aria-label','Open menu');
+    btn.onclick=openMobSidebar;
+    btn.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>';
+    topbar.insertBefore(btn,topbar.firstChild);
+  }
+})();
+function openMobSidebar(){document.getElementById('mobSidebar').classList.add('open');document.getElementById('mobSidebarOverlay').style.display='flex';}
+function closeMobSidebar(){document.getElementById('mobSidebar').classList.remove('open');document.getElementById('mobSidebarOverlay').style.display='none';}
 </script>
 {% block scripts %}{% endblock %}
 </body>

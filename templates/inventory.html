@@ -2050,4 +2050,26 @@ async function confirmAssign(){
 </script>
 {% endif %}
 
+<style>
+/* ── Inventory mobile ── */
+@media(max-width:640px){
+  div[style*="padding:20px 22px"]{padding:12px!important}
+  /* Filters: search full-width first row, rest scroll */
+  .flex.gap-2{flex-wrap:nowrap!important;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  .flex.gap-2>div:first-child{flex:1 1 100%!important;width:100%;order:-1;min-width:0}
+  .flex.gap-2 select{min-width:100px!important;flex-shrink:0}
+  #condFilter,#sortFilter{display:none}
+  /* Table: keep only name, status, action cols on mobile */
+  table th:nth-child(3),table td:nth-child(3),
+  table th:nth-child(4),table td:nth-child(4),
+  table th:nth-child(5),table td:nth-child(5),
+  table th:nth-child(6),table td:nth-child(6){display:none}
+  td,th{padding:8px 8px!important;font-size:12px!important}
+  /* Scan input: 16px stops iOS auto-zoom */
+  .scan-bar input{font-size:16px!important}
+  /* Detail panel footer buttons wrap */
+  .detail-foot{flex-direction:row!important;flex-wrap:wrap;gap:6px!important}
+  .detail-foot .btn{flex:1 1 auto;min-width:80px;justify-content:center}
+}
+</style>
 {% endblock %}
