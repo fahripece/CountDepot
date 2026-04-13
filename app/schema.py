@@ -123,6 +123,11 @@ MIGRATIONS = [
     ("items", "contract_expiry",  "TEXT"),
     ("items", "warranty_notes",   "TEXT"),
 
+    # purchase_orders — accounting sync tracking
+    ("purchase_orders", "qb_bill_id",   "TEXT"),
+    ("purchase_orders", "xero_po_id",   "TEXT"),
+    ("purchase_orders", "synced_at",    "TEXT"),
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
 ]
 
@@ -451,6 +456,17 @@ def _init_db_conn(db):
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, created_at);
+        CREATE TABLE IF NOT EXISTS accounting_sync_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider    TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id   INTEGER NOT NULL,
+            remote_id   TEXT,
+            status      TEXT NOT NULL DEFAULT 'ok',
+            detail      TEXT,
+            synced_at   TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_acct_sync ON accounting_sync_log(provider, entity_type, entity_id);
         CREATE TABLE IF NOT EXISTS user_locations (
             user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,

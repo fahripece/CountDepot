@@ -322,6 +322,75 @@ def report_login_activity():
     return render_template("report_login_activity.html")
 
 
+@bp.route("/integrations/accounting")
+@login_required
+@admin_required
+def integrations_accounting():
+    return render_template("integrations_accounting.html")
+
+
+@bp.route("/integrations/accounting/qb/callback")
+@login_required
+@admin_required
+def qb_oauth_callback():
+    """QuickBooks OAuth2 callback — exchange code for tokens."""
+    from app.accounting import (qb_exchange_code, _get_setting, _set_setting)
+    code  = request.args.get("code", "")
+    realm = request.args.get("realmId", "")
+    error = request.args.get("error", "")
+    if error or not code:
+        return render_template("integrations_accounting.html",
+                               flash_error=f"QuickBooks authorization failed: {error or 'No code received'}")
+    try:
+        redirect_uri = request.host_url.rstrip("/") + "/integrations/accounting/qb/callback"
+        tokens = qb_exchange_code(
+            _get_setting("qb_client_id", ""),
+            _get_setting("qb_client_secret", ""),
+            code, redirect_uri)
+        from datetime import datetime, timedelta
+        expiry = (datetime.utcnow() + timedelta(seconds=tokens["expires_in"])).isoformat()
+        _set_setting("qb_access_token",  tokens["access_token"])
+        _set_setting("qb_refresh_token", tokens["refresh_token"])
+        _set_setting("qb_token_expiry",  expiry)
+        _set_setting("qb_realm_id",      realm)
+    except Exception as e:
+        return render_template("integrations_accounting.html",
+                               flash_error=f"QuickBooks token exchange failed: {e}")
+    return redirect(url_for("main.integrations_accounting") + "?connected=qb")
+
+
+@bp.route("/integrations/accounting/xero/callback")
+@login_required
+@admin_required
+def xero_oauth_callback():
+    """Xero OAuth2 callback — exchange code for tokens and fetch tenant ID."""
+    from app.accounting import (xero_exchange_code, xero_get_tenants, _get_setting, _set_setting)
+    code  = request.args.get("code", "")
+    error = request.args.get("error", "")
+    if error or not code:
+        return render_template("integrations_accounting.html",
+                               flash_error=f"Xero authorization failed: {error or 'No code received'}")
+    try:
+        redirect_uri = request.host_url.rstrip("/") + "/integrations/accounting/xero/callback"
+        tokens = xero_exchange_code(
+            _get_setting("xero_client_id", ""),
+            _get_setting("xero_client_secret", ""),
+            code, redirect_uri)
+        from datetime import datetime, timedelta
+        expiry = (datetime.utcnow() + timedelta(seconds=tokens["expires_in"])).isoformat()
+        _set_setting("xero_access_token",  tokens["access_token"])
+        _set_setting("xero_refresh_token", tokens["refresh_token"])
+        _set_setting("xero_token_expiry",  expiry)
+        # Fetch Xero tenant ID
+        tenants = xero_get_tenants(tokens["access_token"])
+        if tenants:
+            _set_setting("xero_tenant_id", tenants[0]["tenantId"])
+    except Exception as e:
+        return render_template("integrations_accounting.html",
+                               flash_error=f"Xero token exchange failed: {e}")
+    return redirect(url_for("main.integrations_accounting") + "?connected=xero")
+
+
 # ── Procurement helpers ───────────────────────────────────────────────────────
 
 def _po_number():

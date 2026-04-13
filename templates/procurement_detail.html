@@ -457,6 +457,27 @@ function renderStatusSteps(){
   }).join('');
 }
 
+let _acctStatus = null;
+async function loadAcctStatus(){
+  try{
+    const d=await fetch('/api/integrations/accounting/status').then(r=>r.json());
+    _acctStatus=d;
+  }catch(e){}
+}
+function accountingSyncBtns(){
+  if(!_acctStatus) return '';
+  let btns='';
+  if(_acctStatus.quickbooks&&_acctStatus.quickbooks.connected)
+    btns+=`<button class="btn btn-secondary btn-sm" onclick="syncToAccounting('quickbooks')" style="color:#2CA01C">↑ QB</button>`;
+  if(_acctStatus.xero&&_acctStatus.xero.connected)
+    btns+=`<button class="btn btn-secondary btn-sm" onclick="syncToAccounting('xero')" style="color:#13B5EA">↑ Xero</button>`;
+  return btns;
+}
+async function syncToAccounting(provider){
+  const r=await api(`/api/integrations/accounting/sync-po/${PO_ID}`,{provider});
+  if(r.ok) toast(`Synced to ${provider==='quickbooks'?'QuickBooks':'Xero'} (${r.remote_id})`);
+  else toast(r.msg||'Sync failed','error');
+}
 function renderActionBar(){
   const bar = document.getElementById('action-bar');
   const s = poData.status;
@@ -476,12 +497,15 @@ function renderActionBar(){
             <button class="btn btn-secondary btn-sm" onclick="openEdit()">Edit Details</button>
             <button class="btn btn-secondary btn-sm" onclick="openSendModal()">Resend PO</button>
             <button class="btn btn-primary btn-sm" onclick="showReceivePanel()">Receive Goods</button>
-            <button class="btn btn-secondary btn-sm" onclick="setStatus('closed')">Close PO</button>`;
+            <button class="btn btn-secondary btn-sm" onclick="setStatus('closed')">Close PO</button>
+            ${accountingSyncBtns()}`;
   } else if(s === 'received'){
     html = `<a href="/api/procurement/pos/${PO_ID}/pdf" class="btn btn-secondary btn-sm" target="_blank">Download PDF</a>
-            <button class="btn btn-secondary btn-sm" onclick="setStatus('closed')">Close PO</button>`;
+            <button class="btn btn-secondary btn-sm" onclick="setStatus('closed')">Close PO</button>
+            ${accountingSyncBtns()}`;
   } else if(s === 'closed'){
-    html = `<a href="/api/procurement/pos/${PO_ID}/pdf" class="btn btn-secondary btn-sm" target="_blank">Download PDF</a>`;
+    html = `<a href="/api/procurement/pos/${PO_ID}/pdf" class="btn btn-secondary btn-sm" target="_blank">Download PDF</a>
+            ${accountingSyncBtns()}`;
   }
   bar.innerHTML = html;
 }
@@ -1025,6 +1049,6 @@ async function saveInvoice(){
   loadMatch();
 }
 
-loadPO();
+loadAcctStatus().then(loadPO);
 </script>
 {% endblock %}

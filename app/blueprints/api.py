@@ -6188,6 +6188,123 @@ def api_procurement_set_budget():
     return jsonify({"ok": True})
 
 
+# ── Accounting Integrations (QuickBooks & Xero) ───────────────────────────────
+
+@bp.route("/api/integrations/accounting/status")
+@login_required
+@admin_required
+def api_accounting_status():
+    from app.accounting import qb_get_credentials, xero_get_credentials
+    return jsonify({
+        "ok":        True,
+        "quickbooks": qb_get_credentials(),
+        "xero":       xero_get_credentials(),
+    })
+
+
+@bp.route("/api/integrations/accounting/qb/save", methods=["POST"])
+@login_required
+@admin_required
+def api_qb_save_credentials():
+    from app.accounting import _set_setting
+    d = request.json or {}
+    for key in ("qb_client_id", "qb_client_secret", "qb_sandbox"):
+        if key in d:
+            _set_setting(key, str(d[key]))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/accounting/qb/auth-url")
+@login_required
+@admin_required
+def api_qb_auth_url():
+    from app.accounting import qb_auth_url, _get_setting
+    from flask import request as req
+    client_id    = _get_setting("qb_client_id", "")
+    if not client_id:
+        return jsonify({"ok": False, "msg": "QuickBooks client ID not configured"}), 400
+    redirect_uri = req.host_url.rstrip("/") + "/integrations/accounting/qb/callback"
+    url          = qb_auth_url(client_id, redirect_uri)
+    return jsonify({"ok": True, "url": url})
+
+
+@bp.route("/api/integrations/accounting/qb/disconnect", methods=["POST"])
+@login_required
+@admin_required
+def api_qb_disconnect():
+    from app.accounting import qb_disconnect
+    qb_disconnect()
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/accounting/xero/save", methods=["POST"])
+@login_required
+@admin_required
+def api_xero_save_credentials():
+    from app.accounting import _set_setting
+    d = request.json or {}
+    for key in ("xero_client_id", "xero_client_secret"):
+        if key in d:
+            _set_setting(key, str(d[key]))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/accounting/xero/auth-url")
+@login_required
+@admin_required
+def api_xero_auth_url():
+    from app.accounting import xero_auth_url, _get_setting
+    from flask import request as req
+    client_id    = _get_setting("xero_client_id", "")
+    if not client_id:
+        return jsonify({"ok": False, "msg": "Xero client ID not configured"}), 400
+    redirect_uri = req.host_url.rstrip("/") + "/integrations/accounting/xero/callback"
+    url          = xero_auth_url(client_id, redirect_uri)
+    return jsonify({"ok": True, "url": url})
+
+
+@bp.route("/api/integrations/accounting/xero/disconnect", methods=["POST"])
+@login_required
+@admin_required
+def api_xero_disconnect():
+    from app.accounting import xero_disconnect
+    xero_disconnect()
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/accounting/sync-po/<int:po_id>", methods=["POST"])
+@login_required
+@admin_required
+def api_accounting_sync_po(po_id):
+    d        = request.json or {}
+    provider = d.get("provider", "").lower()
+    if provider not in ("quickbooks", "xero"):
+        return jsonify({"ok": False, "msg": "provider must be quickbooks or xero"}), 400
+    try:
+        if provider == "quickbooks":
+            from app.accounting import qb_sync_po
+            remote_id = qb_sync_po(po_id)
+        else:
+            from app.accounting import xero_sync_po
+            remote_id = xero_sync_po(po_id)
+        return jsonify({"ok": True, "remote_id": remote_id})
+    except Exception as e:
+        now = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        execute(
+            "INSERT INTO accounting_sync_log (provider,entity_type,entity_id,status,detail,synced_at) "
+            "VALUES (?,?,?,?,?,?)",
+            [provider, "purchase_order", po_id, "error", str(e)[:500], now])
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+
+@bp.route("/api/integrations/accounting/sync-log")
+@login_required
+@admin_required
+def api_accounting_sync_log():
+    rows = query("SELECT * FROM accounting_sync_log ORDER BY id DESC LIMIT 100")
+    return jsonify({"ok": True, "log": [dict(r) for r in rows]})
+
+
 # ── Amazon Business Integration ───────────────────────────────────────────────
 
 _AMZ_SETTING_KEYS = [
