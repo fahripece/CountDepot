@@ -17,6 +17,53 @@ def health():
     return jsonify({"ok": True, "service": "countdepot"}), 200
 
 
+@bp.route("/api/demo-request", methods=["POST"])
+def api_demo_request():
+    """Public endpoint — store a demo request and optionally email the team."""
+    from flask import request as req
+    d       = req.get_json(silent=True) or {}
+    name    = (d.get("name") or "").strip()
+    company = (d.get("company") or "").strip()
+    email   = (d.get("email") or "").strip().lower()
+    size    = (d.get("size") or "").strip()
+    if not name or not email or "@" not in email:
+        return jsonify({"ok": False, "msg": "Name and valid email are required"}), 400
+    # Store in platform DB
+    try:
+        from app.platform import get_platform_db as _pdb
+        from datetime import datetime as _dt
+        db = _pdb()
+        try:
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS demo_requests "
+                "(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, company TEXT, "
+                "email TEXT, team_size TEXT, created_at TEXT)")
+            db.commit()
+        except Exception:
+            pass
+        db.execute(
+            "INSERT INTO demo_requests (name,company,email,team_size,created_at) VALUES (?,?,?,?,?)",
+            [name, company, email, size, _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S")])
+        db.commit()
+        db.close()
+    except Exception:
+        pass
+    # Email notification to admin (best-effort)
+    try:
+        from config import Config as _Cfg
+        if _Cfg.SMTP_HOST:
+            from app.mailer import send_email as _send
+            _send(
+                _Cfg.SMTP_FROM or "noreply@countdepot.com",
+                "New demo request from CountDepot",
+                f"<p><b>Name:</b> {name}<br><b>Company:</b> {company}<br>"
+                f"<b>Email:</b> {email}<br><b>Team size:</b> {size}</p>",
+                f"New demo request: {name} ({company}) — {email}")
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
+
 @bp.route("/status")
 def status_page():
     """Public uptime/status page — no auth required."""
