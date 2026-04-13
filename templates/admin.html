@@ -204,6 +204,41 @@
   </div>
 </div>
 
+<!-- SCHEDULED REPORTS -->
+<div class="card" style="margin-bottom:20px">
+  <div style="margin-bottom:16px">
+    <div style="font-weight:600;font-size:15px">Scheduled Report Emails</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:1px">Automatically email reports on a daily, weekly, or monthly schedule</div>
+  </div>
+  <div id="sched-rep-list" style="margin-bottom:14px">
+    <div style="font-size:13px;color:#94a3b8">Loading…</div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+    <div class="field" style="margin:0;flex:1;min-width:140px">
+      <label class="label">Report</label>
+      <select class="select" id="sr-type"></select>
+    </div>
+    <div class="field" style="margin:0;min-width:120px">
+      <label class="label">Schedule</label>
+      <select class="select" id="sr-schedule">
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly (Mon)</option>
+        <option value="monthly">Monthly (1st)</option>
+      </select>
+    </div>
+    <div class="field" style="margin:0;flex:1;min-width:180px">
+      <label class="label">Send to Email</label>
+      <input class="input" id="sr-email" type="email" placeholder="ops@company.com">
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="addSchedReport()" style="margin-bottom:14px">+ Add</button>
+  </div>
+  <div style="font-size:12px;color:#94a3b8;margin-top:8px;line-height:1.6">
+    Run via cron: <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-size:11px">curl -X POST https://yourworkspace/api/scheduled-reports/run</code>
+    &nbsp;·&nbsp; <button class="btn btn-secondary btn-sm" onclick="runSchedReports()" style="font-size:11px">Run Now</button>
+    <span id="sr-run-msg" style="display:none;font-size:12px;margin-left:8px"></span>
+  </div>
+</div>
+
 <!-- SECTOR / WORKSPACE MODE -->
 <div class="card" style="margin-bottom:20px">
   <div style="margin-bottom:16px">
@@ -584,6 +619,53 @@ async function runOvrReminders(){
   m.style.display='inline';setTimeout(()=>m.style.display='none',6000);
 }
 loadOvrSettings();
+
+// ── Scheduled Reports ──
+const SCHED_LABELS={low_stock:'Low Stock Alert',overdue:'Overdue Items',inventory:'Inventory Summary',warranties:'Warranty Expiry (30d)',depreciation:'Depreciation Summary'};
+async function loadSchedReports(){
+  const data=await api('/api/scheduled-reports').catch(()=>({ok:false}));
+  const el=document.getElementById('sched-rep-list');
+  const sel=document.getElementById('sr-type');
+  if(data.report_types){sel.innerHTML=Object.entries(data.report_types).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');}
+  if(!data.ok||!data.reports){el.innerHTML='<div style="color:#b91c1c;font-size:13px">Error</div>';return;}
+  if(!data.reports.length){el.innerHTML='<div style="font-size:13px;color:#94a3b8">No scheduled reports yet.</div>';return;}
+  el.innerHTML=data.reports.map(r=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f4f1;font-size:13px">
+    <div style="flex:1"><strong>${SCHED_LABELS[r.report_type]||r.report_type}</strong> <span style="color:#94a3b8;font-size:11px">· ${r.schedule}</span></div>
+    <div style="color:#64748b;font-size:12px">${r.email}</div>
+    <span style="font-size:11px;color:${r.enabled?'#15803d':'#94a3b8'}">${r.enabled?'Active':'Paused'}</span>
+    <button class="btn btn-secondary btn-sm" style="font-size:11px" onclick="toggleSchedReport(${r.id},this)">${r.enabled?'Pause':'Enable'}</button>
+    <button class="btn btn-secondary btn-sm" style="font-size:11px;color:#b91c1c" onclick="deleteSchedReport(${r.id})">✕</button>
+  </div>`).join('');
+}
+async function addSchedReport(){
+  const type=document.getElementById('sr-type').value;
+  const schedule=document.getElementById('sr-schedule').value;
+  const email=document.getElementById('sr-email').value.trim();
+  if(!email){toast('Email required','warn');return;}
+  const res=await api('/api/scheduled-reports',{report_type:type,schedule,email});
+  if(res.ok){toast('Report scheduled ✓','ok');document.getElementById('sr-email').value='';loadSchedReports();}
+  else toast(res.msg||'Error','err');
+}
+async function toggleSchedReport(id,btn){
+  const res=await api('/api/scheduled-reports/'+id+'/toggle',{});
+  if(res.ok){loadSchedReports();}else toast(res.msg||'Error','err');
+}
+async function deleteSchedReport(id){
+  if(!confirm('Remove this scheduled report?'))return;
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  const res=await fetch('/api/scheduled-reports/'+id,{method:'DELETE',headers:{'X-CSRF-Token':csrfToken}}).then(r=>r.json());
+  if(res.ok){toast('Removed','warn');loadSchedReports();}else toast(res.msg||'Error','err');
+}
+async function runSchedReports(){
+  const m=document.getElementById('sr-run-msg');
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  const res=await fetch('/api/scheduled-reports/run',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken}}).then(r=>r.json());
+  m.textContent=res.msg||(res.ok?'Done':'Error');
+  m.style.color=res.ok?'#15803d':'#b91c1c';
+  m.style.display='inline';setTimeout(()=>m.style.display='none',5000);
+  if(res.ok)loadSchedReports();
+}
+loadSchedReports();
 
 // ── 2FA ──
 let _2faEnabled=false;

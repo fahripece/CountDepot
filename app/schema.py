@@ -420,6 +420,16 @@ def _init_db_conn(db):
             sent_to         TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_overdue_rem_cl ON overdue_reminders(checkout_log_id, reminder_num);
+        CREATE TABLE IF NOT EXISTS scheduled_reports (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_type TEXT NOT NULL,
+            schedule    TEXT NOT NULL DEFAULT 'daily',
+            email       TEXT NOT NULL,
+            enabled     INTEGER NOT NULL DEFAULT 1,
+            last_sent   TEXT,
+            created_by  TEXT,
+            created_at  TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS user_locations (
             user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,

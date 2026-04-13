@@ -2666,6 +2666,237 @@ def api_run_overdue_reminders():
                     "msg": f"{sent_count} reminder(s) sent" if sent_count else "No new reminders needed"})
 
 
+# ── Scheduled Reports ────────────────────────────────────────────────────────
+
+REPORT_TYPES = {
+    "low_stock":        "Low Stock Alert",
+    "overdue":          "Overdue Items",
+    "inventory":        "Inventory Summary",
+    "warranties":       "Warranty Expiry (next 30d)",
+    "depreciation":     "Depreciation Summary",
+}
+
+@bp.route("/api/scheduled-reports")
+@login_required
+@admin_required
+def api_scheduled_reports_list():
+    rows = query("SELECT * FROM scheduled_reports ORDER BY id DESC")
+    return jsonify({"ok": True, "reports": [dict(r) for r in rows],
+                    "report_types": REPORT_TYPES})
+
+
+@bp.route("/api/scheduled-reports", methods=["POST"])
+@login_required
+@admin_required
+def api_scheduled_reports_create():
+    d = request.json or {}
+    rtype = d.get("report_type", "").strip()
+    sched = d.get("schedule", "daily").strip()
+    email = d.get("email", "").strip()
+    if rtype not in REPORT_TYPES:
+        return jsonify({"ok": False, "msg": "Invalid report type"})
+    if sched not in ("daily", "weekly", "monthly"):
+        return jsonify({"ok": False, "msg": "Schedule must be daily, weekly, or monthly"})
+    if not email:
+        return jsonify({"ok": False, "msg": "Email is required"})
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    iid = execute("""INSERT INTO scheduled_reports
+                     (report_type, schedule, email, enabled, created_by, created_at)
+                     VALUES (?,?,?,1,?,?)""",
+                  [rtype, sched, email, session.get("username"), now])
+    log_action("SCHEDULED_REPORT_CREATED", detail=f"{rtype} {sched} → {email}")
+    return jsonify({"ok": True, "id": iid})
+
+
+@bp.route("/api/scheduled-reports/<int:rid>", methods=["DELETE"])
+@login_required
+@admin_required
+def api_scheduled_reports_delete(rid):
+    row = query("SELECT * FROM scheduled_reports WHERE id=?", [rid], one=True)
+    if not row:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    execute("DELETE FROM scheduled_reports WHERE id=?", [rid])
+    log_action("SCHEDULED_REPORT_DELETED", detail=f"#{rid} {row['report_type']}")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/scheduled-reports/<int:rid>/toggle", methods=["POST"])
+@login_required
+@admin_required
+def api_scheduled_reports_toggle(rid):
+    row = query("SELECT enabled FROM scheduled_reports WHERE id=?", [rid], one=True)
+    if not row:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    new_val = 0 if row["enabled"] else 1
+    execute("UPDATE scheduled_reports SET enabled=? WHERE id=?", [new_val, rid])
+    return jsonify({"ok": True, "enabled": new_val})
+
+
+@bp.route("/api/scheduled-reports/run", methods=["POST"])
+@login_required
+@admin_required
+def api_run_scheduled_reports():
+    """Run all due scheduled reports. Safe to call from cron."""
+    from app.mailer import send_email
+    from config import Config as _Cfg
+    from datetime import date
+    if not _Cfg.SMTP_HOST:
+        return jsonify({"ok": False, "msg": "SMTP not configured"})
+    today = date.today()
+    day_of_week = today.weekday()  # 0=Monday
+    day_of_month = today.day
+    rows = query("SELECT * FROM scheduled_reports WHERE enabled=1")
+    sent = 0
+    for r in rows:
+        last = r["last_sent"]
+        sched = r["schedule"]
+        if last:
+            last_d = date.fromisoformat(last[:10])
+            if sched == "daily" and (today - last_d).days < 1:
+                continue
+            elif sched == "weekly" and (today - last_d).days < 7:
+                continue
+            elif sched == "monthly" and (today - last_d).days < 28:
+                continue
+        # Weekly: only send on Monday; Monthly: only on 1st
+        if sched == "weekly" and day_of_week != 0:
+            continue
+        if sched == "monthly" and day_of_month != 1:
+            continue
+        ok = _send_scheduled_report(r["report_type"], r["email"])
+        if ok:
+            execute("UPDATE scheduled_reports SET last_sent=? WHERE id=?",
+                    [today.isoformat(), r["id"]])
+            sent += 1
+    return jsonify({"ok": True, "sent": sent, "msg": f"{sent} report(s) sent"})
+
+
+def _send_scheduled_report(report_type: str, to: str) -> bool:
+    """Build and send one scheduled report email."""
+    from app.mailer import send_email
+    from datetime import date, timedelta
+    today = date.today().isoformat()
+    label = REPORT_TYPES.get(report_type, report_type)
+
+    if report_type == "low_stock":
+        from app.helpers import get_low_stock_alerts
+        alerts = get_low_stock_alerts()
+        if not alerts:
+            return False  # nothing to report
+        rows_html = "".join(
+            f'<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e3de">{a["name"]}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de;color:#b91c1c">{a["available_count"]}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de">{a["low_stock_threshold"]}</td></tr>'
+            for a in alerts
+        )
+        body_html = f"""<h2 style="font-size:16px;margin-bottom:12px">Low Stock Alert — {len(alerts)} product(s)</h2>
+        <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e3de;border-radius:8px;overflow:hidden">
+          <thead><tr style="background:#f8f7f4">
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Product</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Available</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Minimum</th>
+          </tr></thead><tbody>{rows_html}</tbody></table>"""
+
+    elif report_type == "overdue":
+        overdues = query("""SELECT cl.item_id, i.name, i.serial, cl.checked_out_by,
+                               cl.expected_return_date, cl.checkout_date
+                            FROM checkout_log cl JOIN items i ON i.id=cl.item_id
+                            WHERE cl.checkin_date IS NULL AND cl.expected_return_date IS NOT NULL
+                              AND cl.expected_return_date < ? ORDER BY cl.expected_return_date""", [today])
+        if not overdues:
+            return False
+        rows_html = "".join(
+            f'<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e3de">{r["name"]}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de">{r["checked_out_by"] or "—"}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de;color:#b91c1c">{(r["expected_return_date"] or "")[:10]}</td></tr>'
+            for r in overdues
+        )
+        body_html = f"""<h2 style="font-size:16px;margin-bottom:12px">Overdue Items — {len(overdues)} item(s)</h2>
+        <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e3de;border-radius:8px;overflow:hidden">
+          <thead><tr style="background:#f8f7f4">
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Item</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Checked Out By</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Due Date</th>
+          </tr></thead><tbody>{rows_html}</tbody></table>"""
+
+    elif report_type == "inventory":
+        total  = query("SELECT COUNT(*) FROM items WHERE active=1 AND COALESCE(retired,0)=0 AND sold=0", one=True)[0]
+        out    = query("SELECT COUNT(*) FROM items WHERE active=1 AND checked_out=1", one=True)[0]
+        val_r  = query("SELECT COALESCE(SUM(COALESCE(cost_price,0)),0) FROM items WHERE active=1 AND sold=0", one=True)
+        val    = round(val_r[0], 2) if val_r else 0
+        body_html = f"""<h2 style="font-size:16px;margin-bottom:12px">Inventory Summary</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div style="background:#f8f7f4;border-radius:8px;padding:14px 18px"><div style="font-size:24px;font-weight:700">{total}</div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-top:4px">Total Items</div></div>
+          <div style="background:#fef2f2;border-radius:8px;padding:14px 18px"><div style="font-size:24px;font-weight:700;color:#b91c1c">{out}</div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-top:4px">Checked Out</div></div>
+          <div style="background:#f0fdf4;border-radius:8px;padding:14px 18px"><div style="font-size:24px;font-weight:700;color:#15803d">${val:,.2f}</div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-top:4px">Stock Value</div></div>
+        </div>"""
+
+    elif report_type == "warranties":
+        cutoff = (date.today() + __import__('datetime').timedelta(days=30)).isoformat()
+        exp = query("""SELECT i.name, i.serial, i.warranty_expiry, i.contract_expiry
+                       FROM items i WHERE i.active=1 AND i.sold=0
+                         AND ((i.warranty_expiry IS NOT NULL AND i.warranty_expiry<=?)
+                           OR (i.contract_expiry IS NOT NULL AND i.contract_expiry<=?))
+                       ORDER BY COALESCE(i.warranty_expiry,i.contract_expiry)""", [cutoff, cutoff])
+        if not exp:
+            return False
+        rows_html = "".join(
+            f'<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e3de">{r["name"]}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de;color:#b45309">{(r["warranty_expiry"] or "")[:10] or "—"}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de;color:#b45309">{(r["contract_expiry"] or "")[:10] or "—"}</td></tr>'
+            for r in exp
+        )
+        body_html = f"""<h2 style="font-size:16px;margin-bottom:12px">Warranties Expiring in 30 Days — {len(exp)} item(s)</h2>
+        <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e3de;border-radius:8px;overflow:hidden">
+          <thead><tr style="background:#f8f7f4">
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Item</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Warranty Expiry</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Contract Expiry</th>
+          </tr></thead><tbody>{rows_html}</tbody></table>"""
+
+    elif report_type == "depreciation":
+        from datetime import date as _date
+        items = query("""SELECT name, cost_price, depreciation_rate, purchase_date
+                         FROM items WHERE active=1 AND sold=0 AND COALESCE(retired,0)=0
+                           AND depreciation_rate IS NOT NULL AND depreciation_rate>0 ORDER BY name""")
+        if not items:
+            return False
+        today_d = _date.today()
+        total_cost, total_cur = 0.0, 0.0
+        rows_html = ""
+        for r in items:
+            cost = r["cost_price"] or 0
+            rate = r["depreciation_rate"] or 0
+            yrs = 0.0
+            if r["purchase_date"]:
+                try: yrs = (_date.today() - _date.fromisoformat(r["purchase_date"][:10])).days / 365.25
+                except: pass
+            cur = max(0.0, cost * (1 - (rate/100) * yrs))
+            total_cost += cost; total_cur += cur
+            rows_html += (f'<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e3de">{r["name"]}</td>'
+                          f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de">${cost:,.2f}</td>'
+                          f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de;color:#1d4ed8">${cur:,.2f}</td></tr>')
+        body_html = f"""<h2 style="font-size:16px;margin-bottom:12px">Depreciation Summary</h2>
+        <p style="font-size:13px;color:#64748b;margin-bottom:12px">Total original cost: <strong>${total_cost:,.2f}</strong> → Current book value: <strong style="color:#1d4ed8">${total_cur:,.2f}</strong></p>
+        <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e3de;border-radius:8px;overflow:hidden">
+          <thead><tr style="background:#f8f7f4">
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Item</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Original Cost</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Current Value</th>
+          </tr></thead><tbody>{rows_html}</tbody></table>"""
+    else:
+        return False
+
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Scheduled Report · {today}</div>
+  <h1 style="font-size:20px;font-weight:700;margin-bottom:20px">{label}</h1>
+  {body_html}
+  <p style="font-size:11px;color:#94a3b8;margin-top:24px">Sent automatically by CountDepot. Manage scheduled reports in Settings → Admin.</p>
+</div>"""
+    return send_email(to, f"[CountDepot] {label} — {today}", html)
+
+
 # ── API Keys ──────────────────────────────────────────────────────────────────
 
 @bp.route("/api/keys")
