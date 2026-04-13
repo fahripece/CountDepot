@@ -224,8 +224,8 @@ def verify_signup(token):
     conn.commit()
     conn.close()
 
-    # Set 7-day trial
-    trial_ends = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    # Set 30-day trial
+    trial_ends = (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     pdb = get_platform_db()
     pdb.execute("UPDATE tenants SET subscription_status='trial', trial_ends_at=? WHERE slug=?",
                 [trial_ends, slug])

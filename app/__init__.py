@@ -122,6 +122,21 @@ def create_app():
                 g.brand_color = (brand_color_row["value"] if brand_color_row else None) or "#0f172a"
                 banner_row    = _bq("SELECT value FROM settings WHERE key='banner_message'", one=True)
                 g.banner_message = banner_row["value"] if banner_row else None
+                # Trial countdown banner (overrides manual banner when trial is expiring soon)
+                if not g.banner_message:
+                    sub_st = g.tenant.get("subscription_status", "") if g.tenant else ""
+                    trial_e = g.tenant.get("trial_ends_at", "") if g.tenant else ""
+                    if sub_st == "trial" and trial_e:
+                        try:
+                            from datetime import datetime as _dtb, timedelta as _tdb
+                            days_left = (_dtb.fromisoformat(trial_e[:19]) - _dtb.utcnow()).days
+                            if days_left <= 7:
+                                g.banner_message = (
+                                    f"Your free trial expires in {max(0, days_left)} day{'s' if days_left != 1 else ''}. "
+                                    "Upgrade at /billing to keep access."
+                                )
+                        except Exception:
+                            pass
             except Exception:
                 g.brand_name     = g.tenant.get("name") if hasattr(g, "tenant") and g.tenant else None
                 g.brand_color    = "#0f172a"

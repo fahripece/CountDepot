@@ -457,6 +457,45 @@ def sync_item_task(item_id, item_name, missing_fields):
                     [now, existing["id"]])
 
 
+# ── Plan limits ───────────────────────────────────────────────────────────────
+
+PLAN_LIMITS = {
+    "free":     {"items": 100, "users": 1,  "label": "Free"},
+    "starter":  {"items": 500, "users": 3,  "label": "Starter"},
+    "standard": {"items": None, "users": None, "label": "Standard"},
+    "trial":    {"items": None, "users": None, "label": "Trial"},
+    "enterprise": {"items": None, "users": None, "label": "Enterprise"},
+}
+
+
+def get_plan_limits(plan):
+    """Return limit dict for a plan name. Unknown plans get standard (unlimited)."""
+    return PLAN_LIMITS.get(plan, PLAN_LIMITS["standard"])
+
+
+def check_plan_item_limit(plan):
+    """Return (allowed, current_count, limit) for item creation.
+    allowed=True means adding one more item is within the plan limit."""
+    limits = get_plan_limits(plan)
+    max_items = limits["items"]
+    if max_items is None:
+        return True, None, None
+    current = query("SELECT COUNT(*) AS c FROM items WHERE COALESCE(active,1)=1 AND COALESCE(sold,0)=0", one=True)
+    count = current["c"] if current else 0
+    return count < max_items, count, max_items
+
+
+def check_plan_user_limit(plan):
+    """Return (allowed, current_count, limit) for user creation."""
+    limits = get_plan_limits(plan)
+    max_users = limits["users"]
+    if max_users is None:
+        return True, None, None
+    current = query("SELECT COUNT(*) AS c FROM users WHERE COALESCE(active,1)=1", one=True)
+    count = current["c"] if current else 0
+    return count < max_users, count, max_users
+
+
 # ── Notifications ─────────────────────────────────────────────────────────────
 
 def push_notification(event_type, title, body=None, link=None, user_id=None):
