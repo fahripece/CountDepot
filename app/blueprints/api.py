@@ -344,6 +344,194 @@ def api_report_warranties():
     return jsonify({"ok": True, "horizon": horizon, "today": today, "items": result})
 
 
+@bp.route("/api/report/<report_type>/pdf")
+@login_required
+@perm_required("view_inventory")
+def api_report_pdf(report_type):
+    """Generate a PDF for any supported report type and return as download."""
+    from flask import send_file
+    import io as _io
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                        Paragraph, Spacer)
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_RIGHT, TA_CENTER
+    except ImportError:
+        return jsonify({"ok": False, "msg": "reportlab not installed"}), 500
+
+    from datetime import date, timedelta
+    from flask import g
+
+    today = date.today().isoformat()
+    tenant_name = (g.tenant.get("name", "") if hasattr(g, "tenant") and g.tenant else "CountDepot")
+
+    buf = _io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter,
+                            leftMargin=0.75*inch, rightMargin=0.75*inch,
+                            topMargin=0.75*inch, bottomMargin=0.75*inch)
+
+    navy   = colors.HexColor("#0f172a")
+    blue   = colors.HexColor("#1d4ed8")
+    grey   = colors.HexColor("#64748b")
+    lgrey  = colors.HexColor("#f8f7f4")
+    red    = colors.HexColor("#b91c1c")
+    amber  = colors.HexColor("#b45309")
+    border = colors.HexColor("#e5e3de")
+
+    h1  = ParagraphStyle("h1",  fontSize=18, textColor=navy,  fontName="Helvetica-Bold",  spaceAfter=4)
+    sub = ParagraphStyle("sub", fontSize=10, textColor=grey,  fontName="Helvetica",        spaceAfter=0)
+    th  = ParagraphStyle("th",  fontSize=8,  textColor=grey,  fontName="Helvetica-Bold")
+    td  = ParagraphStyle("td",  fontSize=9,  textColor=navy,  fontName="Helvetica")
+    tdr = ParagraphStyle("tdr", fontSize=9,  textColor=navy,  fontName="Helvetica",        alignment=TA_RIGHT)
+
+    page_w = letter[0] - 1.5*inch
+    story  = []
+
+    def _header(title):
+        story.append(Paragraph(tenant_name, sub))
+        story.append(Paragraph(title, h1))
+        story.append(Paragraph(f"Generated {today}", sub))
+        story.append(Spacer(1, 14))
+
+    REPORT_TABLE_STYLE = TableStyle([
+        ("BACKGROUND",  (0,0), (-1,0),  lgrey),
+        ("TEXTCOLOR",   (0,0), (-1,0),  grey),
+        ("FONTNAME",    (0,0), (-1,0),  "Helvetica-Bold"),
+        ("FONTSIZE",    (0,0), (-1,0),  8),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#fafaf9")]),
+        ("GRID",        (0,0), (-1,-1), 0.5, border),
+        ("LEFTPADDING", (0,0), (-1,-1), 8),
+        ("RIGHTPADDING",(0,0), (-1,-1), 8),
+        ("TOPPADDING",  (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING",(0,0), (-1,-1), 6),
+        ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
+    ])
+
+    if report_type == "inventory":
+        _header("Inventory Report")
+        items = query("""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
+                               i.shelf, i.condition, i.cost_price, i.checked_out,
+                               i.sold, c.name as category, p.name as product_name
+                        FROM items i
+                        LEFT JOIN categories c ON c.id=i.category_id
+                        LEFT JOIN products p ON p.id=i.product_id
+                        WHERE i.active=1 AND COALESCE(i.retired,0)=0
+                        ORDER BY i.name LIMIT 1000""")
+        rows = [[Paragraph(h, th) for h in ["Item","Category","Serial/SKU","Shelf","Condition","Status","Cost"]]]
+        for i in items:
+            ident = i["serial"] or i["sku"] or i["internal_sku"] or f"ID-{i['id']}"
+            status = "Sold" if i["sold"] else ("Out" if i["checked_out"] else "In")
+            cost   = f"${i['cost_price']:,.2f}" if i["cost_price"] else "—"
+            rows.append([Paragraph(i["name"][:40], td), Paragraph(i["category"] or "—", td),
+                         Paragraph(ident, td), Paragraph(i["shelf"] or "—", td),
+                         Paragraph(i["condition"] or "—", td), Paragraph(status, td),
+                         Paragraph(cost, tdr)])
+        col_w = [page_w*0.28, page_w*0.14, page_w*0.14, page_w*0.09, page_w*0.11, page_w*0.09, page_w*0.15]
+        tbl = Table(rows, colWidths=col_w, repeatRows=1)
+        tbl.setStyle(REPORT_TABLE_STYLE)
+        story.append(tbl)
+        filename = "inventory_report.pdf"
+
+    elif report_type == "financial":
+        _header("Financial Report")
+        items = query("""SELECT i.name, i.cost_price, i.sale_price, i.sold, i.sold_price,
+                               i.sold_date, c.name as category
+                        FROM items i LEFT JOIN categories c ON c.id=i.category_id
+                        WHERE i.active=1 ORDER BY i.name LIMIT 1000""")
+        rows = [[Paragraph(h, th) for h in ["Item","Category","Cost","Sale Price","Status","Sold For","Sold Date"]]]
+        for i in items:
+            status = "Sold" if i["sold"] else "In Stock"
+            rows.append([Paragraph(i["name"][:40], td), Paragraph(i["category"] or "—", td),
+                         Paragraph(f"${i['cost_price']:,.2f}" if i["cost_price"] else "—", tdr),
+                         Paragraph(f"${i['sale_price']:,.2f}" if i["sale_price"] else "—", tdr),
+                         Paragraph(status, td),
+                         Paragraph(f"${i['sold_price']:,.2f}" if i["sold_price"] else "—", tdr),
+                         Paragraph((i["sold_date"] or "")[:10] or "—", td)])
+        col_w = [page_w*0.28, page_w*0.14, page_w*0.11, page_w*0.11, page_w*0.1, page_w*0.11, page_w*0.15]
+        tbl = Table(rows, colWidths=col_w, repeatRows=1)
+        tbl.setStyle(REPORT_TABLE_STYLE)
+        story.append(tbl)
+        filename = "financial_report.pdf"
+
+    elif report_type == "checkout-history":
+        _header("Checkout History Report")
+        rows_q = query("""SELECT cl.checkout_date, cl.checkin_date, cl.checked_out_by,
+                                 cl.expected_return_date, i.name as item_name, i.serial
+                          FROM checkout_log cl JOIN items i ON i.id=cl.item_id
+                          ORDER BY cl.checkout_date DESC LIMIT 500""")
+        rows = [[Paragraph(h, th) for h in ["Item","Serial","Checked Out By","Out Date","Due","In Date"]]]
+        for r in rows_q:
+            rows.append([Paragraph(r["item_name"][:35], td), Paragraph(r["serial"] or "—", td),
+                         Paragraph(r["checked_out_by"] or "—", td),
+                         Paragraph((r["checkout_date"] or "")[:10], td),
+                         Paragraph((r["expected_return_date"] or "")[:10] or "—", td),
+                         Paragraph((r["checkin_date"] or "")[:10] or "Open", td)])
+        col_w = [page_w*0.28, page_w*0.14, page_w*0.16, page_w*0.14, page_w*0.14, page_w*0.14]
+        tbl = Table(rows, colWidths=col_w, repeatRows=1)
+        tbl.setStyle(REPORT_TABLE_STYLE)
+        story.append(tbl)
+        filename = "checkout_history.pdf"
+
+    elif report_type == "warranties":
+        _header("Warranty & Contract Report")
+        cutoff = (date.today() + timedelta(days=90)).isoformat()
+        rows_q = query("""SELECT i.name, i.serial, i.shelf, i.warranty_expiry,
+                                 i.contract_expiry, i.warranty_notes
+                          FROM items i WHERE i.active=1 AND i.sold=0
+                            AND ((i.warranty_expiry IS NOT NULL AND i.warranty_expiry<=?)
+                              OR (i.contract_expiry IS NOT NULL AND i.contract_expiry<=?))
+                          ORDER BY COALESCE(i.warranty_expiry,i.contract_expiry)""", [cutoff, cutoff])
+        rows = [[Paragraph(h, th) for h in ["Item","Serial","Location","Warranty Expiry","Contract Expiry","Notes"]]]
+        for r in rows_q:
+            rows.append([Paragraph(r["name"][:35], td), Paragraph(r["serial"] or "—", td),
+                         Paragraph(r["shelf"] or "—", td),
+                         Paragraph((r["warranty_expiry"] or "—")[:10], td),
+                         Paragraph((r["contract_expiry"] or "—")[:10], td),
+                         Paragraph(r["warranty_notes"] or "—", td)])
+        col_w = [page_w*0.26, page_w*0.14, page_w*0.12, page_w*0.14, page_w*0.14, page_w*0.20]
+        tbl = Table(rows, colWidths=col_w, repeatRows=1)
+        tbl.setStyle(REPORT_TABLE_STYLE)
+        story.append(tbl)
+        filename = "warranties_report.pdf"
+
+    elif report_type == "depreciation":
+        _header("Depreciation Report")
+        rows_q = query("""SELECT i.name, i.serial, i.cost_price, i.depreciation_rate,
+                                 i.purchase_date, c.name as category
+                          FROM items i LEFT JOIN categories c ON c.id=i.category_id
+                          WHERE i.active=1 AND i.sold=0 AND COALESCE(i.retired,0)=0
+                            AND i.depreciation_rate IS NOT NULL AND i.depreciation_rate>0
+                          ORDER BY i.name""")
+        rows = [[Paragraph(h, th) for h in ["Item","Category","Original Cost","Rate","Age","Current Value"]]]
+        for r in rows_q:
+            cost = r["cost_price"] or 0
+            rate = r["depreciation_rate"] or 0
+            yrs  = 0.0
+            if r["purchase_date"]:
+                try: yrs = (date.today() - date.fromisoformat(r["purchase_date"][:10])).days / 365.25
+                except: pass
+            cur = max(0.0, cost * (1 - (rate/100)*yrs))
+            rows.append([Paragraph(r["name"][:35], td), Paragraph(r["category"] or "—", td),
+                         Paragraph(f"${cost:,.2f}", tdr), Paragraph(f"{rate}%/yr", tdr),
+                         Paragraph(f"{yrs:.1f}yr", tdr), Paragraph(f"${cur:,.2f}", tdr)])
+        col_w = [page_w*0.30, page_w*0.16, page_w*0.13, page_w*0.10, page_w*0.10, page_w*0.21]
+        tbl = Table(rows, colWidths=col_w, repeatRows=1)
+        tbl.setStyle(REPORT_TABLE_STYLE)
+        story.append(tbl)
+        filename = "depreciation_report.pdf"
+
+    else:
+        return jsonify({"ok": False, "msg": f"Unknown report type: {report_type}"}), 404
+
+    doc.build(story)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/pdf",
+                     as_attachment=True, download_name=filename)
+
+
 @bp.route("/api/report/activity")
 @login_required
 @perm_required("view_audit")
