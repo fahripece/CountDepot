@@ -366,7 +366,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
     {% endif %}
 
     <!-- ── REPORTS (collapsible) ──────────────────── -->
-    <div class="sb-section sb-accordion {% if in_reports %}open{% endif %}" style="margin-top:10px" onclick="toggleAccordion('reports')" id="reports-hdr">
+    <div class="sb-section sb-accordion {% if in_reports %}open{% endif %}" style="margin-top:10px" onclick="toggleAccordion(this,'reports')" id="reports-hdr">
       <span>Reports</span>
       <svg id="reports-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px;margin-left:auto;transition:transform .2s;{% if in_reports %}transform:rotate(180deg){% endif %}"><polyline points="6 9 12 15 18 9"/></svg>
     </div>
@@ -417,7 +417,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
 
     <!-- ── SETTINGS (collapsible, admin) ─────────── -->
     {% if session.get('role') == 'admin' %}
-    <div class="sb-section sb-accordion {% if in_settings %}open{% endif %}" style="margin-top:10px" onclick="toggleAccordion('settings')" id="settings-hdr">
+    <div class="sb-section sb-accordion {% if in_settings %}open{% endif %}" style="margin-top:10px" onclick="toggleAccordion(this,'settings')" id="settings-hdr">
       <span>Settings</span>
       <svg id="settings-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px;margin-left:auto;transition:transform .2s;{% if in_settings %}transform:rotate(180deg){% endif %}"><polyline points="6 9 12 15 18 9"/></svg>
     </div>
@@ -571,28 +571,45 @@ function toggleDark(){const on=document.body.classList.toggle('dark');localStora
 (function(){const on=localStorage.getItem('darkMode')==='1';const lbl=document.getElementById('darkLabel');if(lbl)lbl.textContent=on?'Light mode':'Dark mode';})();
 
 // ── Accordion nav ──
-function toggleAccordion(id){
-  const nav=document.getElementById(id+'-nav');
-  const hdr=document.getElementById(id+'-hdr');
-  const chevron=document.getElementById(id+'-chevron');
+// hdr = the clicked element (passed via onclick="toggleAccordion(this,'id')")
+// Uses DOM traversal so it works even when innerHTML is cloned (mobile sidebar)
+function toggleAccordion(hdr,id){
+  // Find the next sibling that is the accordion body
+  let nav=hdr.nextElementSibling;
+  while(nav&&!nav.classList.contains('sb-accordion-body'))nav=nav.nextElementSibling;
   if(!nav)return;
+  const chevron=hdr.querySelector('svg');
   const nowCollapsed=nav.classList.toggle('collapsed');
   if(chevron)chevron.style.transform=nowCollapsed?'':'rotate(180deg)';
-  if(hdr){if(nowCollapsed)hdr.classList.remove('open');else hdr.classList.add('open');}
-  localStorage.setItem('accordion_'+id,nowCollapsed?'0':'1');
+  if(nowCollapsed)hdr.classList.remove('open');else hdr.classList.add('open');
+  if(id)localStorage.setItem('accordion_'+id,nowCollapsed?'0':'1');
+  // Sync mobile sidebar mirror (mobile clones desktop HTML, so same IDs exist — fix its state too)
+  const mob=document.getElementById('mobSidebar');
+  if(mob&&id){
+    const mHdr=mob.querySelector('#'+id+'-hdr');
+    if(mHdr&&mHdr!==hdr){
+      let mNav=mHdr.nextElementSibling;
+      while(mNav&&!mNav.classList.contains('sb-accordion-body'))mNav=mNav.nextElementSibling;
+      const mChev=mHdr.querySelector('svg');
+      if(mNav){if(nowCollapsed){mNav.classList.add('collapsed');mHdr.classList.remove('open');if(mChev)mChev.style.transform='';}else{mNav.classList.remove('collapsed');mHdr.classList.add('open');if(mChev)mChev.style.transform='rotate(180deg)';}}
+    }
+  }
 }
+// Restore accordion open/close state from localStorage on page load
 (function(){
   ['reports','settings'].forEach(function(id){
     const saved=localStorage.getItem('accordion_'+id);
     if(saved===null)return;
     const hdr=document.getElementById(id+'-hdr');
-    if(hdr&&hdr.classList.contains('open'))return; // server forced open — don't override
-    const nav=document.getElementById(id+'-nav');
+    if(!hdr)return;
+    if(hdr.classList.contains('open'))return; // server already opened (active page in section)
+    let nav=hdr.nextElementSibling;
+    while(nav&&!nav.classList.contains('sb-accordion-body'))nav=nav.nextElementSibling;
     if(!nav)return;
-    const chevron=document.getElementById(id+'-chevron');
+    const chevron=hdr.querySelector('svg');
     const open=saved==='1';
-    if(open){nav.classList.remove('collapsed');if(chevron)chevron.style.transform='rotate(180deg)';}
-    else{nav.classList.add('collapsed');if(chevron)chevron.style.transform='';}
+    if(open){nav.classList.remove('collapsed');hdr.classList.add('open');if(chevron)chevron.style.transform='rotate(180deg)';}
+    else{nav.classList.add('collapsed');hdr.classList.remove('open');if(chevron)chevron.style.transform='';}
   });
 })();
 // ── Mobile sidebar ──
