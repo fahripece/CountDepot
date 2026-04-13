@@ -242,6 +242,63 @@ def api_report_inventory():
                     "totals": totals, "items": result})
 
 
+@bp.route("/api/report/depreciation")
+@login_required
+@perm_required("view_inventory")
+def api_report_depreciation():
+    """Return items with depreciation_rate set and their current book value."""
+    from datetime import date
+    today = date.today()
+    rows = query("""
+        SELECT i.id, i.name, i.serial, i.sku, i.internal_sku, i.shelf,
+               i.cost_price, i.purchase_date, i.depreciation_rate,
+               i.created_at, c.name as category, p.name as product_name
+        FROM items i
+        LEFT JOIN categories c ON c.id=i.category_id
+        LEFT JOIN products p ON p.id=i.product_id
+        WHERE i.active=1 AND COALESCE(i.retired,0)=0 AND i.sold=0
+          AND i.depreciation_rate IS NOT NULL AND i.depreciation_rate > 0
+        ORDER BY i.name
+    """)
+    result = []
+    total_cost = 0.0
+    total_current = 0.0
+    for r in rows:
+        d = dict(r)
+        cost = r["cost_price"]
+        rate = r["depreciation_rate"]
+        years = 0.0
+        if r["purchase_date"]:
+            try:
+                pd = date.fromisoformat(r["purchase_date"][:10])
+                years = (today - pd).days / 365.25
+            except Exception:
+                pass
+        if cost is not None:
+            current = max(0.0, cost * (1 - (rate / 100) * years))
+            d["current_value"] = round(current, 2)
+            d["total_depreciated"] = round(cost - current, 2)
+            d["years_held"] = round(years, 1)
+            total_cost += cost
+            total_current += current
+        else:
+            d["current_value"] = None
+            d["total_depreciated"] = None
+            d["years_held"] = round(years, 1)
+        result.append(d)
+    return jsonify({
+        "ok": True,
+        "today": today.isoformat(),
+        "items": result,
+        "totals": {
+            "count": len(result),
+            "total_cost": round(total_cost, 2),
+            "total_current": round(total_current, 2),
+            "total_depreciated": round(total_cost - total_current, 2),
+        }
+    })
+
+
 @bp.route("/api/report/warranties")
 @login_required
 @perm_required("view_inventory")

@@ -256,6 +256,13 @@ def report_warranties():
     return render_template("report_warranties.html")
 
 
+@bp.route("/report/depreciation")
+@login_required
+@perm_required("view_inventory")
+def report_depreciation():
+    return render_template("report_depreciation.html")
+
+
 # ── Procurement helpers ───────────────────────────────────────────────────────
 
 def _po_number():
