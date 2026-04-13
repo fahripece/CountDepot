@@ -307,6 +307,89 @@
   </p>
 </div>
 
+<!-- SSO / SAML -->
+<div class="card" style="margin-bottom:20px" id="ssoCard">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div style="font-weight:600;font-size:15px">Single Sign-On (SAML 2.0)</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:1px">Let users log in with your company's Identity Provider (Okta, Azure AD, Google Workspace, etc.)</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="sso-status-badge" style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:#f1f5f9;color:#64748b">Loading…</span>
+      <a id="sso-metadata-link" href="/sso/metadata" target="_blank" style="font-size:12px;color:#6366f1;display:none">View SP Metadata</a>
+    </div>
+  </div>
+
+  <div id="sso-saml-warn" style="display:none;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e;margin-bottom:14px;line-height:1.6">
+    <strong>Server Note:</strong> The <code>python3-saml</code> library is not installed. To enable SSO, install it on the server:<br>
+    <code style="background:#fde68a33;padding:2px 6px;border-radius:4px">apt-get install libxmlsec1-dev &amp;&amp; pip install python3-saml</code>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+    <div class="field" style="grid-column:1/-1">
+      <label class="label">IdP Entity ID (Issuer) *</label>
+      <input class="input" id="sso-idp-entity-id" placeholder="https://your-idp.example.com/saml/metadata">
+    </div>
+    <div class="field">
+      <label class="label">IdP SSO URL *</label>
+      <input class="input" id="sso-idp-sso-url" placeholder="https://your-idp.example.com/saml/sso">
+    </div>
+    <div class="field">
+      <label class="label">IdP SLO URL <span style="color:#94a3b8">(optional)</span></label>
+      <input class="input" id="sso-idp-slo-url" placeholder="https://your-idp.example.com/saml/slo">
+    </div>
+    <div class="field" style="grid-column:1/-1">
+      <label class="label">IdP X.509 Certificate *</label>
+      <textarea class="input" id="sso-idp-cert" rows="4" placeholder="Paste the Base64 certificate from your IdP. PEM headers are stripped automatically." style="font-family:monospace;font-size:11px"></textarea>
+    </div>
+  </div>
+
+  <div style="font-weight:600;font-size:12px;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Attribute Mapping</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px">
+    <div class="field"><label class="label">Email attribute</label><input class="input" id="sso-attr-email" placeholder="email"></div>
+    <div class="field"><label class="label">Username attribute</label><input class="input" id="sso-attr-username" placeholder="username"></div>
+    <div class="field"><label class="label">First name attribute</label><input class="input" id="sso-attr-firstname" placeholder="firstName"></div>
+    <div class="field"><label class="label">Last name attribute</label><input class="input" id="sso-attr-lastname" placeholder="lastName"></div>
+  </div>
+
+  <div style="font-weight:600;font-size:12px;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">JIT Provisioning</div>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="sso-jit-enabled" style="width:16px;height:16px">
+      Auto-create accounts for new users on first SSO login
+    </label>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:18px" id="sso-jit-options">
+    <div class="field">
+      <label class="label">Default role for new users</label>
+      <select class="select" id="sso-jit-role">
+        <option value="worker">Worker</option>
+        <option value="viewer">Viewer (read-only)</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="sso-enabled" style="width:16px;height:16px">
+      <span style="font-weight:600">Enable SSO for this workspace</span>
+    </label>
+    <button class="btn btn-primary btn-sm" onclick="saveSso()">Save SSO Settings</button>
+    <span id="sso-saved" style="font-size:12px;color:#15803d;display:none">✓ Saved</span>
+    <span id="sso-err" style="font-size:12px;color:#b91c1c;display:none"></span>
+  </div>
+
+  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-top:16px;font-size:12px;color:#475569;line-height:1.8">
+    <strong>Setup checklist:</strong><br>
+    1. Register CountDepot as a SAML SP with your IdP — use the <strong>SP Metadata URL</strong> above or fill in manually:<br>
+    &nbsp;&nbsp;&nbsp;• <strong>SP Entity ID / Audience:</strong> <code id="sso-sp-entity">https://your-subdomain.countdepot.com/sso/metadata</code><br>
+    &nbsp;&nbsp;&nbsp;• <strong>ACS URL:</strong> <code id="sso-sp-acs">https://your-subdomain.countdepot.com/sso/acs</code><br>
+    2. Paste the IdP settings above and save.<br>
+    3. Test by visiting <a href="/sso/login" target="_blank" style="color:#6366f1">/sso/login</a>.
+  </div>
+</div>
+
 <!-- CUSTOMER DATA EXPORT -->
 <div class="card" style="margin-bottom:20px">
   <div style="margin-bottom:12px">
@@ -1028,6 +1111,69 @@ async function saveSiteAccess(){
     closeModal('siteAccessModal');
   } else toast(res.msg||'Error','err');
 }
+
+// ── SSO ──────────────────────────────────────────────────────────────────────
+async function loadSso(){
+  // Show SP URLs using current host
+  const base=location.origin;
+  document.getElementById('sso-sp-entity').textContent=base+'/sso/metadata';
+  document.getElementById('sso-sp-acs').textContent=base+'/sso/acs';
+  document.getElementById('sso-metadata-link').href=base+'/sso/metadata';
+
+  // Check if python3-saml is available by fetching metadata
+  const metaOk=await fetch('/sso/metadata').then(r=>r.status!==503).catch(()=>false);
+  if(!metaOk)document.getElementById('sso-saml-warn').style.display='block';
+
+  const d=await fetch('/api/admin/sso').then(r=>r.json()).catch(()=>({ok:false}));
+  if(!d.ok)return;
+
+  document.getElementById('sso-enabled').checked=d.enabled;
+  document.getElementById('sso-idp-entity-id').value=d.idp_entity_id||'';
+  document.getElementById('sso-idp-sso-url').value=d.idp_sso_url||'';
+  document.getElementById('sso-idp-slo-url').value=d.idp_slo_url||'';
+  document.getElementById('sso-idp-cert').value=d.idp_cert||'';
+  document.getElementById('sso-attr-email').value=d.attr_email||'email';
+  document.getElementById('sso-attr-username').value=d.attr_username||'username';
+  document.getElementById('sso-attr-firstname').value=d.attr_firstname||'firstName';
+  document.getElementById('sso-attr-lastname').value=d.attr_lastname||'lastName';
+  document.getElementById('sso-jit-enabled').checked=d.jit_enabled;
+  document.getElementById('sso-jit-role').value=d.jit_default_role||'worker';
+
+  const badge=document.getElementById('sso-status-badge');
+  const configured=!!(d.idp_entity_id&&d.idp_sso_url&&d.idp_cert);
+  if(d.enabled&&configured){
+    badge.textContent='Active';badge.style.background='#dcfce7';badge.style.color='#15803d';
+    document.getElementById('sso-metadata-link').style.display='inline';
+  }else if(configured){
+    badge.textContent='Configured (disabled)';badge.style.background='#fef3c7';badge.style.color='#92400e';
+  }else{
+    badge.textContent='Not configured';badge.style.background='#f1f5f9';badge.style.color='#64748b';
+  }
+}
+
+async function saveSso(){
+  const saved=document.getElementById('sso-saved');
+  const errEl=document.getElementById('sso-err');
+  saved.style.display='none';errEl.style.display='none';
+  const payload={
+    enabled:document.getElementById('sso-enabled').checked,
+    idp_entity_id:document.getElementById('sso-idp-entity-id').value.trim(),
+    idp_sso_url:document.getElementById('sso-idp-sso-url').value.trim(),
+    idp_slo_url:document.getElementById('sso-idp-slo-url').value.trim(),
+    idp_cert:document.getElementById('sso-idp-cert').value.trim(),
+    attr_email:document.getElementById('sso-attr-email').value.trim()||'email',
+    attr_username:document.getElementById('sso-attr-username').value.trim()||'username',
+    attr_firstname:document.getElementById('sso-attr-firstname').value.trim()||'firstName',
+    attr_lastname:document.getElementById('sso-attr-lastname').value.trim()||'lastName',
+    jit_enabled:document.getElementById('sso-jit-enabled').checked,
+    jit_default_role:document.getElementById('sso-jit-role').value,
+  };
+  const r=await api('/api/admin/sso',payload);
+  if(r.ok){saved.style.display='inline';setTimeout(()=>saved.style.display='none',3000);loadSso();}
+  else{errEl.textContent=r.msg||'Save failed';errEl.style.display='inline';}
+}
+
+loadSso();
 </script>
 
 <!-- NEW API KEY MODAL -->

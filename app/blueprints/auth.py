@@ -492,6 +492,216 @@ def auto_login():
     return redirect(url_for("main.inventory"))
 
 
+@bp.route("/sso/metadata")
+def sso_metadata():
+    """Return SAML SP metadata XML — share this URL with your Identity Provider."""
+    try:
+        from onelogin.saml2.auth import OneLogin_Saml2_Auth
+        from onelogin.saml2.settings import OneLogin_Saml2_Settings
+    except ImportError:
+        return "SAML library not installed on server", 503
+
+    settings_dict, err = _build_saml_settings()
+    if err:
+        return err, 400
+
+    try:
+        saml_settings = OneLogin_Saml2_Settings(settings=settings_dict, sp_validation_only=True)
+        metadata = saml_settings.get_sp_metadata()
+        errors   = saml_settings.validate_metadata(metadata)
+        if errors:
+            return f"Metadata validation errors: {', '.join(errors)}", 400
+        return metadata, 200, {"Content-Type": "text/xml"}
+    except Exception as e:
+        return f"Could not generate metadata: {e}", 500
+
+
+@bp.route("/sso/login")
+def sso_login():
+    """Redirect the browser to the IdP for SAML login."""
+    if session.get("user_id") and check_session_expiry():
+        return redirect(url_for("main.inventory"))
+
+    try:
+        from onelogin.saml2.auth import OneLogin_Saml2_Auth
+    except ImportError:
+        return "SAML library not installed on this server. Contact your administrator.", 503
+
+    settings_dict, err = _build_saml_settings()
+    if err:
+        return render_template("login.html", error=f"SSO is not configured: {err}")
+
+    try:
+        req  = _prepare_saml_request(request)
+        auth = OneLogin_Saml2_Auth(req, old_settings=settings_dict)
+        return redirect(auth.login())
+    except Exception as e:
+        return render_template("login.html", error=f"SSO login failed: {e}")
+
+
+@bp.route("/sso/acs", methods=["POST"])
+def sso_acs():
+    """SAML Assertion Consumer Service — receives and validates IdP response."""
+    try:
+        from onelogin.saml2.auth import OneLogin_Saml2_Auth
+    except ImportError:
+        return "SAML library not installed", 503
+
+    settings_dict, err = _build_saml_settings()
+    if err:
+        return render_template("login.html", error=f"SSO not configured: {err}")
+
+    cfg = query("SELECT * FROM sso_config LIMIT 1", one=True)
+    ip  = request.remote_addr or "unknown"
+
+    try:
+        req  = _prepare_saml_request(request)
+        auth = OneLogin_Saml2_Auth(req, old_settings=settings_dict)
+        auth.process_response()
+        errors = auth.get_errors()
+        if errors:
+            log_auth_event("SSO_FAIL", username="(saml)", ip=ip,
+                           tenant=getattr(g, "tenant_slug", ""),
+                           detail="; ".join(errors))
+            return render_template("login.html",
+                                   error="SSO authentication failed. Please contact your administrator.")
+
+        if not auth.is_authenticated():
+            return render_template("login.html", error="SSO: Not authenticated.")
+
+        # Extract attributes
+        attrs      = auth.get_attributes()
+        name_id    = auth.get_nameid() or ""
+        attr_email = cfg["attr_email"] if cfg else "email"
+        attr_user  = cfg["attr_username"] if cfg else "username"
+        attr_fn    = cfg["attr_firstname"] if cfg else "firstName"
+        attr_ln    = cfg["attr_lastname"] if cfg else "lastName"
+
+        email    = _saml_attr(attrs, attr_email) or name_id
+        username = _saml_attr(attrs, attr_user) or email.split("@")[0]
+        fname    = _saml_attr(attrs, attr_fn) or ""
+        lname    = _saml_attr(attrs, attr_ln) or ""
+
+        if not email:
+            return render_template("login.html",
+                                   error="SSO: Could not retrieve email address from IdP.")
+
+        # Look up user by email
+        user = query("SELECT * FROM users WHERE LOWER(COALESCE(email,''))=?",
+                     [email.lower()], one=True)
+
+        # JIT provisioning — create user on first login if enabled
+        if not user and cfg and cfg["jit_enabled"]:
+            role        = cfg["jit_default_role"] or "worker"
+            perms_str   = cfg["jit_default_permissions"] or ""
+            display_name = (f"{fname} {lname}".strip() or username)[:50]
+            import secrets as _sec
+            uid = execute(
+                "INSERT INTO users (username, password, role, permissions, email, email_verified, must_change_password) "
+                "VALUES (?, ?, ?, ?, ?, 1, 0)",
+                [display_name, _sec.token_hex(32), role, perms_str, email.lower()])
+            user = query("SELECT * FROM users WHERE id=?", [uid], one=True)
+            log_auth_event("SSO_JIT", username=display_name, ip=ip,
+                           tenant=getattr(g, "tenant_slug", ""),
+                           detail=f"JIT-provisioned via SSO; email={email}")
+
+        if not user:
+            return render_template("login.html",
+                                   error="Your account is not provisioned in this workspace. "
+                                         "Contact your administrator.")
+
+        perms = get_user_perms(user["id"], user["role"],
+                               user["permissions"] if "permissions" in user.keys() else "")
+        sess = _build_session(user, perms)
+        session.clear()
+        session.update(sess)
+        now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
+                [now_str, sess["session_token"], user["id"]])
+        execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
+                [user["id"], user["username"], ip, request.user_agent.string, "ok_sso", now_str])
+        log_auth_event("SSO_OK", username=user["username"], ip=ip,
+                       tenant=getattr(g, "tenant_slug", ""))
+
+        relay = auth.get_last_request_id()
+        return redirect(url_for("main.inventory"))
+
+    except Exception as e:
+        log_auth_event("SSO_ERROR", username="(saml)", ip=ip,
+                       tenant=getattr(g, "tenant_slug", ""), detail=str(e))
+        return render_template("login.html", error=f"SSO error: {e}")
+
+
+# ── SSO helpers ───────────────────────────────────────────────────────────────
+
+def _prepare_saml_request(req):
+    """Convert Flask request to the dict that python3-saml expects."""
+    return {
+        "https":       "on" if req.is_secure or req.headers.get("X-Forwarded-Proto") == "https" else "off",
+        "http_host":   req.host,
+        "script_name": req.path,
+        "get_data":    req.args.copy(),
+        "post_data":   req.form.copy(),
+        "server_port": req.environ.get("SERVER_PORT", "443"),
+    }
+
+
+def _build_saml_settings():
+    """Return (settings_dict, None) or (None, error_string)."""
+    cfg = query("SELECT * FROM sso_config LIMIT 1", one=True)
+    if not cfg or not cfg["enabled"]:
+        return None, "SSO is not enabled for this workspace"
+    if not cfg["idp_entity_id"] or not cfg["idp_sso_url"] or not cfg["idp_cert"]:
+        return None, "SSO configuration is incomplete (missing IdP Entity ID, SSO URL, or certificate)"
+
+    scheme = "https"
+    from flask import current_app
+    if current_app.debug:
+        scheme = "http"
+
+    from flask import request as _req
+    host = _req.host if _req else "localhost"
+
+    sp_base = f"{scheme}://{host}"
+    settings = {
+        "strict": True,
+        "debug":  False,
+        "sp": {
+            "entityId": f"{sp_base}/sso/metadata",
+            "assertionConsumerService": {
+                "url":     f"{sp_base}/sso/acs",
+                "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
+            },
+            "singleLogoutService": {
+                "url":     f"{sp_base}/sso/slo",
+                "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+            },
+            "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+            "x509cert":  "",
+            "privateKey": "",
+        },
+        "idp": {
+            "entityId": cfg["idp_entity_id"],
+            "singleSignOnService": {
+                "url":     cfg["idp_sso_url"],
+                "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+            },
+            "singleLogoutService": {
+                "url":     cfg["idp_slo_url"] or "",
+                "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+            },
+            "x509cert": cfg["idp_cert"],
+        },
+    }
+    return settings, None
+
+
+def _saml_attr(attrs, key):
+    """Safely extract the first value of a SAML attribute."""
+    val = attrs.get(key, [])
+    return val[0].strip() if val else None
+
+
 @bp.route("/resend-verification", methods=["POST"])
 def resend_verification():
     """Resend email verification link. Rate limited to 3 per 15 min per IP."""

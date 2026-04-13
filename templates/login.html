@@ -42,9 +42,15 @@ input:focus{border-color:#1d4ed8;background:#fff}
     <input name="password" type="password" autocomplete="current-password" placeholder="Enter password">
     <button class="btn" type="submit">Sign In →</button>
   </form>
-  <div style="text-align:center;margin-top:16px">
+  <div style="text-align:center;margin-top:16px;display:flex;justify-content:space-between;align-items:center">
     <a href="/forgot-password" style="font-size:12.5px;color:#94a3b8;text-decoration:none">Forgot password?</a>
+    <a href="/sso/login" id="sso-link" style="font-size:12.5px;color:#6366f1;text-decoration:none;display:none">Sign in with SSO →</a>
   </div>
+<script>
+fetch('/api/sso/status').then(r=>r.json()).then(d=>{
+  if(d.ok&&d.enabled)document.getElementById('sso-link').style.display='inline';
+}).catch(()=>{});
+</script>
 </div>
 </body>
 </html>

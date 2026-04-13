@@ -7315,3 +7315,100 @@ def api_punchout_return(dist_key):
 <cXML><Response><Status code="200" text="OK">PO {po_number} created</Status></Response></cXML>""", 200, {
         "Content-Type": "text/xml"
     }
+
+
+# ── SSO / SAML Admin ──────────────────────────────────────────────────────────
+
+@bp.route("/api/sso/status")
+def api_sso_status():
+    """Public — returns whether SSO is active (used by login page to show SSO button)."""
+    row = query("SELECT enabled, idp_entity_id, idp_sso_url, idp_cert FROM sso_config LIMIT 1", one=True)
+    active = bool(row and row["enabled"] and row["idp_entity_id"] and row["idp_sso_url"] and row["idp_cert"])
+    return jsonify({"ok": True, "enabled": active})
+
+
+@bp.route("/api/admin/sso", methods=["GET"])
+@login_required
+@admin_required
+def api_sso_get():
+    """Return current SSO config. Certificate is returned (admins need to see it)."""
+    row = query("SELECT * FROM sso_config LIMIT 1", one=True)
+    if not row:
+        return jsonify({
+            "ok": True, "configured": False,
+            "enabled": False, "idp_entity_id": "", "idp_sso_url": "",
+            "idp_slo_url": "", "idp_cert": "",
+            "attr_email": "email", "attr_username": "username",
+            "attr_firstname": "firstName", "attr_lastname": "lastName",
+            "jit_enabled": True, "jit_default_role": "worker",
+            "jit_default_permissions": "",
+        })
+    return jsonify({
+        "ok": True,
+        "configured":              bool(row["idp_entity_id"] and row["idp_sso_url"] and row["idp_cert"]),
+        "enabled":                 bool(row["enabled"]),
+        "idp_entity_id":           row["idp_entity_id"] or "",
+        "idp_sso_url":             row["idp_sso_url"] or "",
+        "idp_slo_url":             row["idp_slo_url"] or "",
+        "idp_cert":                row["idp_cert"] or "",
+        "attr_email":              row["attr_email"] or "email",
+        "attr_username":           row["attr_username"] or "username",
+        "attr_firstname":          row["attr_firstname"] or "firstName",
+        "attr_lastname":           row["attr_lastname"] or "lastName",
+        "jit_enabled":             bool(row["jit_enabled"]),
+        "jit_default_role":        row["jit_default_role"] or "worker",
+        "jit_default_permissions": row["jit_default_permissions"] or "",
+    })
+
+
+@bp.route("/api/admin/sso", methods=["POST"])
+@login_required
+@admin_required
+def api_sso_save():
+    """Create or update the tenant's SSO/SAML configuration."""
+    d = request.json or {}
+    enabled    = 1 if d.get("enabled") else 0
+    idp_eid    = (d.get("idp_entity_id") or "").strip()
+    idp_sso    = (d.get("idp_sso_url") or "").strip()
+    idp_slo    = (d.get("idp_slo_url") or "").strip()
+    idp_cert   = (d.get("idp_cert") or "").strip()
+    # Strip PEM header/footer if accidentally pasted — python3-saml wants raw base64
+    idp_cert   = idp_cert.replace("-----BEGIN CERTIFICATE-----", "") \
+                         .replace("-----END CERTIFICATE-----", "") \
+                         .replace("\n", "").replace("\r", "").strip()
+
+    if enabled and (not idp_eid or not idp_sso or not idp_cert):
+        return jsonify({"ok": False,
+                        "msg": "IdP Entity ID, SSO URL, and certificate are required to enable SSO."})
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    existing = query("SELECT id FROM sso_config LIMIT 1", one=True)
+    if existing:
+        execute(
+            "UPDATE sso_config SET enabled=?,idp_entity_id=?,idp_sso_url=?,idp_slo_url=?,"
+            "idp_cert=?,attr_email=?,attr_username=?,attr_firstname=?,attr_lastname=?,"
+            "jit_enabled=?,jit_default_role=?,jit_default_permissions=?,updated_at=? WHERE id=?",
+            [enabled, idp_eid, idp_sso, idp_slo, idp_cert,
+             d.get("attr_email", "email"), d.get("attr_username", "username"),
+             d.get("attr_firstname", "firstName"), d.get("attr_lastname", "lastName"),
+             1 if d.get("jit_enabled", True) else 0,
+             d.get("jit_default_role", "worker"),
+             d.get("jit_default_permissions", ""),
+             now, existing["id"]])
+    else:
+        execute(
+            "INSERT INTO sso_config (enabled,idp_entity_id,idp_sso_url,idp_slo_url,idp_cert,"
+            "attr_email,attr_username,attr_firstname,attr_lastname,"
+            "jit_enabled,jit_default_role,jit_default_permissions,updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [enabled, idp_eid, idp_sso, idp_slo, idp_cert,
+             d.get("attr_email", "email"), d.get("attr_username", "username"),
+             d.get("attr_firstname", "firstName"), d.get("attr_lastname", "lastName"),
+             1 if d.get("jit_enabled", True) else 0,
+             d.get("jit_default_role", "worker"),
+             d.get("jit_default_permissions", ""),
+             now])
+
+    log_action("SSO_CONFIG_SAVE", None, "sso_config",
+               f"SSO {'enabled' if enabled else 'disabled'}; IdP={idp_eid or '(none)'}")
+    return jsonify({"ok": True})

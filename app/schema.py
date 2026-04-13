@@ -632,6 +632,22 @@ def _init_db_conn(db):
             unit_price  REAL NOT NULL DEFAULT 0,
             line_total  REAL NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS sso_config (
+            id                      INTEGER PRIMARY KEY,
+            enabled                 INTEGER NOT NULL DEFAULT 0,
+            idp_entity_id           TEXT,
+            idp_sso_url             TEXT,
+            idp_slo_url             TEXT,
+            idp_cert                TEXT,
+            attr_email              TEXT NOT NULL DEFAULT 'email',
+            attr_username           TEXT NOT NULL DEFAULT 'username',
+            attr_firstname          TEXT NOT NULL DEFAULT 'firstName',
+            attr_lastname           TEXT NOT NULL DEFAULT 'lastName',
+            jit_enabled             INTEGER NOT NULL DEFAULT 1,
+            jit_default_role        TEXT NOT NULL DEFAULT 'worker',
+            jit_default_permissions TEXT NOT NULL DEFAULT '',
+            updated_at              TEXT
+        );
     """)
 
     # ── Indexes ────────────────────────────────────────────────────────────────
