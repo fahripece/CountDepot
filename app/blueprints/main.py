@@ -17,6 +17,58 @@ def health():
     return jsonify({"ok": True, "service": "countdepot"}), 200
 
 
+@bp.route("/status")
+def status_page():
+    """Public uptime/status page — no auth required."""
+    from app.platform import get_platform_db
+    import time, os
+    checks = []
+    overall = "operational"
+
+    # Platform DB check
+    try:
+        t0 = time.monotonic()
+        pdb = get_platform_db()
+        pdb.execute("SELECT 1").fetchone()
+        pdb.close()
+        ms = int((time.monotonic() - t0) * 1000)
+        checks.append({"name": "Platform Database", "status": "ok", "latency_ms": ms})
+    except Exception as e:
+        checks.append({"name": "Platform Database", "status": "error", "detail": str(e)})
+        overall = "degraded"
+
+    # Tenant DB check (current tenant if available)
+    try:
+        from flask import g
+        if hasattr(g, "tenant_slug") and g.tenant_slug:
+            t0 = time.monotonic()
+            query("SELECT 1")
+            ms = int((time.monotonic() - t0) * 1000)
+            checks.append({"name": "Tenant Database", "status": "ok", "latency_ms": ms})
+    except Exception as e:
+        checks.append({"name": "Tenant Database", "status": "error", "detail": str(e)})
+        overall = "degraded"
+
+    # Disk space check
+    try:
+        import shutil
+        from config import Config as _Cfg
+        usage = shutil.disk_usage(_Cfg.TENANTS_DIR)
+        free_pct = usage.free / usage.total * 100
+        status = "ok" if free_pct > 10 else ("warn" if free_pct > 5 else "error")
+        if status == "error":
+            overall = "degraded"
+        checks.append({"name": "Disk Space", "status": status,
+                        "detail": f"{free_pct:.0f}% free ({usage.free // (1024**3)} GB)"})
+    except Exception as e:
+        checks.append({"name": "Disk Space", "status": "unknown", "detail": str(e)})
+
+    return render_template("status.html",
+                           checks=checks,
+                           overall=overall,
+                           generated_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+
+
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
 def _cat_fields():
