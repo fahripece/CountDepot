@@ -111,6 +111,18 @@ MIGRATIONS = [
     # po_invoices / po_invoice_lines — 3-way match
     # (these are new tables; added via CREATE TABLE IF NOT EXISTS in DDL)
 
+    # items — retirement / end of life workflow
+    ("items", "retired",          "INTEGER NOT NULL DEFAULT 0"),
+    ("items", "retired_at",       "TEXT"),
+    ("items", "retirement_method","TEXT"),
+    ("items", "retirement_notes", "TEXT"),
+    ("items", "final_book_value", "REAL"),
+
+    # items — warranty & contract tracking
+    ("items", "warranty_expiry",  "TEXT"),
+    ("items", "contract_expiry",  "TEXT"),
+    ("items", "warranty_notes",   "TEXT"),
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
 ]
 
@@ -399,6 +411,15 @@ def _init_db_conn(db):
             created_at        TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_service_log_item ON service_log(item_id);
+        CREATE TABLE IF NOT EXISTS overdue_reminders (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            checkout_log_id INTEGER NOT NULL,
+            item_id         INTEGER NOT NULL REFERENCES items(id),
+            reminded_at     TEXT NOT NULL,
+            reminder_num    INTEGER NOT NULL DEFAULT 1,
+            sent_to         TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_overdue_rem_cl ON overdue_reminders(checkout_log_id, reminder_num);
         CREATE TABLE IF NOT EXISTS user_locations (
             user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,

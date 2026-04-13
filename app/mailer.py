@@ -215,6 +215,38 @@ def send_password_reset_email(to: str, slug: str, token: str) -> bool:
     return send_email(to, subject, html, text)
 
 
+def send_overdue_reminder(to: str, item_name: str, serial: str, checked_out_by: str,
+                          checkout_date: str, due_date: str, days_overdue: int,
+                          reminder_num: int, workspace_url: str) -> bool:
+    subject = f"Overdue item reminder: {item_name}"
+    badge = "SECOND REMINDER" if reminder_num >= 2 else "REMINDER"
+    serial_line = f'<div style="font-size:11px;color:#94a3b8;margin-top:4px">Serial: {serial}</div>' if serial else ""
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <div style="display:inline-block;background:#fef2f2;color:#991b1b;font-size:11px;font-weight:700;letter-spacing:.5px;padding:3px 8px;border-radius:4px;margin-bottom:16px">{badge}</div>
+  <h1 style="font-size:20px;font-weight:700;margin-bottom:6px">You have an overdue item</h1>
+  <p style="color:#64748b;margin-bottom:20px">This item was due back <strong>{days_overdue} day{'s' if days_overdue != 1 else ''} ago</strong>. Please return it as soon as possible.</p>
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:16px 20px;margin-bottom:20px">
+    <div style="font-size:15px;font-weight:700;color:#0f172a">{item_name}</div>
+    {serial_line}
+    <div style="margin-top:10px;display:flex;gap:24px;flex-wrap:wrap">
+      <div><div style="font-size:10px;color:#94a3b8;margin-bottom:2px">CHECKED OUT BY</div><div style="font-size:13px;font-weight:600">{checked_out_by or '—'}</div></div>
+      <div><div style="font-size:10px;color:#94a3b8;margin-bottom:2px">CHECKOUT DATE</div><div style="font-size:13px">{checkout_date or '—'}</div></div>
+      <div><div style="font-size:10px;color:#94a3b8;margin-bottom:2px">DUE DATE</div><div style="font-size:13px;color:#991b1b;font-weight:600">{due_date or '—'}</div></div>
+    </div>
+  </div>
+  <a href="{workspace_url}" style="display:inline-block;padding:12px 24px;background:#1d4ed8;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;font-size:14px">Go to CountDepot →</a>
+  <p style="margin-top:24px;font-size:11px;color:#94a3b8">This reminder was sent automatically. Contact your administrator if you have questions.</p>
+</div>"""
+    text = (f"Overdue item reminder ({badge}): {item_name}\n\n"
+            f"This item was due back {days_overdue} day(s) ago.\n\n"
+            f"Checked out by: {checked_out_by or '—'}\n"
+            f"Checkout date: {checkout_date or '—'}\n"
+            f"Due date: {due_date or '—'}\n\n"
+            f"Please return the item as soon as possible.\n{workspace_url}\n")
+    return send_email(to, subject, html, text)
+
+
 def send_po_email(to: str, po_number: str, vendor_name: str,
                   sender_name: str, notes: str, pdf_bytes: bytes) -> bool:
     subject = f"Purchase Order {po_number} from {sender_name}"

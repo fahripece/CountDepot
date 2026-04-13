@@ -171,6 +171,39 @@
   </div>
 </div>
 
+<!-- OVERDUE ESCALATION REMINDERS -->
+<div class="card" style="margin-bottom:20px">
+  <div style="margin-bottom:16px">
+    <div style="font-weight:600;font-size:15px">Overdue Item Reminders</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:1px">Send reminder emails to users who have overdue checked-out items</div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <label class="label" style="margin:0;min-width:160px">Enable reminders</label>
+      <select class="select" id="ovr-enabled" style="width:auto">
+        <option value="1">Enabled</option>
+        <option value="0">Disabled</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <label class="label" style="margin:0;min-width:160px">First reminder after</label>
+      <input class="input" id="ovr-days1" type="number" min="1" max="30" value="1" style="width:70px"> <span style="font-size:13px;color:#64748b">day(s) overdue</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <label class="label" style="margin:0;min-width:160px">Second reminder after</label>
+      <input class="input" id="ovr-days2" type="number" min="1" max="60" value="7" style="width:70px"> <span style="font-size:13px;color:#64748b">day(s) overdue</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary btn-sm" onclick="saveOvrSettings()">Save</button>
+      <button class="btn btn-secondary btn-sm" onclick="runOvrReminders()">Run Reminders Now</button>
+      <span id="ovr-msg" style="font-size:12px;color:#15803d;display:none"></span>
+    </div>
+    <div style="font-size:12px;color:#94a3b8;line-height:1.6">
+      Reminders are sent to the user's email address on their CountDepot account. Each reminder is only sent once per checkout. Run reminders daily via cron: <code style="font-size:11px;background:#f1f5f9;padding:1px 4px;border-radius:3px">curl -X POST https://yourworkspace/api/admin/overdue-reminders/run</code>
+    </div>
+  </div>
+</div>
+
 <!-- SECTOR / WORKSPACE MODE -->
 <div class="card" style="margin-bottom:20px">
   <div style="margin-bottom:16px">
@@ -523,6 +556,34 @@ async function sendLsaReport(){
   setTimeout(()=>m.style.display='none',5000);
 }
 loadLsaSettings();
+
+// ── Overdue Reminders ──
+async function loadOvrSettings(){
+  const s=await api('/api/settings');
+  if(s.overdue_reminder_enabled!==undefined)document.getElementById('ovr-enabled').value=s.overdue_reminder_enabled;
+  if(s.overdue_reminder_days_1)document.getElementById('ovr-days1').value=s.overdue_reminder_days_1;
+  if(s.overdue_reminder_days_2)document.getElementById('ovr-days2').value=s.overdue_reminder_days_2;
+}
+async function saveOvrSettings(){
+  const res=await api('/api/settings',{
+    overdue_reminder_enabled:document.getElementById('ovr-enabled').value,
+    overdue_reminder_days_1:document.getElementById('ovr-days1').value,
+    overdue_reminder_days_2:document.getElementById('ovr-days2').value
+  });
+  const m=document.getElementById('ovr-msg');
+  m.textContent=res.ok?'Saved ✓':(res.msg||'Error');
+  m.style.color=res.ok?'#15803d':'#b91c1c';
+  m.style.display='inline';setTimeout(()=>m.style.display='none',4000);
+}
+async function runOvrReminders(){
+  const m=document.getElementById('ovr-msg');m.style.display='none';
+  const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
+  const res=await fetch('/api/admin/overdue-reminders/run',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken}}).then(r=>r.json());
+  m.textContent=res.msg||(res.ok?'Done':'Error');
+  m.style.color=res.ok?'#15803d':'#b91c1c';
+  m.style.display='inline';setTimeout(()=>m.style.display='none',6000);
+}
+loadOvrSettings();
 
 // ── 2FA ──
 let _2faEnabled=false;

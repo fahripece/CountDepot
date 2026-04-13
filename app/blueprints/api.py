@@ -2355,6 +2355,8 @@ def api_get_settings():
 ALLOWED_SETTINGS = {
     "brand_name", "brand_color",
     "low_stock_alerts_enabled", "low_stock_alert_email",
+    "overdue_reminder_days_1", "overdue_reminder_days_2",
+    "overdue_reminder_enabled",
 }
 
 @bp.route("/api/settings", methods=["POST"])
@@ -2438,6 +2440,85 @@ def api_send_low_stock_report():
         log_action("LOW_STOCK_REPORT_SENT", detail=f"Sent to {alert_email}, {len(alerts)} items")
         return jsonify({"ok": True, "msg": f"Report sent to {alert_email}"})
     return jsonify({"ok": False, "msg": "Failed to send email. Check SMTP settings on the server."})
+
+
+# ── Overdue Escalation Reminders ─────────────────────────────────────────────
+
+@bp.route("/api/admin/overdue-reminders/run", methods=["POST"])
+@login_required
+@admin_required
+def api_run_overdue_reminders():
+    """Check all overdue checkouts and send reminder emails. Safe to call repeatedly — tracks sent reminders."""
+    from app.mailer import send_overdue_reminder
+    from config import Config as _Cfg
+    from flask import g
+    from datetime import date
+
+    settings    = {r["key"]: r["value"] for r in query("SELECT key,value FROM settings")}
+    enabled     = settings.get("overdue_reminder_enabled", "1") == "1"
+    days_1      = int(settings.get("overdue_reminder_days_1", "1") or 1)
+    days_2      = int(settings.get("overdue_reminder_days_2", "7") or 7)
+
+    if not enabled:
+        return jsonify({"ok": False, "msg": "Overdue reminders are disabled in settings."})
+    if not _Cfg.SMTP_HOST:
+        return jsonify({"ok": False, "msg": "SMTP is not configured on this server."})
+
+    today    = date.today().isoformat()
+    domain   = _Cfg.APP_DOMAIN
+    slug     = getattr(g, "tenant_slug", "")
+    base_url = f"https://{slug}.{domain}"
+
+    # All open checkouts past their due date
+    overdue_rows = query("""
+        SELECT cl.id as cl_id, cl.item_id, cl.checked_out_by, cl.checkout_date,
+               cl.expected_return_date, i.name as item_name, i.serial,
+               u.email as user_email
+        FROM checkout_log cl
+        JOIN items i ON i.id = cl.item_id
+        LEFT JOIN users u ON lower(u.username) = lower(cl.checked_out_by)
+        WHERE cl.checkin_date IS NULL
+          AND cl.expected_return_date IS NOT NULL
+          AND cl.expected_return_date < ?
+    """, [today])
+
+    sent_count = 0
+    for row in overdue_rows:
+        due   = row["expected_return_date"]
+        diff  = (date.fromisoformat(today) - date.fromisoformat(due)).days
+        email = row["user_email"]
+        if not email:
+            continue
+
+        for (num, threshold) in [(1, days_1), (2, days_2)]:
+            if diff < threshold:
+                continue
+            already = query("""SELECT id FROM overdue_reminders
+                               WHERE checkout_log_id=? AND reminder_num=?""",
+                            [row["cl_id"], num], one=True)
+            if already:
+                continue
+            ok = send_overdue_reminder(
+                to=email,
+                item_name=row["item_name"],
+                serial=row["serial"],
+                checked_out_by=row["checked_out_by"],
+                checkout_date=(row["checkout_date"] or "")[:10],
+                due_date=due[:10] if due else "",
+                days_overdue=diff,
+                reminder_num=num,
+                workspace_url=base_url,
+            )
+            if ok:
+                execute("""INSERT INTO overdue_reminders
+                           (checkout_log_id, item_id, reminded_at, reminder_num, sent_to)
+                           VALUES (?,?,?,?,?)""",
+                        [row["cl_id"], row["item_id"], today, num, email])
+                sent_count += 1
+
+    log_action("OVERDUE_REMINDERS_RUN", detail=f"Sent {sent_count} reminder(s)")
+    return jsonify({"ok": True, "sent": sent_count,
+                    "msg": f"{sent_count} reminder(s) sent" if sent_count else "No new reminders needed"})
 
 
 # ── API Keys ──────────────────────────────────────────────────────────────────
