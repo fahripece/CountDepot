@@ -14,7 +14,54 @@ bp = Blueprint("main", __name__)
 
 @bp.route("/_health")
 def health():
-    return jsonify({"ok": True, "service": "countdepot"}), 200
+    import shutil
+    import time
+    from pathlib import Path
+    from config import Config
+
+    checks = {}
+    ok = True
+
+    # Platform DB connectivity
+    try:
+        from app.platform import get_platform_db as _gpdb
+        _db = _gpdb()
+        _db.execute("SELECT COUNT(*) FROM tenants").fetchone()
+        _db.close()
+        checks["platform_db"] = "ok"
+    except Exception as e:
+        checks["platform_db"] = f"error: {e}"
+        ok = False
+
+    # Disk space (warn below 15%, fail below 5%)
+    try:
+        usage = shutil.disk_usage(Config.DATA_DIR)
+        free_pct = usage.free / usage.total * 100
+        checks["disk_free_pct"]  = round(free_pct, 1)
+        checks["disk_free_gb"]   = round(usage.free / 1_073_741_824, 2)
+        checks["disk"] = "ok" if free_pct >= 15 else ("warning" if free_pct >= 5 else "critical")
+        if free_pct < 5:
+            ok = False
+    except Exception as e:
+        checks["disk"] = f"error: {e}"
+
+    # Backup freshness (warn if last backup > 25h, fail if > 49h)
+    try:
+        backup_dir = Path(Config.DATA_DIR).parent / "backups"
+        archives   = sorted(backup_dir.glob("countdepot_*.tar.gz"),
+                            key=lambda p: p.stat().st_mtime) if backup_dir.exists() else []
+        if archives:
+            age_h = (time.time() - archives[-1].stat().st_mtime) / 3600
+            checks["backup_age_hours"] = round(age_h, 1)
+            checks["backup"] = "ok" if age_h < 25 else ("stale" if age_h < 49 else "critical")
+            if age_h >= 49:
+                ok = False
+        else:
+            checks["backup"] = "no_backups"
+    except Exception as e:
+        checks["backup"] = f"error: {e}"
+
+    return jsonify({"ok": ok, "service": "countdepot", "checks": checks}), 200 if ok else 503
 
 
 @bp.route("/api-docs")

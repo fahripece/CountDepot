@@ -893,28 +893,29 @@ def api_checkin():
 @login_required
 def api_get_locations():
     allowed_ids = session.get("location_ids") or []
+    # Single query: item counts + member counts in one pass
     sql = """
-        SELECT l.*,
-               COUNT(DISTINCT i.id) as item_count,
-               SUM(CASE WHEN i.checked_out=0 AND i.sold=0 AND i.active=1 THEN 1 ELSE 0 END) as available_count,
-               COUNT(DISTINCT ul.user_id) as member_count
+        SELECT l.id, l.name, l.description, l.email, l.created_at,
+               COUNT(DISTINCT CASE WHEN i.active=1 THEN i.id END)                                             AS item_count,
+               COUNT(DISTINCT CASE WHEN i.active=1 AND i.checked_out=0 AND i.sold=0 THEN i.id END)           AS available_count,
+               COUNT(DISTINCT ul.user_id)                                                                      AS member_count,
+               GROUP_CONCAT(DISTINCT mu.username ORDER BY mu.username)                                         AS member_names_csv
         FROM locations l
-        LEFT JOIN items i ON i.location_id=l.id AND i.active=1
-        LEFT JOIN user_locations ul ON ul.location_id=l.id
+        LEFT JOIN items i       ON i.location_id = l.id
+        LEFT JOIN user_locations ul ON ul.location_id = l.id
+        LEFT JOIN users mu      ON mu.id = ul.user_id AND mu.active = 1
     """
     if allowed_ids:
         sql += f" WHERE l.id IN ({','.join('?'*len(allowed_ids))})"
     sql += " GROUP BY l.id ORDER BY l.name"
     rows = query(sql, allowed_ids if allowed_ids else [])
-    result = [dict(r) for r in rows]
-    # Attach member names for display (up to 5 per site)
-    for loc in result:
-        members = query(
-            "SELECT u.username FROM user_locations ul "
-            "JOIN users u ON u.id=ul.user_id AND u.active=1 "
-            "WHERE ul.location_id=? ORDER BY u.username LIMIT 5",
-            [loc["id"]])
-        loc["member_names"] = [m["username"] for m in members]
+    result = []
+    for r in rows:
+        d = dict(r)
+        csv = d.pop("member_names_csv") or ""
+        names = [n for n in csv.split(",") if n] if csv else []
+        d["member_names"] = names[:5]
+        result.append(d)
     return jsonify(result)
 
 
@@ -2404,8 +2405,24 @@ def api_distributor_delete():
 @bp.route("/api/tasks")
 @login_required
 def api_tasks():
-    rows = query("SELECT * FROM tasks ORDER BY CASE urgency WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at DESC")
+    # Purge stale auto-tasks whose item has been deleted
+    execute("DELETE FROM tasks WHERE item_id IS NOT NULL "
+            "AND item_id NOT IN (SELECT id FROM items WHERE active=1)")
+    rows = query(
+        "SELECT t.*, i.name AS item_name "
+        "FROM tasks t "
+        "LEFT JOIN items i ON i.id = t.item_id AND i.active = 1 "
+        "WHERE t.item_id IS NULL OR i.id IS NOT NULL "
+        "ORDER BY CASE t.urgency WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, t.created_at DESC")
     return jsonify([dict(r) for r in rows])
+
+
+@bp.route("/api/tasks/clear-done", methods=["POST"])
+@login_required
+def api_tasks_clear_done():
+    """Delete all manually-created done tasks (item-linked tasks are managed by the system)."""
+    execute("DELETE FROM tasks WHERE status='done' AND item_id IS NULL")
+    return jsonify({"ok": True})
 
 
 @bp.route("/api/task/add", methods=["POST"])
@@ -2976,6 +2993,60 @@ def api_run_overdue_reminders():
     log_action("OVERDUE_REMINDERS_RUN", detail=f"Sent {sent_count} reminder(s)")
     return jsonify({"ok": True, "sent": sent_count,
                     "msg": f"{sent_count} reminder(s) sent" if sent_count else "No new reminders needed"})
+
+
+# ── Alert channel test ────────────────────────────────────────────────────────
+
+@bp.route("/api/admin/alerts/test", methods=["POST"])
+@login_required
+@admin_required
+def api_test_alerts():
+    """Fire a test message on every configured alert channel and report results."""
+    from app.mailer import send_email as _se
+    from config import Config as _Cfg
+    results = {}
+
+    # Email
+    to = _Cfg.PLATFORM_ADMIN_EMAIL or _Cfg.SUPPORT_EMAIL or _Cfg.SMTP_FROM
+    if _Cfg.SMTP_HOST and to:
+        ok = _se(to,
+                 "CountDepot alert test",
+                 "<div style='font-family:sans-serif;padding:24px'>"
+                 "<h2 style='margin:0 0 8px'>Alert test</h2>"
+                 "<p style='color:#64748b'>This is a test alert from CountDepot. "
+                 "Your email alert channel is working correctly.</p></div>",
+                 "CountDepot alert test — email channel is working.")
+        results["email"] = {"ok": ok, "to": to}
+    else:
+        results["email"] = {"ok": False, "reason": "SMTP not configured or no admin email set"}
+
+    # Slack
+    settings = {r["key"]: r["value"] for r in query("SELECT key,value FROM settings WHERE key LIKE 'slack%' OR key LIKE 'teams%'")}
+    if settings.get("slack_enabled") == "1" and settings.get("slack_webhook_url"):
+        try:
+            from app.messenger import send_slack as _sl
+            _sl(settings["slack_webhook_url"], "test",
+                "CountDepot alert test — Slack channel is working.")
+            results["slack"] = {"ok": True}
+        except Exception as ex:
+            results["slack"] = {"ok": False, "reason": str(ex)}
+    else:
+        results["slack"] = {"ok": None, "reason": "Slack not configured"}
+
+    # Teams
+    if settings.get("teams_enabled") == "1" and settings.get("teams_webhook_url"):
+        try:
+            from app.messenger import send_teams as _tm
+            _tm(settings["teams_webhook_url"], "test",
+                "CountDepot alert test — Teams channel is working.")
+            results["teams"] = {"ok": True}
+        except Exception as ex:
+            results["teams"] = {"ok": False, "reason": str(ex)}
+    else:
+        results["teams"] = {"ok": None, "reason": "Teams not configured"}
+
+    log_action("ALERT_TEST", detail="Alert channel test triggered by admin")
+    return jsonify({"ok": True, "results": results})
 
 
 # ── Scheduled Reports ────────────────────────────────────────────────────────

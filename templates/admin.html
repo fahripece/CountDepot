@@ -256,6 +256,18 @@
   </div>
 </div>
 
+<!-- ALERT CHANNELS -->
+<div class="card" style="margin-bottom:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-weight:600;font-size:15px">Alert Channels</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:1px">Email, Slack, and Teams — test all channels at once</div>
+    </div>
+    <button class="btn btn-secondary btn-sm" id="testAllAlertsBtn" onclick="testAllAlerts()">Test All Channels</button>
+  </div>
+  <div id="alertTestResult" style="display:none;margin-bottom:12px"></div>
+</div>
+
 <!-- SLACK / TEAMS NOTIFICATIONS -->
 <div class="card" style="margin-bottom:20px">
   <div style="margin-bottom:16px">
@@ -783,6 +795,25 @@ async function testMessenger(provider){
   const r=await api('/api/integrations/messenger/test',{provider}).catch(()=>({ok:false}));
   if(r.ok) alert(`${provider==='slack'?'Slack':'Teams'} test message sent!`);
   else alert('Test failed: '+(r.msg||'unknown error'));
+}
+async function testAllAlerts(){
+  const btn=document.getElementById('testAllAlertsBtn');
+  const out=document.getElementById('alertTestResult');
+  btn.disabled=true;btn.textContent='Testing…';
+  out.style.display='none';
+  const r=await api('/api/admin/alerts/test',{}).catch(()=>({ok:false}));
+  btn.disabled=false;btn.textContent='Test All Channels';
+  if(!r.ok){out.style.display='block';out.innerHTML='<div style="color:#b91c1c;font-size:12px">Test failed</div>';return;}
+  const rows=Object.entries(r.results).map(([ch,res])=>{
+    const color=res.ok===true?'#15803d':res.ok===false?'#b91c1c':'#64748b';
+    const label=res.ok===true?'OK':res.ok===false?'FAIL':'Not configured';
+    const detail=res.reason?`<span style="color:#64748b"> — ${res.reason}</span>`:(res.to?`<span style="color:#64748b"> → ${res.to}</span>`:'');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ede8">
+      <span style="font-size:13px;text-transform:capitalize">${ch}</span>
+      <span style="font-size:12px;font-weight:600;color:${color}">${label}${detail}</span></div>`;
+  }).join('');
+  out.style.display='block';
+  out.innerHTML=`<div style="border:1px solid #e5e3de;border-radius:8px;padding:0 12px;margin-bottom:4px">${rows}</div>`;
 }
 loadMessengerSettings();
 

@@ -247,6 +247,116 @@ def send_overdue_reminder(to: str, item_name: str, serial: str, checked_out_by: 
     return send_email(to, subject, html, text)
 
 
+def send_error_alert(method: str, path: str, tenant: str, tb: str) -> bool:
+    """Email the platform admin when a 500 error occurs.
+    Only fires when PLATFORM_ADMIN_EMAIL is set."""
+    to = Config.PLATFORM_ADMIN_EMAIL or Config.SUPPORT_EMAIL
+    if not to:
+        log.warning(f"[ERROR ALERT no-dest] {method} {path} — {tb[:200]}")
+        return False
+    from datetime import datetime as _dt
+    ts = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    tb_escaped = tb.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <div style="display:inline-block;background:#fef2f2;color:#991b1b;font-size:11px;font-weight:700;letter-spacing:.5px;padding:3px 10px;border-radius:4px;margin-bottom:16px">SERVER ERROR</div>
+  <h2 style="font-size:18px;font-weight:700;margin-bottom:6px">500 Internal Server Error</h2>
+  <div style="background:#f8f7f4;border-radius:8px;padding:14px 18px;margin-bottom:20px">
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">REQUEST</div>
+    <div style="font-weight:600;font-family:monospace">{method} {path}</div>
+    <div style="margin-top:8px;font-size:11px;color:#94a3b8">TENANT</div>
+    <div style="font-family:monospace">{tenant}</div>
+    <div style="margin-top:8px;font-size:11px;color:#94a3b8">TIME</div>
+    <div style="font-size:13px">{ts}</div>
+  </div>
+  <div style="background:#0f172a;border-radius:8px;padding:16px 18px;margin-bottom:16px">
+    <pre style="color:#e2e8f0;font-size:11px;margin:0;white-space:pre-wrap;word-break:break-all">{tb_escaped}</pre>
+  </div>
+  <p style="font-size:11px;color:#94a3b8">This alert was sent automatically by CountDepot. Check Sentry for full context.</p>
+</div>"""
+    text = f"CountDepot 500 Error\n\n{method} {path}\nTenant: {tenant}\nTime: {ts}\n\n{tb}"
+    return send_email(to, f"[CountDepot Error] 500 on {method} {path} ({tenant})", html, text)
+
+
+def send_daily_digest(to: str, stats: dict) -> bool:
+    """Daily ops digest email for the platform admin."""
+    from datetime import datetime as _dt
+    ts = _dt.utcnow().strftime("%Y-%m-%d")
+    tenants     = stats.get("tenants", 0)
+    errors_24h  = stats.get("errors_24h", 0)
+    low_stock   = stats.get("low_stock_alerts", 0)
+    overdue     = stats.get("overdue_checkouts", 0)
+    warranty    = stats.get("warranty_expiring_30d", 0)
+    backup_age  = stats.get("backup_age_hours", "unknown")
+    disk_free   = stats.get("disk_free_pct", "unknown")
+
+    def _status_badge(ok: bool):
+        color = "#dcfce7" if ok else "#fef2f2"
+        text_color = "#15803d" if ok else "#991b1b"
+        label = "OK" if ok else "ALERT"
+        return f'<span style="background:{color};color:{text_color};font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px">{label}</span>'
+
+    backup_ok = isinstance(backup_age, (int, float)) and backup_age < 25
+    disk_ok   = isinstance(disk_free, (int, float)) and disk_free > 15
+
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <h2 style="font-size:18px;font-weight:700;margin-bottom:4px">CountDepot Daily Digest</h2>
+  <p style="color:#64748b;font-size:13px;margin-bottom:24px">{ts}</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px">
+    <div style="background:#f8f7f4;border-radius:8px;padding:14px 16px">
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px">ACTIVE TENANTS</div>
+      <div style="font-size:24px;font-weight:700">{tenants}</div>
+    </div>
+    <div style="background:{'#fef2f2' if errors_24h else '#f8f7f4'};border-radius:8px;padding:14px 16px">
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px">ERRORS (24H)</div>
+      <div style="font-size:24px;font-weight:700;color:{'#b91c1c' if errors_24h else 'inherit'}">{errors_24h}</div>
+    </div>
+    <div style="background:{'#fef2f2' if low_stock else '#f8f7f4'};border-radius:8px;padding:14px 16px">
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px">LOW STOCK ALERTS</div>
+      <div style="font-size:24px;font-weight:700;color:{'#b91c1c' if low_stock else 'inherit'}">{low_stock}</div>
+    </div>
+    <div style="background:{'#fef2f2' if overdue else '#f8f7f4'};border-radius:8px;padding:14px 16px">
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px">OVERDUE CHECKOUTS</div>
+      <div style="font-size:24px;font-weight:700;color:{'#b91c1c' if overdue else 'inherit'}">{overdue}</div>
+    </div>
+  </div>
+
+  <div style="border:1px solid #e5e3de;border-radius:8px;overflow:hidden;margin-bottom:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #e5e3de">
+      <span style="font-size:13px">Backup age</span>
+      <span style="display:flex;align-items:center;gap:8px;font-size:13px;font-family:monospace">
+        {f'{backup_age}h' if isinstance(backup_age, (int,float)) else backup_age}
+        {_status_badge(backup_ok)}
+      </span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #e5e3de">
+      <span style="font-size:13px">Disk free</span>
+      <span style="display:flex;align-items:center;gap:8px;font-size:13px;font-family:monospace">
+        {f'{disk_free}%' if isinstance(disk_free, (int,float)) else disk_free}
+        {_status_badge(disk_ok)}
+      </span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+      <span style="font-size:13px">Warranties expiring (30d)</span>
+      <span style="font-size:13px;font-family:monospace">{warranty}</span>
+    </div>
+  </div>
+
+  <p style="font-size:11px;color:#94a3b8">Sent automatically each morning by CountDepot ops cron.</p>
+</div>"""
+    text = (f"CountDepot Daily Digest — {ts}\n\n"
+            f"Active tenants: {tenants}\n"
+            f"Errors (24h): {errors_24h}\n"
+            f"Low stock alerts: {low_stock}\n"
+            f"Overdue checkouts: {overdue}\n"
+            f"Warranties expiring (30d): {warranty}\n"
+            f"Backup age: {backup_age}h\n"
+            f"Disk free: {disk_free}%\n")
+    return send_email(to, f"CountDepot Daily Digest — {ts}", html, text)
+
+
 def send_po_email(to: str, po_number: str, vendor_name: str,
                   sender_name: str, notes: str, pdf_bytes: bytes) -> bool:
     subject = f"Purchase Order {po_number} from {sender_name}"

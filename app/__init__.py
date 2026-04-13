@@ -280,6 +280,16 @@ def create_app():
 
     @app.errorhandler(500)
     def err_500(e):
+        import traceback, threading
+        tenant = getattr(g, "tenant_slug", "unknown")
+        tb     = traceback.format_exc()
+        def _alert():
+            try:
+                from app.mailer import send_error_alert
+                send_error_alert(request.method, request.path, tenant, tb)
+            except Exception:
+                pass
+        threading.Thread(target=_alert, daemon=True).start()
         if request.path.startswith("/api/"):
             return jsonify({"ok": False, "msg": "Internal server error"}), 500
         return redirect(url_for("auth.login_page"))
