@@ -467,6 +467,25 @@ def _init_db_conn(db):
             synced_at   TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_acct_sync ON accounting_sync_log(provider, entity_type, entity_id);
+        CREATE TABLE IF NOT EXISTS webhooks (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            url        TEXT NOT NULL,
+            events     TEXT NOT NULL DEFAULT 'item.added,item.checked_out,item.checked_in,low_stock,po.created,po.approved',
+            secret     TEXT,
+            enabled    INTEGER NOT NULL DEFAULT 1,
+            created_by TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS webhook_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            webhook_id  INTEGER NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
+            event_type  TEXT NOT NULL,
+            payload     TEXT,
+            status_code INTEGER,
+            error       TEXT,
+            delivered_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_webhook_log ON webhook_log(webhook_id, delivered_at);
         CREATE TABLE IF NOT EXISTS user_locations (
             user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,

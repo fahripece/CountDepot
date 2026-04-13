@@ -832,6 +832,12 @@ def api_checkout():
                (f" | Sale price → ${new_sale:.2f}" if new_sale is not None else ""),
                {"checked_out": 0}, {"checked_out": 1})
     notify_low_stock_if_needed(item.get("product_id"))
+    try:
+        from app.webhooks import fire as _wh
+        _wh("item.checked_out", {"id": item["id"], "name": item["name"],
+                                  "checked_out_by": who, "job_ref": d.get("job_ref", "")})
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 
@@ -872,6 +878,11 @@ def api_checkin():
     log_action("CHECKIN", item["id"], item["name"],
                f"Returned. Was on: {item['job_ref'] or '-'}" + (f" | Note: {checkin_note}" if checkin_note else ""),
                {"checked_out": 1}, {"checked_out": 0})
+    try:
+        from app.webhooks import fire as _wh
+        _wh("item.checked_in", {"id": item["id"], "name": item["name"]})
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 
@@ -1610,6 +1621,11 @@ def api_item_add():
         if saved:
             sync_item_task(iid, d.get("name", ""), _item_missing_fields(dict(saved)))
             sync_maintenance_tasks(iid)
+        try:
+            from app.webhooks import fire as _wh
+            _wh("item.added", {"id": iid, "name": d.get("name"), "serial": d.get("serial")})
+        except Exception:
+            pass
         return jsonify({"ok": True, "id": iid})
     except Exception as e:
         return jsonify({"ok": False, "msg": f"Save failed: {str(e)}"})
@@ -3174,6 +3190,89 @@ def _check_item_limit():
         return False, (f"Item limit reached ({max_items} on {plan_name} plan). "
                        f"Upgrade your plan to add more items.")
     return True, None
+
+
+# ── Webhooks ──────────────────────────────────────────────────────────────────
+
+WEBHOOK_EVENTS = [
+    "item.added", "item.updated", "item.deleted",
+    "item.checked_out", "item.checked_in", "item.sold", "item.retired",
+    "low_stock", "po.created", "po.approved", "po.rejected", "po.received",
+    "warranty.expiring",
+]
+
+
+@bp.route("/api/webhooks")
+@login_required
+@admin_required
+def api_webhooks_list():
+    rows = query("SELECT * FROM webhooks ORDER BY id DESC")
+    return jsonify({"ok": True, "webhooks": [dict(r) for r in rows],
+                    "events": WEBHOOK_EVENTS})
+
+
+@bp.route("/api/webhooks", methods=["POST"])
+@login_required
+@admin_required
+def api_webhooks_create():
+    d      = request.json or {}
+    url    = (d.get("url") or "").strip()
+    events = (d.get("events") or ",".join(WEBHOOK_EVENTS)).strip()
+    secret = (d.get("secret") or "").strip()
+    if not url or not url.startswith("http"):
+        return jsonify({"ok": False, "msg": "Valid HTTPS URL required"}), 400
+    import secrets as _sec
+    if not secret:
+        secret = _sec.token_hex(20)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    wid = execute(
+        "INSERT INTO webhooks (url,events,secret,enabled,created_by,created_at) VALUES (?,?,?,1,?,?)",
+        [url, events, secret, session.get("username"), now])
+    return jsonify({"ok": True, "id": wid, "secret": secret})
+
+
+@bp.route("/api/webhooks/<int:wid>", methods=["DELETE"])
+@login_required
+@admin_required
+def api_webhooks_delete(wid):
+    execute("DELETE FROM webhooks WHERE id=?", [wid])
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/webhooks/<int:wid>/toggle", methods=["POST"])
+@login_required
+@admin_required
+def api_webhooks_toggle(wid):
+    row = query("SELECT enabled FROM webhooks WHERE id=?", [wid], one=True)
+    if not row:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    new_val = 0 if row["enabled"] else 1
+    execute("UPDATE webhooks SET enabled=? WHERE id=?", [new_val, wid])
+    return jsonify({"ok": True, "enabled": bool(new_val)})
+
+
+@bp.route("/api/webhooks/<int:wid>/test", methods=["POST"])
+@login_required
+@admin_required
+def api_webhooks_test(wid):
+    row = query("SELECT * FROM webhooks WHERE id=?", [wid], one=True)
+    if not row:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    from app.webhooks import _deliver
+    _deliver(row["id"], row["url"], row["secret"] or "", "ping",
+             {"message": "This is a test webhook from CountDepot"})
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/webhooks/log")
+@login_required
+@admin_required
+def api_webhooks_log():
+    rows = query(
+        "SELECT wl.*, w.url FROM webhook_log wl "
+        "JOIN webhooks w ON w.id=wl.webhook_id "
+        "ORDER BY wl.id DESC LIMIT 100")
+    return jsonify({"ok": True, "log": [dict(r) for r in rows]})
 
 
 # ── Notifications ─────────────────────────────────────────────────────────────

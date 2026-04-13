@@ -17,6 +17,20 @@ def health():
     return jsonify({"ok": True, "service": "countdepot"}), 200
 
 
+@bp.route("/api-docs")
+@login_required
+@admin_required
+def api_docs_page():
+    return render_template("api_docs.html")
+
+
+@bp.route("/webhooks")
+@login_required
+@admin_required
+def webhooks_page():
+    return render_template("webhooks.html")
+
+
 @bp.route("/api/demo-request", methods=["POST"])
 def api_demo_request():
     """Public endpoint — store a demo request and optionally email the team."""

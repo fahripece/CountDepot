@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}API Docs · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">API Documentation</span>
+  <span class="topbar-sub">REST API · Webhooks · Zapier</span>
+</div>
+<div style="flex:1;overflow-y:auto;padding:20px 24px;max-width:860px">
+
+<!-- Auth section -->
+<div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:24px;margin-bottom:16px">
+  <h3 style="font-size:14px;font-weight:700;margin-bottom:12px">Authentication</h3>
+  <p style="font-size:13px;color:#475569;line-height:1.7;margin-bottom:12px">
+    All API requests must include your API key in the <code>Authorization</code> header.
+    Get your key from <a href="/admin" style="color:#7c3aed">Settings → API Keys</a>.
+  </p>
+  <div style="background:#0f172a;border-radius:8px;padding:14px 16px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#e2e8f0">
+    Authorization: Bearer &lt;your-api-key&gt;
+  </div>
+</div>
+
+<!-- Items -->
+<div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:24px;margin-bottom:16px">
+  <h3 style="font-size:14px;font-weight:700;margin-bottom:16px">Items</h3>
+  {% set endpoints = [
+    ("GET", "/api/items", "List all items. Params: status, category_id, search, limit, offset"),
+    ("POST", "/api/item/add", "Create an item. Body: {name, category_id, product_id, serial, sku, shelf, …}"),
+    ("POST", "/api/item/edit", "Update an item. Body: {id, name, …}"),
+    ("POST", "/api/item/delete", "Delete item. Body: {id}"),
+    ("POST", "/api/checkout", "Check out an item. Body: {id, checked_out_by, job_ref, due_date}"),
+    ("POST", "/api/checkin", "Check in an item. Body: {id}"),
+    ("GET", "/api/item/<id>/timeline", "Get item event history"),
+    ("POST", "/api/item/retire", "Retire an item. Body: {id, method, notes, final_book_value}"),
+  ] %}
+  {% for method, path, desc in endpoints %}
+  <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f0ede8">
+    <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;min-width:40px;text-align:center;{% if method=='GET' %}background:#dbeafe;color:#1d4ed8{% elif method=='POST' %}background:#dcfce7;color:#15803d{% elif method=='DELETE' %}background:#fee2e2;color:#b91c1c{% endif %}">{{method}}</span>
+    <code style="font-size:12px;color:#0f172a;flex-shrink:0">{{path}}</code>
+    <span style="font-size:12px;color:#64748b">{{desc}}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Products & Categories -->
+<div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:24px;margin-bottom:16px">
+  <h3 style="font-size:14px;font-weight:700;margin-bottom:16px">Products &amp; Categories</h3>
+  {% set endpoints2 = [
+    ("GET", "/api/categories", "List all categories"),
+    ("POST", "/api/categories", "Create a category. Body: {name, color}"),
+    ("GET", "/api/products", "List products. Params: category_id"),
+    ("POST", "/api/products", "Create a product. Body: {name, category_id, …}"),
+    ("GET", "/api/alerts", "List low stock alerts"),
+  ] %}
+  {% for method, path, desc in endpoints2 %}
+  <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f0ede8">
+    <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;min-width:40px;text-align:center;{% if method=='GET' %}background:#dbeafe;color:#1d4ed8{% elif method=='POST' %}background:#dcfce7;color:#15803d{% endif %}">{{method}}</span>
+    <code style="font-size:12px;color:#0f172a;flex-shrink:0">{{path}}</code>
+    <span style="font-size:12px;color:#64748b">{{desc}}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Procurement -->
+<div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:24px;margin-bottom:16px">
+  <h3 style="font-size:14px;font-weight:700;margin-bottom:16px">Procurement</h3>
+  {% set endpoints3 = [
+    ("GET", "/api/procurement/pos", "List purchase orders. Params: status, vendor"),
+    ("POST", "/api/procurement/pos", "Create a draft PO. Body: {vendor, expected_date, notes}"),
+    ("GET", "/api/procurement/pos/<id>", "Get PO detail with lines"),
+    ("POST", "/api/procurement/pos/<id>/receive", "Receive goods. Body: [{line_id, qty_received}]"),
+    ("GET", "/api/procurement/pos/<id>/pdf", "Download PO as PDF"),
+  ] %}
+  {% for method, path, desc in endpoints3 %}
+  <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f0ede8">
+    <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;min-width:40px;text-align:center;{% if method=='GET' %}background:#dbeafe;color:#1d4ed8{% elif method=='POST' %}background:#dcfce7;color:#15803d{% endif %}">{{method}}</span>
+    <code style="font-size:12px;color:#0f172a;flex-shrink:0">{{path}}</code>
+    <span style="font-size:12px;color:#64748b">{{desc}}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Webhooks -->
+<div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:24px;margin-bottom:16px">
+  <h3 style="font-size:14px;font-weight:700;margin-bottom:12px">Webhooks</h3>
+  <p style="font-size:13px;color:#475569;line-height:1.7;margin-bottom:12px">
+    CountDepot can POST JSON payloads to your endpoint when events occur.
+    Manage webhooks at <a href="/webhooks" style="color:#7c3aed">/webhooks</a>.
+  </p>
+  <div style="background:#0f172a;border-radius:8px;padding:14px 16px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#e2e8f0;margin-bottom:12px">
+{<br>
+&nbsp;&nbsp;"event": "item.checked_out",<br>
+&nbsp;&nbsp;"created_at": "2026-04-13 14:23:00",<br>
+&nbsp;&nbsp;"data": {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"id": 42,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"name": "ThinkPad X1 Carbon",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"checked_out_by": "Alice",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"job_ref": "JOB-2026-099"<br>
+&nbsp;&nbsp;}<br>
+}
+  </div>
+  <p style="font-size:12px;color:#64748b">
+    Verify signature: <code>HMAC-SHA256(secret, raw_body)</code> must match <code>X-CountDepot-Signature</code> header.
+  </p>
+  <div style="margin-top:14px">
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px">Supported Events</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      {% for ev in ["item.added","item.updated","item.deleted","item.checked_out","item.checked_in","item.sold","item.retired","low_stock","po.created","po.approved","po.rejected","po.received","warranty.expiring"] %}
+      <code style="font-size:11px;background:#f1f5f9;padding:2px 8px;border-radius:4px">{{ev}}</code>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Zapier -->
+<div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:24px;margin-bottom:16px">
+  <h3 style="font-size:14px;font-weight:700;margin-bottom:12px">Zapier Integration</h3>
+  <p style="font-size:13px;color:#475569;line-height:1.7;margin-bottom:12px">
+    Connect CountDepot to 6,000+ apps via Zapier using webhooks as your trigger.
+  </p>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="background:#fef9f0;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;font-size:12.5px;color:#92400e">
+      <strong>Step 1:</strong> In Zapier, create a new Zap → Trigger → Webhooks by Zapier → Catch Hook. Copy the webhook URL.
+    </div>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;font-size:12.5px;color:#166534">
+      <strong>Step 2:</strong> In CountDepot, go to <a href="/webhooks" style="color:#15803d">Webhooks</a> → Add Webhook. Paste the Zapier URL and choose your events.
+    </div>
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 14px;font-size:12.5px;color:#075985">
+      <strong>Step 3:</strong> In Zapier, test the trigger, then build your action (Slack message, Google Sheet row, email, etc.).
+    </div>
+  </div>
+</div>
+
+</div>
+{% endblock %}
