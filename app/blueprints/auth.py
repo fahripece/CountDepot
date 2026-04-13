@@ -6,6 +6,7 @@ import secrets as _secrets
 from app.db import query, execute
 from app.helpers import (hash_pw, verify_pw, validate_password,
                          check_login_rate, clear_login_rate, check_rate_limit,
+                         check_account_lockout,
                          get_user_perms, get_user_location_ids, log_auth_event)
 
 bp = Blueprint("auth", __name__)
@@ -57,6 +58,18 @@ def login_page():
                 "login.html",
                 error=f"Too many login attempts. Try again in {reset_in} seconds."
             ), 429
+
+        # Per-account lockout — 5 consecutive failures from any IP → 15-min lockout
+        acct_allowed, locked_until = check_account_lockout(username)
+        if not acct_allowed:
+            log_auth_event("ACCOUNT_LOCKED", username=username, ip=ip,
+                           tenant=getattr(g, "tenant_slug", ""),
+                           detail=f"Account locked until {locked_until}")
+            return render_template(
+                "login.html",
+                error="This account is temporarily locked due to too many failed attempts. Try again in 15 minutes."
+            ), 429
+
         # Email-only login
         user = query("SELECT * FROM users WHERE LOWER(COALESCE(email,''))=?",
                      [username.lower()], one=True)

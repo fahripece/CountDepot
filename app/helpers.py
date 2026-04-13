@@ -99,6 +99,44 @@ def clear_login_rate(ip):
     clear_rate_limit(ip, "login")
 
 
+# ── Per-account lockout (username-level, separate from IP rate limit) ─────────
+# After 5 consecutive failures for a specific email address, lock that account
+# for 15 minutes regardless of which IP the next attempt comes from.
+
+LOCKOUT_MAX    = 5    # failures before lockout
+LOCKOUT_WINDOW = 900  # 15 minutes
+
+def check_account_lockout(username: str):
+    """Returns (allowed: bool, locked_until_str: str | None).
+    Uses the login_log in the current tenant DB (already open in g)."""
+    from datetime import datetime as _dt
+    cutoff = (_dt.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
+    # Count consecutive failures in the last LOCKOUT_WINDOW seconds
+    cutoff_ts = (_dt.utcnow().timestamp() - LOCKOUT_WINDOW)
+    cutoff_s  = _dt.utcfromtimestamp(cutoff_ts).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        row = query(
+            "SELECT COUNT(*) FROM login_log "
+            "WHERE LOWER(username)=LOWER(?) AND result='fail' AND ts>=?",
+            [username, cutoff_s], one=True)
+        failures = row[0] if row else 0
+        if failures >= LOCKOUT_MAX:
+            # Compute when lockout expires: oldest failure in window + LOCKOUT_WINDOW
+            oldest = query(
+                "SELECT ts FROM login_log "
+                "WHERE LOWER(username)=LOWER(?) AND result='fail' AND ts>=? "
+                "ORDER BY ts ASC LIMIT 1", [username, cutoff_s], one=True)
+            if oldest:
+                from datetime import datetime as _dt2
+                oldest_ts  = _dt2.strptime(oldest[0], "%Y-%m-%d %H:%M:%S").timestamp()
+                unlock_ts  = oldest_ts + LOCKOUT_WINDOW
+                unlock_str = _dt2.utcfromtimestamp(unlock_ts).strftime("%Y-%m-%d %H:%M:%S")
+                return False, unlock_str
+        return True, None
+    except Exception:
+        return True, None  # fail open — don't lock out due to DB errors
+
+
 # ── API rate-limit decorator ──────────────────────────────────────────────────
 
 def api_rate_limit(max_attempts=60, window=60):

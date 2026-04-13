@@ -18,7 +18,23 @@ def create_app():
     app.config.from_object(Config)
     app.secret_key = Config.SECRET_KEY
 
-    # Gzip compression for HTML/JSON/CSS responses
+    # ── Sentry error monitoring ───────────────────────────────────────────────
+    _sentry_dsn = Config.SENTRY_DSN
+    if _sentry_dsn:
+        try:
+            import sentry_sdk
+            from sentry_sdk.integrations.flask import FlaskIntegration
+            sentry_sdk.init(
+                dsn=_sentry_dsn,
+                integrations=[FlaskIntegration()],
+                traces_sample_rate=float(Config.SENTRY_TRACES_SAMPLE_RATE),
+                send_default_pii=False,   # never send passwords/tokens to Sentry
+                environment=Config.ENV,
+            )
+        except ImportError:
+            pass  # sentry-sdk not installed; harmless
+
+    # ── Gzip compression for HTML/JSON/CSS responses ──────────────────────────
     try:
         from flask_compress import Compress
         Compress(app)
@@ -221,6 +237,28 @@ def create_app():
         response.headers["X-Frame-Options"]         = "SAMEORIGIN"
         response.headers["X-XSS-Protection"]        = "1; mode=block"
         response.headers["Referrer-Policy"]          = "strict-origin-when-cross-origin"
+        # Permissions-Policy: disable unused browser APIs
+        response.headers["Permissions-Policy"] = (
+            "geolocation=(), microphone=(), camera=(), payment=(self)"
+        )
+        # Content-Security-Policy
+        # Notes:
+        #  - unsafe-inline required for script/style due to extensive inline JS/CSS
+        #  - cdnjs: JsBarcode, Chart.js; fonts.googleapis/gstatic: IBM Plex
+        #  - js.stripe.com: Stripe checkout frames
+        #  - data: blob: needed for item photo uploads / label rendering
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://js.stripe.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: blob: https:; "
+            "connect-src 'self'; "
+            "frame-src https://js.stripe.com; "
+            "object-src 'none'; "
+            "base-uri 'self'; "
+            "frame-ancestors 'self'"
+        )
         # Long-lived cache for static assets (versioned by Flask's url_for ?v=...)
         if request.path.startswith("/static/"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"

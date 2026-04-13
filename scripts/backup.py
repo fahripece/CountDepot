@@ -28,6 +28,13 @@ import tarfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# Optional S3 upload — only needed when S3_BACKUP_BUCKET is set
+try:
+    import boto3
+    _BOTO3_AVAILABLE = True
+except ImportError:
+    _BOTO3_AVAILABLE = False
+
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] %(levelname)s %(message)s",
@@ -148,6 +155,23 @@ def run_backup(data_dir: Path, backup_dir: Path, keep_days: int) -> bool:
     return ok
 
 
+def upload_to_s3(archive: Path, bucket: str, prefix: str) -> bool:
+    """Upload a backup archive to S3. Returns True on success."""
+    if not _BOTO3_AVAILABLE:
+        log.error("boto3 not installed — cannot upload to S3. Run: pip install boto3")
+        return False
+    key = f"{prefix.rstrip('/')}/{archive.name}"
+    try:
+        s3 = boto3.client("s3")
+        s3.upload_file(str(archive), bucket, key,
+                       ExtraArgs={"ServerSideEncryption": "AES256"})
+        log.info(f"  ↑ S3: s3://{bucket}/{key}")
+        return True
+    except Exception as exc:
+        log.error(f"  ✗ S3 upload failed: {exc}")
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description="CountDepot WAL-safe backup")
     parser.add_argument("--data-dir",   default=_default("COUNTDEPOT_DATA_DIR",
@@ -156,6 +180,9 @@ def main():
                                                           str(PROJECT_DIR.parent / "backups")))
     parser.add_argument("--keep-days",  type=int,
                         default=int(_default("COUNTDEPOT_BACKUP_KEEP_DAYS", "14")))
+    parser.add_argument("--s3-bucket",  default=_default("S3_BACKUP_BUCKET", ""),
+                        help="S3 bucket name (also reads S3_BACKUP_BUCKET env var)")
+    parser.add_argument("--s3-prefix",  default=_default("S3_BACKUP_PREFIX", "countdepot-backups"))
     args = parser.parse_args()
 
     success = run_backup(
@@ -163,6 +190,18 @@ def main():
         backup_dir = Path(args.backup_dir).resolve(),
         keep_days  = args.keep_days,
     )
+
+    if success and args.s3_bucket:
+        backup_dir = Path(args.backup_dir).resolve()
+        archives   = sorted(backup_dir.glob("countdepot_*.tar.gz"),
+                            key=lambda p: p.stat().st_mtime)
+        if archives:
+            if not upload_to_s3(archives[-1], args.s3_bucket, args.s3_prefix):
+                success = False
+        else:
+            log.error("No archive found to upload to S3")
+            success = False
+
     sys.exit(0 if success else 1)
 
 

@@ -38,3 +38,10 @@ class Config:
     STRIPE_PRICE_PRO_YEARLY         = os.environ.get("STRIPE_PRICE_PRO_YEARLY", "")
     STRIPE_PRICE_ENTERPRISE_MONTHLY = os.environ.get("STRIPE_PRICE_ENTERPRISE_MONTHLY", "")
     STRIPE_PRICE_ENTERPRISE_YEARLY  = os.environ.get("STRIPE_PRICE_ENTERPRISE_YEARLY", "")
+    # Sentry error monitoring
+    SENTRY_DSN                  = os.environ.get("SENTRY_DSN", "")
+    SENTRY_TRACES_SAMPLE_RATE   = os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.05")
+    ENV                         = os.environ.get("FLASK_ENV", "production")
+    # S3 backups
+    S3_BACKUP_BUCKET            = os.environ.get("S3_BACKUP_BUCKET", "")
+    S3_BACKUP_PREFIX            = os.environ.get("S3_BACKUP_PREFIX", "countdepot-backups")
