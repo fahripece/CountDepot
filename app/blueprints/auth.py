@@ -492,6 +492,86 @@ def auto_login():
     return redirect(url_for("main.inventory"))
 
 
+@bp.route("/auth/google")
+def auth_google():
+    """Redirect to Google for OAuth2 sign-in."""
+    from app import oauth
+    if oauth is None:
+        return render_template("login.html",
+                               error="Google sign-in is not configured. Contact your administrator.")
+    redirect_uri = url_for("auth.auth_google_callback", _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+
+@bp.route("/auth/google/callback")
+def auth_google_callback():
+    """Google OAuth2 callback — creates session or provisions account via JIT."""
+    from app import oauth
+    if oauth is None:
+        return redirect(url_for("auth.login_page"))
+
+    ip = request.remote_addr or "unknown"
+    try:
+        token     = oauth.google.authorize_access_token()
+        user_info = token.get("userinfo") or {}
+    except Exception as e:
+        log_auth_event("GOOGLE_AUTH_ERROR", username="(google)", ip=ip,
+                       tenant=getattr(g, "tenant_slug", ""), detail=str(e))
+        return render_template("login.html", error="Google sign-in failed. Please try again.")
+
+    email = (user_info.get("email") or "").strip().lower()
+    if not email:
+        return render_template("login.html",
+                               error="Google did not return an email address. Please try again.")
+
+    if not user_info.get("email_verified", True):
+        return render_template("login.html",
+                               error="Your Google account email is not verified.")
+
+    # Look up user by email in this tenant's DB
+    user = query("SELECT * FROM users WHERE LOWER(COALESCE(email,''))=?", [email], one=True)
+
+    # JIT provisioning — create account on first Google login if enabled
+    if not user:
+        sso_cfg = query("SELECT jit_enabled, jit_default_role, jit_default_permissions "
+                        "FROM sso_config LIMIT 1", one=True)
+        jit_ok = sso_cfg["jit_enabled"] if sso_cfg else False
+        if jit_ok:
+            given  = user_info.get("given_name", "")
+            family = user_info.get("family_name", "")
+            name   = (f"{given} {family}".strip() or email.split("@")[0])[:50]
+            role   = sso_cfg["jit_default_role"] or "worker"
+            perms  = sso_cfg["jit_default_permissions"] or ""
+            import secrets as _sec
+            uid = execute(
+                "INSERT INTO users (username, password, role, permissions, email, "
+                "email_verified, must_change_password) VALUES (?,?,?,?,?,1,0)",
+                [name, _sec.token_hex(32), role, perms, email])
+            user = query("SELECT * FROM users WHERE id=?", [uid], one=True)
+            log_auth_event("GOOGLE_JIT", username=name, ip=ip,
+                           tenant=getattr(g, "tenant_slug", ""),
+                           detail=f"JIT-provisioned via Google; email={email}")
+        else:
+            return render_template(
+                "login.html",
+                error="No account found for this Google email. "
+                      "Ask your administrator to add you to this workspace.")
+
+    perms = get_user_perms(user["id"], user["role"],
+                           user["permissions"] if "permissions" in user.keys() else "")
+    sess = _build_session(user, perms)
+    session.clear()
+    session.update(sess)
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
+            [now_str, sess["session_token"], user["id"]])
+    execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
+            [user["id"], user["username"], ip, request.user_agent.string, "ok_google", now_str])
+    log_auth_event("GOOGLE_OK", username=user["username"], ip=ip,
+                   tenant=getattr(g, "tenant_slug", ""))
+    return redirect(url_for("main.inventory"))
+
+
 @bp.route("/sso/metadata")
 def sso_metadata():
     """Return SAML SP metadata XML — share this URL with your Identity Provider."""

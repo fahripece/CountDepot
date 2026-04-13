@@ -7345,12 +7345,25 @@ def api_punchout_return(dist_key):
 
 # ── SSO / SAML Admin ──────────────────────────────────────────────────────────
 
-@bp.route("/api/sso/status")
-def api_sso_status():
-    """Public — returns whether SSO is active (used by login page to show SSO button)."""
-    row = query("SELECT enabled, idp_entity_id, idp_sso_url, idp_cert FROM sso_config LIMIT 1", one=True)
-    active = bool(row and row["enabled"] and row["idp_entity_id"] and row["idp_sso_url"] and row["idp_cert"])
-    return jsonify({"ok": True, "enabled": active})
+@bp.route("/api/auth/providers")
+def api_auth_providers():
+    """Public — which login methods are active (used by login page to show buttons)."""
+    from config import Config as _Cfg
+    # Google: enabled when GOOGLE_CLIENT_ID is set and authlib is installed
+    google_on = bool(_Cfg.GOOGLE_CLIENT_ID)
+    if google_on:
+        try:
+            from authlib.integrations.flask_client import OAuth as _O  # noqa
+        except ImportError:
+            google_on = False
+    # SAML SSO: enabled when tenant has configured it
+    try:
+        saml_row = query("SELECT enabled, idp_entity_id, idp_sso_url, idp_cert FROM sso_config LIMIT 1", one=True)
+        saml_on  = bool(saml_row and saml_row["enabled"] and saml_row["idp_entity_id"]
+                        and saml_row["idp_sso_url"] and saml_row["idp_cert"])
+    except Exception:
+        saml_on = False
+    return jsonify({"ok": True, "google": google_on, "saml": saml_on})
 
 
 @bp.route("/api/admin/sso", methods=["GET"])

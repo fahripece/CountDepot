@@ -9,5 +9,6 @@ pdfplumber>=0.10
 reportlab>=4.0
 sentry-sdk[flask]>=1.40
 boto3>=1.34
+authlib>=1.3
 # SSO/SAML — requires system libs: apt-get install libxmlsec1-dev libxmlsec1-openssl pkg-config
 python3-saml>=1.15

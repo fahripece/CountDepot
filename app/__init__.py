@@ -8,8 +8,19 @@ from app.tenant import resolve_tenant
 from app.db import close_db, query
 from app.schema import init_db
 
+# ── Google OAuth2 ─────────────────────────────────────────────────────────────
+try:
+    from authlib.integrations.flask_client import OAuth as _OAuth
+    _oauth_available = True
+except ImportError:
+    _oauth_available = False
+
+oauth = None  # set in create_app()
+
 
 def create_app():
+    global oauth
+
     app = Flask(
         __name__,
         template_folder="../templates",
@@ -17,6 +28,17 @@ def create_app():
     )
     app.config.from_object(Config)
     app.secret_key = Config.SECRET_KEY
+
+    # ── Google OAuth2 client ──────────────────────────────────────────────────
+    if _oauth_available and Config.GOOGLE_CLIENT_ID:
+        oauth = _OAuth(app)
+        oauth.register(
+            name="google",
+            client_id=Config.GOOGLE_CLIENT_ID,
+            client_secret=Config.GOOGLE_CLIENT_SECRET,
+            server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+            client_kwargs={"scope": "openid email profile"},
+        )
 
     # ── Sentry error monitoring ───────────────────────────────────────────────
     _sentry_dsn = Config.SENTRY_DSN
@@ -173,7 +195,8 @@ def create_app():
         skip = ("/onboarding", "/login", "/logout", "/change-password",
                 "/forgot-password", "/reset-password", "/verify-email",
                 "/resend-verification", "/billing", "/static", "/signup",
-                "/verify-signup", "/resend-signup-verify", "/auto-login")
+                "/verify-signup", "/resend-signup-verify", "/auto-login",
+                "/auth/google", "/sso/")
         if any(request.path.startswith(s) for s in skip):
             return
 

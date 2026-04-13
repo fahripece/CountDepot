@@ -1120,7 +1120,9 @@ async function loadSso(){
   document.getElementById('sso-sp-acs').textContent=base+'/sso/acs';
   document.getElementById('sso-metadata-link').href=base+'/sso/metadata';
 
-  // Check if python3-saml is available by fetching metadata
+  // Check if python3-saml is available
+  const providers=await fetch('/api/auth/providers').then(r=>r.json()).catch(()=>({ok:false}));
+  // Show warning if SAML lib not installed (metadata endpoint returns 503)
   const metaOk=await fetch('/sso/metadata').then(r=>r.status!==503).catch(()=>false);
   if(!metaOk)document.getElementById('sso-saml-warn').style.display='block';
 
