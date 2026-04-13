@@ -893,29 +893,45 @@ def api_checkin():
 @login_required
 def api_get_locations():
     allowed_ids = session.get("location_ids") or []
-    # Single query: item counts + member counts in one pass
+    # Correlated subqueries avoid cross-product from joining items + user_locations simultaneously
     sql = """
-        SELECT l.id, l.name, l.description, l.email, l.created_at,
-               COUNT(DISTINCT CASE WHEN i.active=1 THEN i.id END)                                             AS item_count,
-               COUNT(DISTINCT CASE WHEN i.active=1 AND i.checked_out=0 AND i.sold=0 THEN i.id END)           AS available_count,
-               COUNT(DISTINCT ul.user_id)                                                                      AS member_count,
-               GROUP_CONCAT(DISTINCT mu.username ORDER BY mu.username)                                         AS member_names_csv
+        SELECT l.*,
+               (SELECT COUNT(*) FROM items WHERE location_id=l.id AND active=1)                             AS item_count,
+               (SELECT COUNT(*) FROM items WHERE location_id=l.id AND active=1
+                                             AND checked_out=0 AND sold=0)                                  AS available_count,
+               (SELECT COUNT(*) FROM user_locations WHERE location_id=l.id)                                 AS member_count
         FROM locations l
-        LEFT JOIN items i       ON i.location_id = l.id
-        LEFT JOIN user_locations ul ON ul.location_id = l.id
-        LEFT JOIN users mu      ON mu.id = ul.user_id AND mu.active = 1
     """
     if allowed_ids:
         sql += f" WHERE l.id IN ({','.join('?'*len(allowed_ids))})"
-    sql += " GROUP BY l.id ORDER BY l.name"
+    sql += " ORDER BY l.name"
     rows = query(sql, allowed_ids if allowed_ids else [])
-    result = []
-    for r in rows:
-        d = dict(r)
-        csv = d.pop("member_names_csv") or ""
-        names = [n for n in csv.split(",") if n] if csv else []
-        d["member_names"] = names[:5]
-        result.append(d)
+    result = [dict(r) for r in rows]
+
+    # Fetch member names for all locations in one query (avoids N+1)
+    if result:
+        loc_ids = [r["id"] for r in result]
+        placeholders = ",".join("?" * len(loc_ids))
+        member_rows = query(
+            f"SELECT ul.location_id, u.username "
+            f"FROM user_locations ul "
+            f"JOIN users u ON u.id=ul.user_id AND u.active=1 "
+            f"WHERE ul.location_id IN ({placeholders}) "
+            f"ORDER BY u.username",
+            loc_ids)
+        members_by_loc = {}
+        for mr in member_rows:
+            lid = mr["location_id"]
+            if lid not in members_by_loc:
+                members_by_loc[lid] = []
+            if len(members_by_loc[lid]) < 5:
+                members_by_loc[lid].append(mr["username"])
+        for loc in result:
+            loc["member_names"] = members_by_loc.get(loc["id"], [])
+    else:
+        for loc in result:
+            loc["member_names"] = []
+
     return jsonify(result)
 
 
