@@ -10,5 +10,7 @@ reportlab>=4.0
 sentry-sdk[flask]>=1.40
 boto3>=1.34
 authlib>=1.3
-# SSO/SAML — requires system libs: apt-get install libxmlsec1-dev libxmlsec1-openssl pkg-config
-python3-saml>=1.15
+# SSO/SAML (optional, enterprise only) — NOT in default install.
+# Requires system libs first: apt-get install libxmlsec1-dev libxmlsec1-openssl pkg-config
+# Then: pip install python3-saml
+# The app runs fine without it; the SAML routes return 503 when it's not installed.
