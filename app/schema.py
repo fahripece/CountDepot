@@ -33,6 +33,7 @@ from app.helpers import hash_pw
 
 MIGRATIONS = [
     # users table additions
+    ("users", "active",              "INTEGER NOT NULL DEFAULT 1"),
     ("users", "email",                "TEXT"),
     ("users", "must_change_password", "INTEGER NOT NULL DEFAULT 0"),
     ("users", "last_login",           "TEXT"),

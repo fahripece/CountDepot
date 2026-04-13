@@ -947,7 +947,7 @@ def api_get_locations():
             member_rows = query(
                 f"SELECT ul.location_id, u.username "
                 f"FROM user_locations ul "
-                f"JOIN users u ON u.id=ul.user_id AND u.active=1 "
+                f"JOIN users u ON u.id=ul.user_id AND COALESCE(u.active,1)=1 "
                 f"WHERE ul.location_id IN ({placeholders}) "
                 f"ORDER BY u.username",
                 loc_ids)
@@ -1001,7 +1001,7 @@ def api_get_location_users(loc_id):
             "  CASE WHEN ul.location_id IS NOT NULL THEN 1 ELSE 0 END AS assigned "
             "FROM users u "
             "LEFT JOIN user_locations ul ON ul.user_id=u.id AND ul.location_id=? "
-            "WHERE u.active=1 ORDER BY u.role DESC, u.username",
+            "WHERE COALESCE(u.active, 1) = 1 ORDER BY u.role DESC, u.username",
             [loc_id])
         return jsonify([dict(r) for r in rows])
     except Exception as e:
