@@ -82,6 +82,7 @@
     <option value="low">🔴 Low Stock</option>
     <option value="incomplete">⚠ Incomplete</option>
     <option value="maintenance">🔧 Maintenance Due</option>
+    <option value="retired">♻ Retired</option>
   </select>
   <select id="condFilter" class="select" style="width:auto;min-width:120px" onchange="loadItems()">
     <option value="">All Conditions</option>
@@ -474,6 +475,39 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('ebayModal')">Cancel</button>
       <button class="btn btn-primary" id="ebayBtn" onclick="confirmEbay()">Save eBay Status</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RETIRE MODAL ══ -->
+<div class="overlay" id="retireModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">♻ Retire Item</div><button class="modal-close" onclick="closeModal('retireModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#f8f8f7;border-radius:7px;padding:10px 12px;margin-bottom:14px">
+        <div style="font-weight:600;font-size:13px" id="retire-item-name"></div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:2px">This item will leave active inventory but remain in the audit trail.</div>
+      </div>
+      <div class="field"><label class="label">Disposal Method *</label>
+        <select class="select" id="retire-method">
+          <option value="">— Select —</option>
+          <option value="Disposed">Disposed</option>
+          <option value="Donated">Donated</option>
+          <option value="Scrapped">Scrapped</option>
+          <option value="Transferred">Transferred</option>
+          <option value="Lost">Lost / Missing</option>
+        </select>
+      </div>
+      <div class="field"><label class="label">Final Book Value ($)</label>
+        <input class="input" id="retire-book-value" type="number" step="0.01" min="0" placeholder="e.g. 0.00">
+      </div>
+      <div class="field"><label class="label">Notes</label>
+        <textarea class="input" id="retire-notes" style="min-height:56px;resize:vertical" placeholder="Reason, recipient, disposal certificate #, etc."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('retireModal')">Cancel</button>
+      <button class="btn btn-primary" id="retireBtn" onclick="confirmRetire()">Retire Item</button>
     </div>
   </div>
 </div>
@@ -905,8 +939,19 @@ function showDetail(item){
   }
   if(item.notes) rows.push(['Notes',item.notes]);
   document.getElementById('dp-fields').innerHTML=rows.map(([l,v])=>`<div class="dl-row"><div class="dl-l">${l}</div><div class="dl-v">${v}</div></div>`).join('');
+  // Retired banner in detail info
+  if(item.retired){
+    rows.push(['Status','<span style="display:inline-block;background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600">♻ RETIRED</span>']);
+    if(item.retirement_method) rows.push(['Disposal Method', item.retirement_method]);
+    if(item.retired_at) rows.push(['Retired On', item.retired_at.slice(0,10)]);
+    if(item.retirement_notes) rows.push(['Retirement Notes', item.retirement_notes]);
+    if(item.final_book_value!=null) rows.push(['Final Book Value','$'+parseFloat(item.final_book_value).toFixed(2)]);
+  }
   let acts='';
-  if(item.sold){
+  if(item.retired){
+    acts=`<div style="background:#f1f5f9;border-radius:7px;padding:10px 12px;font-size:12.5px;color:#475569;font-weight:500">♻ Retired${item.retired_at?' on '+item.retired_at.slice(0,10):''}</div>`;
+    acts+=`<button class="btn btn-secondary btn-sm" onclick="undoRetire(${item.id})" style="font-size:11px">↩ Undo Retirement</button>`;
+  } else if(item.sold){
     acts=`<div style="background:#f5f3ff;border-radius:7px;padding:10px 12px;font-size:12.5px;color:#7c3aed;font-weight:500">✓ Sold — $${parseFloat(item.sold_price||0).toFixed(2)}${item.sold_to?' to '+item.sold_to:''}<br><span style="font-weight:400;color:#94a3b8">${item.sold_date||''}</span></div>`;
   } else if(item.qty!==null){
     acts=`<button class="btn btn-primary" onclick="openQtyAdjust(${item.id})">Adjust Quantity</button>`;
@@ -920,6 +965,9 @@ function showDetail(item){
   acts+=`<button class="btn btn-secondary" onclick="printLabel(${item.id})" style="font-size:11px">🏷 Label</button>`;
   if(item.is_incomplete){
     acts+=`<button class="btn btn-secondary" style="background:#fef3c7;color:#92400e;border-color:#fde68a;font-size:11px" onclick="openConfirmScan(${item.id})" title="Scan the label to confirm this item">🔍 Scan to Confirm</button>`;
+  }
+  if(!item.sold&&!item.retired){
+    acts+=`<button class="btn btn-secondary" style="font-size:11px;color:#475569" onclick="openRetireModal(${item.id})" title="Retire this item">♻ Retire</button>`;
   }
   document.getElementById('dp-actions').innerHTML=acts;
   loadNotes(item.id);
@@ -1523,6 +1571,39 @@ async function deletePhoto(photoId,itemId){
   const csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
   const res=await fetch('/api/photo/'+photoId,{method:'DELETE',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken}}).then(r=>r.json());
   if(res.ok){toast('Photo deleted','warn');loadPhotos(itemId);}
+  else toast(res.msg||'Error','err');
+}
+
+// ── Retirement ──
+let _retireItemId=null;
+function openRetireModal(itemId){
+  const item=allItems.find(i=>i.id===itemId);
+  if(!item)return;
+  _retireItemId=itemId;
+  document.getElementById('retire-item-name').textContent=item.name;
+  document.getElementById('retire-method').value='';
+  document.getElementById('retire-book-value').value='';
+  document.getElementById('retire-notes').value='';
+  openModal('retireModal');
+}
+async function confirmRetire(){
+  const method=document.getElementById('retire-method').value;
+  if(!method){toast('Select a disposal method','warn');return;}
+  const btn=document.getElementById('retireBtn');
+  btn.disabled=true;btn.textContent='Retiring…';
+  const res=await api('/api/item/retire',{
+    id:_retireItemId,method,
+    notes:document.getElementById('retire-notes').value.trim()||null,
+    final_book_value:document.getElementById('retire-book-value').value||null
+  });
+  btn.disabled=false;btn.textContent='Retire Item';
+  if(res.ok){toast('Item retired','ok');closeModal('retireModal');closeDetail();await loadItems();}
+  else toast(res.msg||'Error','err');
+}
+async function undoRetire(itemId){
+  if(!confirm('Restore this item to active inventory?'))return;
+  const res=await api('/api/item/retire',{id:itemId,undo:true});
+  if(res.ok){toast('Retirement reversed','ok');closeDetail();await loadItems();}
   else toast(res.msg||'Error','err');
 }
 

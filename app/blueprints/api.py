@@ -410,12 +410,13 @@ def api_items():
     loc_id   = request.args.get("loc", "")
     tag      = request.args.get("tag", "").strip()
     cond_f   = request.args.get("cond", "").strip()
+    show_retired = (status == "retired")
     base_where = """FROM items i
              LEFT JOIN categories c  ON c.id=i.category_id
              LEFT JOIN products p    ON p.id=i.product_id
              LEFT JOIN companies co  ON co.id=i.company_id
              LEFT JOIN locations l   ON l.id=i.location_id
-             WHERE i.active=1"""
+             WHERE i.active=1 AND COALESCE(i.retired,0)=""" + ("1" if show_retired else "0")
     sql  = """SELECT i.*, c.name as category, c.color,
                     p.name as product_name, p.serial_tracked, p.qty_tracked,
                     p.require_scan_checkout as product_scan_req,
@@ -469,6 +470,8 @@ def api_items():
         today_str = datetime.now().strftime("%Y-%m-%d")
         sql += " AND i.sold=0 AND i.next_maintenance_date IS NOT NULL AND i.next_maintenance_date <= ?"
         args.append(today_str)
+    elif status == "retired":
+        pass  # base_where already filters to retired=1
     else:
         if not no_paginate:
             sql += " AND i.checked_out=0 AND i.sold=0"
@@ -1179,6 +1182,43 @@ def api_item_sell():
                {"sold": 0}, {"sold": 1, "price": price})
     notify_low_stock_if_needed(item.get("product_id"))
     return jsonify({"ok": True, "profit": profit})
+
+
+# ── Retirement ───────────────────────────────────────────────────────────────
+
+@bp.route("/api/item/retire", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_item_retire():
+    d      = request.json or {}
+    iid    = d.get("id")
+    method = (d.get("method") or "").strip()
+    notes  = (d.get("notes") or "").strip() or None
+    book_v = float(d["final_book_value"]) if d.get("final_book_value") not in (None, "") else None
+    undo   = bool(d.get("undo", False))
+
+    item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+    loc_ids = session.get("location_ids") or []
+    if loc_ids and item["location_id"] not in loc_ids:
+        return jsonify({"ok": False, "msg": "Not found"}), 404
+
+    if undo:
+        execute("UPDATE items SET retired=0,retired_at=NULL,retirement_method=NULL,"
+                "retirement_notes=NULL,final_book_value=NULL WHERE id=?", [iid])
+        log_action("ITEM_UNRETIRED", iid, item["name"], "Retirement reversed")
+        return jsonify({"ok": True})
+
+    if item["checked_out"]:
+        return jsonify({"ok": False, "msg": "Check item in before retiring it"})
+    now = datetime.now().strftime("%Y-%m-%d")
+    execute("UPDATE items SET retired=1,retired_at=?,retirement_method=?,retirement_notes=?,"
+            "final_book_value=?,checked_out=0 WHERE id=?",
+            [now, method or None, notes, book_v, iid])
+    log_action("ITEM_RETIRED", iid, item["name"],
+               f"Method: {method or 'unspecified'} | {notes or ''}")
+    return jsonify({"ok": True})
 
 
 # ── Out of service ────────────────────────────────────────────────────────────
