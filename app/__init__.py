@@ -123,7 +123,7 @@ def create_app():
             host not in ("localhost", "127.0.0.1")
             and len(parts) < 3
         )
-        if is_bare_domain:
+        if is_bare_domain and not request.path.startswith("/auth/google"):
             from flask import render_template
             return render_template("landing.html")
 

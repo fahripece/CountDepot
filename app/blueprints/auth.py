@@ -500,17 +500,21 @@ def auth_google():
         return render_template("login.html",
                                error="Google sign-in is not configured. Contact your administrator.")
     redirect_uri = url_for("auth.auth_google_callback", _external=True)
-    return oauth.google.authorize_redirect(redirect_uri)
+    # Store mode (signin vs signup) and whether this is a bare-domain request
+    mode = request.args.get("mode", "signin")
+    return oauth.google.authorize_redirect(redirect_uri, state=mode)
 
 
 @bp.route("/auth/google/callback")
 def auth_google_callback():
-    """Google OAuth2 callback — creates session or provisions account via JIT."""
+    """Google OAuth2 callback — handles both bare-domain (platform) and tenant contexts."""
     from app import oauth
     if oauth is None:
         return redirect(url_for("auth.login_page"))
 
-    ip = request.remote_addr or "unknown"
+    ip   = request.remote_addr or "unknown"
+    mode = request.args.get("state", "signin")
+
     try:
         token     = oauth.google.authorize_access_token()
         user_info = token.get("userinfo") or {}
@@ -523,33 +527,90 @@ def auth_google_callback():
     if not email:
         return render_template("login.html",
                                error="Google did not return an email address. Please try again.")
-
     if not user_info.get("email_verified", True):
         return render_template("login.html",
                                error="Your Google account email is not verified.")
 
-    # Look up user by email in this tenant's DB
+    given  = user_info.get("given_name", "")
+    family = user_info.get("family_name", "")
+    name   = (f"{given} {family}".strip() or email.split("@")[0])[:50]
+
+    tenant_slug = getattr(g, "tenant_slug", None)
+
+    # ── Bare-domain path (countdepot.com) ────────────────────────────────────
+    # Find which tenant this email belongs to; issue a cross-login token.
+    if not tenant_slug:
+        import os as _os, sqlite3 as _sql
+        from config import Config as _Cfg
+        from app.platform import get_platform_db as _get_pdb
+
+        pdb     = _get_pdb()
+        tenants = pdb.execute("SELECT slug FROM tenants WHERE active=1").fetchall()
+        pdb.close()
+
+        found_slug = None
+        found_user = None
+        for row in tenants:
+            slug    = row[0]
+            db_path = _os.path.join(_Cfg.TENANTS_DIR, slug, "inventory.db")
+            if not _os.path.exists(db_path):
+                continue
+            conn = _sql.connect(db_path)
+            conn.row_factory = _sql.Row
+            u = conn.execute(
+                "SELECT * FROM users WHERE LOWER(COALESCE(email,''))=?", [email]
+            ).fetchone()
+            conn.close()
+            if u:
+                found_slug = slug
+                found_user = dict(u)
+                break
+
+        if found_slug:
+            # Existing user — generate cross-login token and redirect to their subdomain
+            import secrets as _sec
+            from app.platform import get_platform_db as _get_pdb2
+            token_val  = _sec.token_urlsafe(32)
+            now        = datetime.utcnow()
+            expires_at = (now + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+            created_at = now.strftime("%Y-%m-%d %H:%M:%S")
+            pdb2 = _get_pdb2()
+            pdb2.execute(
+                "INSERT INTO cross_login_tokens (tenant_slug,user_id,token,expires_at,created_at) "
+                "VALUES (?,?,?,?,?)",
+                [found_slug, found_user["id"], token_val, expires_at, created_at])
+            pdb2.commit()
+            pdb2.close()
+            log_auth_event("GOOGLE_OK", username=found_user.get("username", email),
+                           ip=ip, tenant=found_slug, detail="via Google, bare-domain")
+            host     = request.host.split(":")[0]
+            parts    = host.split(".")
+            base     = ".".join(parts[-2:]) if len(parts) >= 2 else host
+            scheme   = "https" if not ("localhost" in host or "127.0.0.1" in host) else "http"
+            return redirect(f"{scheme}://{found_slug}.{base}/auto-login?token={token_val}")
+
+        # No existing account — redirect to signup with email pre-filled
+        from urllib.parse import urlencode
+        params = urlencode({"google_email": email, "google_name": name})
+        return redirect(f"/signup?{params}")
+
+    # ── Tenant path (subdomain) ──────────────────────────────────────────────
     user = query("SELECT * FROM users WHERE LOWER(COALESCE(email,''))=?", [email], one=True)
 
-    # JIT provisioning — create account on first Google login if enabled
     if not user:
         sso_cfg = query("SELECT jit_enabled, jit_default_role, jit_default_permissions "
                         "FROM sso_config LIMIT 1", one=True)
         jit_ok = sso_cfg["jit_enabled"] if sso_cfg else False
         if jit_ok:
-            given  = user_info.get("given_name", "")
-            family = user_info.get("family_name", "")
-            name   = (f"{given} {family}".strip() or email.split("@")[0])[:50]
-            role   = sso_cfg["jit_default_role"] or "worker"
-            perms  = sso_cfg["jit_default_permissions"] or ""
+            role  = (sso_cfg["jit_default_role"] or "worker") if sso_cfg else "worker"
+            perms = (sso_cfg["jit_default_permissions"] or "") if sso_cfg else ""
             import secrets as _sec
             uid = execute(
                 "INSERT INTO users (username, password, role, permissions, email, "
                 "email_verified, must_change_password) VALUES (?,?,?,?,?,1,0)",
                 [name, _sec.token_hex(32), role, perms, email])
             user = query("SELECT * FROM users WHERE id=?", [uid], one=True)
-            log_auth_event("GOOGLE_JIT", username=name, ip=ip,
-                           tenant=getattr(g, "tenant_slug", ""),
+            log_auth_event("GOOGLE_JIT", username=name, ip=ip, tenant=tenant_slug,
                            detail=f"JIT-provisioned via Google; email={email}")
         else:
             return render_template(
@@ -567,8 +628,7 @@ def auth_google_callback():
             [now_str, sess["session_token"], user["id"]])
     execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
             [user["id"], user["username"], ip, request.user_agent.string, "ok_google", now_str])
-    log_auth_event("GOOGLE_OK", username=user["username"], ip=ip,
-                   tenant=getattr(g, "tenant_slug", ""))
+    log_auth_event("GOOGLE_OK", username=user["username"], ip=ip, tenant=tenant_slug)
     return redirect(url_for("main.inventory"))
 
 
