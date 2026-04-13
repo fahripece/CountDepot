@@ -239,6 +239,45 @@
   </div>
 </div>
 
+<!-- SLACK / TEAMS NOTIFICATIONS -->
+<div class="card" style="margin-bottom:20px">
+  <div style="margin-bottom:16px">
+    <div style="font-weight:600;font-size:15px">Slack &amp; Teams Notifications</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:1px">Send alerts to Slack or Microsoft Teams channels via webhooks</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <!-- Slack -->
+    <div>
+      <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+        <span style="background:#4A154B;color:#fff;border-radius:4px;padding:1px 6px;font-size:10px">Slack</span>
+        <label class="toggle-label" style="cursor:pointer">
+          <input type="checkbox" id="slackEnabled" onchange="saveMessengerSetting('slack_enabled',this.checked?'1':'0')">
+          <span style="font-size:11px;color:#475569">Enable</span>
+        </label>
+      </div>
+      <input class="input" id="slackWebhook" placeholder="https://hooks.slack.com/services/…" style="margin-bottom:6px" onblur="saveMessengerSetting('slack_webhook_url',this.value)">
+      <input class="input" id="slackEvents" placeholder="Event filter (blank = all): low_stock,po_submitted,…" style="margin-bottom:6px;font-size:11px" onblur="saveMessengerSetting('slack_events',this.value)">
+      <button class="btn btn-secondary btn-sm" onclick="testMessenger('slack')">Test</button>
+    </div>
+    <!-- Teams -->
+    <div>
+      <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+        <span style="background:#6264A7;color:#fff;border-radius:4px;padding:1px 6px;font-size:10px">Teams</span>
+        <label class="toggle-label" style="cursor:pointer">
+          <input type="checkbox" id="teamsEnabled" onchange="saveMessengerSetting('teams_enabled',this.checked?'1':'0')">
+          <span style="font-size:11px;color:#475569">Enable</span>
+        </label>
+      </div>
+      <input class="input" id="teamsWebhook" placeholder="https://…webhook.office.com/webhookb2/…" style="margin-bottom:6px" onblur="saveMessengerSetting('teams_webhook_url',this.value)">
+      <input class="input" id="teamsEvents" placeholder="Event filter (blank = all): low_stock,po_approved,…" style="margin-bottom:6px;font-size:11px" onblur="saveMessengerSetting('teams_events',this.value)">
+      <button class="btn btn-secondary btn-sm" onclick="testMessenger('teams')">Test</button>
+    </div>
+  </div>
+  <p style="font-size:11px;color:#94a3b8;margin-top:10px">
+    Events: <code>low_stock</code> · <code>overdue_checkout</code> · <code>po_submitted</code> · <code>po_approved</code> · <code>po_rejected</code> · <code>warranty_expiry</code>
+  </p>
+</div>
+
 <!-- CUSTOMER DATA EXPORT -->
 <div class="card" style="margin-bottom:20px">
   <div style="margin-bottom:12px">
@@ -631,6 +670,26 @@ async function runOvrReminders(){
   m.style.display='inline';setTimeout(()=>m.style.display='none',6000);
 }
 loadOvrSettings();
+
+// ── Slack / Teams ──
+async function loadMessengerSettings(){
+  const d=await fetch('/api/settings').then(r=>r.json()).catch(()=>({}));
+  if(d.slack_webhook_url) document.getElementById('slackWebhook').value=d.slack_webhook_url;
+  if(d.slack_events)      document.getElementById('slackEvents').value=d.slack_events;
+  if(d.teams_webhook_url) document.getElementById('teamsWebhook').value=d.teams_webhook_url;
+  if(d.teams_events)      document.getElementById('teamsEvents').value=d.teams_events;
+  document.getElementById('slackEnabled').checked=(d.slack_enabled==='1');
+  document.getElementById('teamsEnabled').checked=(d.teams_enabled==='1');
+}
+async function saveMessengerSetting(key,val){
+  await api('/api/settings',{[key]:val}).catch(()=>{});
+}
+async function testMessenger(provider){
+  const r=await api('/api/integrations/messenger/test',{provider}).catch(()=>({ok:false}));
+  if(r.ok) alert(`${provider==='slack'?'Slack':'Teams'} test message sent!`);
+  else alert('Test failed: '+(r.msg||'unknown error'));
+}
+loadMessengerSettings();
 
 // ── Scheduled Reports ──
 const SCHED_LABELS={low_stock:'Low Stock Alert',overdue:'Overdue Items',inventory:'Inventory Summary',warranties:'Warranty Expiry (30d)',depreciation:'Depreciation Summary'};

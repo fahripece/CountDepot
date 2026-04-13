@@ -345,6 +345,14 @@ def notify_low_stock_if_needed(product_id):
         for email in emails:
             send_low_stock_alert(email, product["name"],
                                  product["available_count"], product["low_stock_threshold"])
+        try:
+            from app.messenger import notify as _notify
+            _notify("low_stock",
+                    f"Low Stock: {product['name']}",
+                    f"Only {product['available_count']} available (threshold {product['low_stock_threshold']})",
+                    "/inventory")
+        except Exception:
+            pass
     except Exception:
         pass  # never crash the request
 

@@ -2690,6 +2690,9 @@ ALLOWED_SETTINGS = {
     "low_stock_alerts_enabled", "low_stock_alert_email",
     "overdue_reminder_days_1", "overdue_reminder_days_2",
     "overdue_reminder_enabled",
+    "slack_webhook_url", "slack_enabled",
+    "teams_webhook_url", "teams_enabled",
+    "slack_events", "teams_events",
 }
 
 @bp.route("/api/settings", methods=["POST"])
@@ -6106,6 +6109,14 @@ def api_po_submit_approval(po_id):
                    f"Submitted for approval; total=${total:.2f}; threshold=${threshold:.2f}")
         # Email all admins
         _notify_approvers(po, total, threshold)
+        try:
+            from app.messenger import notify as _notify
+            _notify("po_submitted",
+                    f"PO Approval Required: {po['po_number']}",
+                    f"Total ${total:.2f} — submitted by {session.get('username','?')}",
+                    f"/procurement/{po_id}")
+        except Exception:
+            pass
         return jsonify({"ok": True, "new_status": "pending_approval", "requires_approval": True})
     else:
         # Auto-approve: no threshold or below threshold — just send
@@ -6128,6 +6139,14 @@ def api_po_approve(po_id):
             [session.get("username"), now, po_id])
     log_action("PO_APPROVED", None, po["po_number"],
                f"Approved by {session.get('username')}")
+    try:
+        from app.messenger import notify as _notify
+        _notify("po_approved",
+                f"PO Approved: {po['po_number']}",
+                f"Approved by {session.get('username','?')}",
+                f"/procurement/{po_id}")
+    except Exception:
+        pass
     return jsonify({"ok": True, "new_status": "draft"})
 
 
@@ -6303,6 +6322,35 @@ def api_accounting_sync_po(po_id):
 def api_accounting_sync_log():
     rows = query("SELECT * FROM accounting_sync_log ORDER BY id DESC LIMIT 100")
     return jsonify({"ok": True, "log": [dict(r) for r in rows]})
+
+
+# ── Slack / Teams Notifications ───────────────────────────────────────────────
+
+@bp.route("/api/integrations/messenger/test", methods=["POST"])
+@login_required
+@admin_required
+def api_messenger_test():
+    d        = request.json or {}
+    provider = d.get("provider", "")
+    try:
+        from app.messenger import send_slack, send_teams, _get_setting
+        if provider == "slack":
+            url = _get_setting("slack_webhook_url", "")
+            if not url:
+                return jsonify({"ok": False, "msg": "Slack webhook URL not configured"}), 400
+            send_slack(url, "default", "CountDepot Test Notification",
+                       "This is a test message from CountDepot.", None)
+        elif provider == "teams":
+            url = _get_setting("teams_webhook_url", "")
+            if not url:
+                return jsonify({"ok": False, "msg": "Teams webhook URL not configured"}), 400
+            send_teams(url, "default", "CountDepot Test Notification",
+                       "This is a test message from CountDepot.", None)
+        else:
+            return jsonify({"ok": False, "msg": "Unknown provider"}), 400
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
 
 
 # ── Amazon Business Integration ───────────────────────────────────────────────
