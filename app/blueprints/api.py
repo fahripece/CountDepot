@@ -3175,6 +3175,63 @@ def _check_item_limit():
 
 # ── Export / Import ───────────────────────────────────────────────────────────
 
+@bp.route("/export/full-data")
+@login_required
+@admin_required
+def export_full_data():
+    """Download all tenant data as a ZIP archive of CSV files."""
+    import csv, io as _io, zipfile
+    from datetime import datetime as _dt
+    from flask import send_file, g
+
+    today = _dt.now().strftime("%Y-%m-%d")
+    slug  = getattr(g, "tenant_slug", "export")
+
+    # Map of filename → (SQL query, column names list or None to auto-detect)
+    exports = [
+        ("items.csv",            "SELECT * FROM items WHERE active=1 ORDER BY name"),
+        ("products.csv",         "SELECT * FROM products WHERE active=1 ORDER BY name"),
+        ("categories.csv",       "SELECT * FROM categories WHERE active=1 ORDER BY name"),
+        ("audit_log.csv",        "SELECT * FROM audit_log ORDER BY ts DESC LIMIT 50000"),
+        ("checkout_log.csv",     "SELECT * FROM checkout_log ORDER BY checkout_date DESC LIMIT 20000"),
+        ("item_notes.csv",       "SELECT * FROM item_notes ORDER BY created_at DESC"),
+        ("users.csv",            "SELECT id,username,email,role,permissions,created_at,active FROM users ORDER BY id"),
+        ("purchase_orders.csv",  "SELECT * FROM purchase_orders ORDER BY id DESC"),
+        ("po_lines.csv",         "SELECT * FROM po_lines ORDER BY po_id"),
+    ]
+
+    zip_buf = _io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for filename, sql in exports:
+            try:
+                rows = query(sql)
+            except Exception:
+                continue
+            if not rows:
+                continue
+            csv_buf = _io.StringIO()
+            cols = rows[0].keys()
+            writer = csv.DictWriter(csv_buf, fieldnames=cols)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(dict(row))
+            zf.writestr(f"{slug}_data/{filename}", csv_buf.getvalue())
+
+        # Write a README
+        readme = (f"CountDepot Full Data Export\n"
+                  f"Workspace: {slug}\n"
+                  f"Exported: {today}\n\n"
+                  f"Files:\n" +
+                  "\n".join(f"  {fn}" for fn, _ in exports) +
+                  "\n\nThis export contains all active data. Deleted/inactive records are excluded.\n")
+        zf.writestr(f"{slug}_data/README.txt", readme)
+
+    zip_buf.seek(0)
+    log_action("FULL_DATA_EXPORT", detail=f"Full data export downloaded by {session.get('username')}")
+    return send_file(zip_buf, mimetype="application/zip",
+                     as_attachment=True, download_name=f"{slug}_data_{today}.zip")
+
+
 @bp.route("/export/csv")
 @login_required
 @perm_required("import_export")
