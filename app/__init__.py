@@ -113,7 +113,8 @@ def create_app():
                 or request.path.startswith("/verify-signup")
                 or request.path == "/resend-signup-verify"
                 or request.path == "/_cross-login"
-                or request.path == "/_cross-forgot-password"):
+                or request.path == "/_cross-forgot-password"
+                or request.path.startswith("/auth/google")):
             return
 
         # Bare domain (countdepot.com with no subdomain) → landing page
