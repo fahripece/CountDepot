@@ -128,6 +128,9 @@ MIGRATIONS = [
     ("purchase_orders", "xero_po_id",   "TEXT"),
     ("purchase_orders", "synced_at",    "TEXT"),
 
+    # users — per-user low stock alert opt-in
+    ("users", "low_stock_alerts", "INTEGER NOT NULL DEFAULT 0"),
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
 ]
 
@@ -627,13 +630,6 @@ def _init_db_conn(db):
     _run_migrations(db)
 
     # ── Seed default data if tables are empty ──────────────────────────────────
-    if not db.execute("SELECT COUNT(*) FROM companies").fetchone()[0]:
-        for co in ["Other"]:
-            try:
-                db.execute("INSERT INTO companies (name) VALUES (?)", [co])
-            except Exception:
-                pass
-
     if not db.execute("SELECT COUNT(*) FROM categories").fetchone()[0]:
         _seed_categories(db)
 
@@ -672,12 +668,6 @@ def seed_tenant(slug):
     db.execute(
         "INSERT INTO users (username,password,role,must_change_password) VALUES (?,?,?,1)",
         ["admin", hash_pw("admin123"), "admin"])
-
-    for name in ["Other"]:
-        try:
-            db.execute("INSERT INTO distributors (name) VALUES (?)", [name])
-        except Exception:
-            pass
 
     db.commit()
 

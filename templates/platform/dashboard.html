@@ -257,7 +257,7 @@ tr:hover td{background:#1a2947}
             <td>
               <div class="actions">
                 <button class="btn btn-muted btn-xs"
-                  onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'trial' }}','{{ t.trial_ends_at or '' }}',{{ t.notes|tojson if t.notes else 'null' }})">
+                  onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'trial' }}','{{ (t.trial_ends_at or '')[:10] }}',{{ t.notes|tojson if t.notes else 'null' }})">
                   Billing
                 </button>
                 <button class="btn btn-green btn-xs"

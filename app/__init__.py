@@ -212,8 +212,16 @@ def create_app():
         # Subscription enforcement — block expired/overdue tenants
         sub_status  = g.tenant.get("subscription_status", "trial")
         trial_ends  = g.tenant.get("trial_ends_at") or ""
-        from datetime import datetime as _dt
+        from datetime import datetime as _dt, timedelta as _td
         now_iso = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        # Fallback: if trial has no end date, derive one from created_at + 30 days
+        if sub_status == "trial" and not trial_ends:
+            created_at = g.tenant.get("created_at") or ""
+            if created_at:
+                try:
+                    trial_ends = (_dt.strptime(created_at[:19], "%Y-%m-%d %H:%M:%S") + _td(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    pass
         if sub_status == "trial" and trial_ends and now_iso > trial_ends:
             # Trial expired — update DB
             from app.platform import get_platform_db as _get_pdb

@@ -927,6 +927,36 @@ def api_location_items(loc_id):
     return jsonify({"location": dict(loc), "items": [dict(r) for r in items]})
 
 
+@bp.route("/api/location/<int:loc_id>/users")
+@login_required
+@admin_required
+def api_get_location_users(loc_id):
+    """Return all active users with a flag for whether they're assigned to this location."""
+    rows = query(
+        "SELECT u.id, u.username, u.email, u.role, "
+        "  CASE WHEN ul.location_id IS NOT NULL THEN 1 ELSE 0 END AS assigned "
+        "FROM users u "
+        "LEFT JOIN user_locations ul ON ul.user_id=u.id AND ul.location_id=? "
+        "WHERE u.active=1 ORDER BY u.role DESC, u.username",
+        [loc_id])
+    return jsonify([dict(r) for r in rows])
+
+
+@bp.route("/api/location/<int:loc_id>/users", methods=["POST"])
+@login_required
+@admin_required
+def api_set_location_users(loc_id):
+    """Replace user assignments for a location. Send user_ids: [] to clear all."""
+    if not query("SELECT id FROM locations WHERE id=?", [loc_id], one=True):
+        return jsonify({"ok": False, "msg": "Location not found"}), 404
+    user_ids = (request.json or {}).get("user_ids", [])
+    execute("DELETE FROM user_locations WHERE location_id=?", [loc_id])
+    for uid in user_ids:
+        execute("INSERT OR IGNORE INTO user_locations (user_id, location_id) VALUES (?,?)", [uid, loc_id])
+    log_action("SITE_USERS_UPDATE", detail=f"location_id={loc_id} users={user_ids}")
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/user/<int:uid>/locations", methods=["GET"])
 @login_required
 @admin_required
@@ -1648,17 +1678,23 @@ def api_item_edit():
         return jsonify({"ok": False, "msg": "Invalid category"})
     serial = (d.get("serial") or "").strip()
     if serial:
-        # Serial uniqueness scoped to same product
-        edit_prod_id = d.get("product_id") or item["product_id"]
-        if edit_prod_id:
-            dup = query("SELECT id,name FROM items WHERE serial=? AND product_id=? AND active=1 AND id!=?", [serial, edit_prod_id, d["id"]], one=True)
-        else:
-            dup = query("SELECT id,name FROM items WHERE serial=? AND product_id IS NULL AND active=1 AND id!=?", [serial, d["id"]], one=True)
-        if dup: return jsonify({"ok": False, "msg": f"Duplicate serial — already on item #{dup['id']} ({dup['name']})"})
+        # Only check uniqueness if the serial is actually changing
+        current_serial = (item["serial"] or "").strip()
+        if serial != current_serial:
+            edit_prod_id = d.get("product_id") or item["product_id"]
+            if edit_prod_id:
+                dup = query("SELECT id,name FROM items WHERE serial=? AND product_id=? AND active=1 AND id!=?", [serial, edit_prod_id, d["id"]], one=True)
+            else:
+                dup = query("SELECT id,name FROM items WHERE serial=? AND product_id IS NULL AND active=1 AND id!=?", [serial, d["id"]], one=True)
+            if dup: return jsonify({"ok": False, "msg": f"Duplicate serial — already on item #{dup['id']} ({dup['name']})"})
     sku = (d.get("sku") or "").strip()
     if sku:
-        dup = query("SELECT id,name FROM items WHERE sku=? AND active=1 AND id!=?", [sku, d["id"]], one=True)
-        if dup: return jsonify({"ok": False, "msg": f"Duplicate SKU — already on item #{dup['id']} ({dup['name']})"})
+        # Only check uniqueness if the SKU is actually changing — avoids blocking
+        # edits on items that already share a SKU from legacy data or bulk import.
+        current_sku = (item["sku"] or "").strip()
+        if sku != current_sku:
+            dup = query("SELECT id,name FROM items WHERE sku=? AND active=1 AND id!=?", [sku, d["id"]], one=True)
+            if dup: return jsonify({"ok": False, "msg": f"Duplicate SKU — already on item #{dup['id']} ({dup['name']})"})
     try:
         _save_item(d, d["id"])
         log_action("ITEM_EDIT", d["id"], d.get("name"), "Edited", dict(item), d)
@@ -2731,6 +2767,47 @@ def api_save_settings():
     return jsonify({"ok": True})
 
 
+@bp.route("/api/alert-emails", methods=["GET"])
+@login_required
+@admin_required
+def api_get_alert_emails():
+    """Return current alert email list and all users with their alert opt-in status."""
+    settings = {r["key"]: r["value"] for r in query("SELECT key,value FROM settings")}
+    raw = settings.get("low_stock_alert_email", "") or ""
+    emails = [e.strip() for e in raw.split(",") if e.strip()]
+    users = query(
+        "SELECT id, username, email, role, COALESCE(low_stock_alerts,0) AS low_stock_alerts "
+        "FROM users WHERE active=1 ORDER BY role DESC, username")
+    return jsonify({
+        "ok": True,
+        "emails": emails,
+        "users": [dict(u) for u in users],
+    })
+
+
+@bp.route("/api/alert-emails", methods=["POST"])
+@login_required
+@admin_required
+def api_save_alert_emails():
+    """Save comma-separated alert emails and per-user alert flags."""
+    d = request.json or {}
+    # emails — deduplicate, basic validation
+    raw_emails = d.get("emails", [])
+    clean = list({e.strip() for e in raw_emails if "@" in (e or "")})
+    csv_value = ",".join(clean)
+    existing = query("SELECT key FROM settings WHERE key='low_stock_alert_email'", one=True)
+    if existing:
+        execute("UPDATE settings SET value=? WHERE key='low_stock_alert_email'", [csv_value])
+    else:
+        execute("INSERT INTO settings (key,value) VALUES ('low_stock_alert_email',?)", [csv_value])
+    # per-user flags
+    user_flags = d.get("user_alerts", {})  # {user_id: 0|1}
+    for uid, flag in user_flags.items():
+        execute("UPDATE users SET low_stock_alerts=? WHERE id=?", [1 if flag else 0, uid])
+    log_action("SETTINGS_UPDATE", detail=f"Alert emails updated: {len(clean)} address(es), {len(user_flags)} user flags")
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/low-stock/send-report", methods=["POST"])
 @login_required
 @admin_required
@@ -2744,9 +2821,14 @@ def api_send_low_stock_report():
         return jsonify({"ok": False, "msg": "SMTP is not configured on this server."})
 
     settings = {r["key"]: r["value"] for r in query("SELECT key,value FROM settings")}
-    alert_email = settings.get("low_stock_alert_email", "").strip()
-    if not alert_email:
-        return jsonify({"ok": False, "msg": "No alert email address set. Add one in the Low Stock Alerts settings."})
+    raw = settings.get("low_stock_alert_email", "") or ""
+    alert_emails = [e.strip() for e in raw.split(",") if e.strip()]
+    # also include users who have opted in and have an email address
+    user_rows = query(
+        "SELECT email FROM users WHERE COALESCE(low_stock_alerts,0)=1 AND email IS NOT NULL AND email != '' AND active=1")
+    alert_emails += [r["email"] for r in user_rows if r["email"] not in alert_emails]
+    if not alert_emails:
+        return jsonify({"ok": False, "msg": "No alert recipients configured. Add an email address or assign users in the Low Stock Alerts settings."})
 
     alerts = get_low_stock_alerts()
     if not alerts:
@@ -2790,10 +2872,19 @@ def api_send_low_stock_report():
             "\n".join(f"• {a['name']}: {a['available_count']} available (min {a['low_stock_threshold']})" for a in alerts) + \
             f"\n\nView: {link}"
 
-    ok = send_email(alert_email, f"Low Stock Alert — {len(alerts)} product(s) need restocking", html, plain)
-    if ok:
-        log_action("LOW_STOCK_REPORT_SENT", detail=f"Sent to {alert_email}, {len(alerts)} items")
-        return jsonify({"ok": True, "msg": f"Report sent to {alert_email}"})
+    subject = f"Low Stock Alert — {len(alerts)} product(s) need restocking"
+    sent_to, failed = [], []
+    for addr in alert_emails:
+        if send_email(addr, subject, html, plain):
+            sent_to.append(addr)
+        else:
+            failed.append(addr)
+    if sent_to:
+        log_action("LOW_STOCK_REPORT_SENT", detail=f"Sent to {', '.join(sent_to)}, {len(alerts)} items")
+        msg = f"Report sent to {', '.join(sent_to)}"
+        if failed:
+            msg += f" (failed: {', '.join(failed)})"
+        return jsonify({"ok": True, "msg": msg})
     return jsonify({"ok": False, "msg": "Failed to send email. Check SMTP settings on the server."})
 
 

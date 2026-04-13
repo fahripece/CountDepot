@@ -335,13 +335,6 @@ def _bootstrap_tenant_db(slug, admin_password, admin_email=None, pre_hashed_pass
     # schema.py owns the DDL — _init_db_conn works on any raw connection
     _init_db_conn(db)
 
-    # Seed distributors (not part of init_db — bootstrap-only)
-    for d_name in ["Other"]:
-        try:
-            db.execute("INSERT INTO distributors (name) VALUES (?)", [d_name])
-        except Exception:
-            pass
-
     # Create admin user — email is the login identifier
     pw_hash = pre_hashed_password if pre_hashed_password else hash_pw(admin_password)
     smtp_on = bool(Config.SMTP_HOST)
@@ -414,6 +407,13 @@ def tenant_billing(slug):
     trial_ends = request.form.get("trial_ends_at", "").strip() or None
     notes      = request.form.get("notes", "").strip() or None
     db = get_platform_db()
+    # If trial_ends_at was left blank, preserve the existing value rather than
+    # overwriting it with NULL (an HTML date input can't render a full datetime
+    # string, so the field often appears empty even when a date is already set).
+    if trial_ends is None and status == "trial":
+        existing = db.execute("SELECT trial_ends_at FROM tenants WHERE slug=?", [slug]).fetchone()
+        if existing and existing["trial_ends_at"]:
+            trial_ends = existing["trial_ends_at"]
     db.execute(
         "UPDATE tenants SET subscription_status=?, trial_ends_at=?, notes=? WHERE slug=?",
         [status, trial_ends, notes, slug])

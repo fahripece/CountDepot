@@ -362,7 +362,7 @@ def notify_low_stock_if_needed(product_id):
             last_dt = datetime.strptime(last[:19], "%Y-%m-%d %H:%M:%S")
             if datetime.utcnow() - last_dt < timedelta(hours=24):
                 return
-        # Prefer site-specific alert emails over global admin emails
+        # Prefer site-specific alert emails over global settings
         site_rows = query("""
             SELECT DISTINCT l.email
             FROM items i
@@ -372,8 +372,21 @@ def notify_low_stock_if_needed(product_id):
         """, [product_id])
         emails = [r["email"] for r in site_rows if r.get("email")]
         if not emails:
+            # Global alert emails from settings (comma-separated)
+            setting = query("SELECT value FROM settings WHERE key='low_stock_alert_email'", one=True)
+            raw = (setting["value"] if setting else "") or ""
+            emails = [e.strip() for e in raw.split(",") if e.strip()]
+            # Users with low_stock_alerts flag set
+            user_rows = query(
+                "SELECT email FROM users WHERE COALESCE(low_stock_alerts,0)=1 "
+                "AND email IS NOT NULL AND email != '' AND active=1")
+            for r in user_rows:
+                if r["email"] not in emails:
+                    emails.append(r["email"])
+        if not emails:
+            # Final fallback: all admin users
             admins = query(
-                "SELECT email FROM users WHERE role='admin' AND email IS NOT NULL AND email != ''")
+                "SELECT email FROM users WHERE role='admin' AND email IS NOT NULL AND email != '' AND active=1")
             emails = [r["email"] for r in admins if r.get("email")]
         if not emails:
             return

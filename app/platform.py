@@ -120,8 +120,8 @@ def create_tenant(slug, name, plan="trial", owner_email=None):
     """Create a new tenant and their data directory."""
     from datetime import datetime, timedelta
     db  = get_platform_db()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    trial_ends = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    trial_ends = (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     db.execute(
         "INSERT INTO tenants (slug, name, plan, sector, onboarded, active, created_at, "
         "owner_email, subscription_status, trial_ends_at) VALUES (?,?,?,'',0,1,?,?,?,?)",
