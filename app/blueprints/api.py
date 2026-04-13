@@ -115,6 +115,9 @@ def _save_item(d, iid=None):
         purchased_from        = d.get("purchased_from") or None,
         sale_state            = d.get("sale_state") or None,
         depreciation_rate     = float(d["depreciation_rate"]) if d.get("depreciation_rate") not in (None, "") else None,
+        warranty_expiry       = d.get("warranty_expiry") or None,
+        contract_expiry       = d.get("contract_expiry") or None,
+        warranty_notes        = d.get("warranty_notes") or None,
         tags                  = ",".join(t.strip() for t in str(d.get("tags") or "").split(",") if t.strip()),
         location_id           = int(d["location_id"]) if d.get("location_id") not in (None, "") else None,
     )
@@ -237,6 +240,51 @@ def api_report_inventory():
     }
     return jsonify({"period": {"from": date_from, "to": date_to},
                     "totals": totals, "items": result})
+
+
+@bp.route("/api/report/warranties")
+@login_required
+@perm_required("view_inventory")
+def api_report_warranties():
+    """Return items with warranty_expiry or contract_expiry, sorted soonest first."""
+    horizon = request.args.get("days", "90")
+    try:
+        horizon = int(horizon)
+    except Exception:
+        horizon = 90
+    from datetime import date, timedelta
+    today = date.today().isoformat()
+    cutoff = (date.today() + timedelta(days=horizon)).isoformat()
+    rows = query("""
+        SELECT i.id, i.name, i.serial, i.sku, i.internal_sku, i.shelf,
+               i.warranty_expiry, i.contract_expiry, i.warranty_notes,
+               i.checked_out, i.purchase_date, i.cost_price,
+               c.name as category, p.name as product_name
+        FROM items i
+        LEFT JOIN categories c ON c.id=i.category_id
+        LEFT JOIN products p ON p.id=i.product_id
+        WHERE i.active=1 AND i.sold=0
+          AND (
+            (i.warranty_expiry IS NOT NULL AND i.warranty_expiry <= ?)
+            OR (i.contract_expiry IS NOT NULL AND i.contract_expiry <= ?)
+          )
+        ORDER BY COALESCE(i.warranty_expiry, i.contract_expiry)
+    """, [cutoff, cutoff])
+    result = []
+    for r in rows:
+        d = dict(r)
+        if r["warranty_expiry"]:
+            diff = (date.fromisoformat(r["warranty_expiry"]) - date.today()).days
+            d["warranty_days_left"] = diff
+        else:
+            d["warranty_days_left"] = None
+        if r["contract_expiry"]:
+            diff2 = (date.fromisoformat(r["contract_expiry"]) - date.today()).days
+            d["contract_days_left"] = diff2
+        else:
+            d["contract_days_left"] = None
+        result.append(d)
+    return jsonify({"ok": True, "horizon": horizon, "today": today, "items": result})
 
 
 @bp.route("/api/report/activity")

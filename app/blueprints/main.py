@@ -249,6 +249,13 @@ def kits_page():
     return render_template("kits.html")
 
 
+@bp.route("/report/warranties")
+@login_required
+@perm_required("view_inventory")
+def report_warranties():
+    return render_template("report_warranties.html")
+
+
 # ── Procurement helpers ───────────────────────────────────────────────────────
 
 def _po_number():

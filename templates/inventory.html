@@ -370,6 +370,11 @@
               <label class="label">Depreciation Rate (% per year) <span style="font-weight:400;font-size:10px;color:#94a3b8">for current value tracking</span></label>
               <input class="input" id="fi-depreciation" type="number" step="0.1" min="0" max="100" placeholder="e.g. 20 for 20%/yr">
             </div>
+            <div class="field-row">
+              <div class="field"><label class="label">Warranty Expiry</label><input class="input" id="fi-warranty-expiry" type="date"></div>
+              <div class="field"><label class="label">Service Contract Expiry</label><input class="input" id="fi-contract-expiry" type="date"></div>
+            </div>
+            <div class="field"><label class="label">Warranty Notes</label><input class="input" id="fi-warranty-notes" placeholder="e.g. 3yr on-site, call 1-800-…"></div>
             <div class="field">
               <label class="label">eBay Status</label>
               <select class="select" id="fi-ebay-status" onchange="document.getElementById('fi-ebay-fields').style.display=this.value!=='not_listed'?'':'none'">
@@ -880,6 +885,24 @@ function showDetail(item){
     const curVal=item.cost_price!=null?Math.max(0,item.cost_price*(1-(item.depreciation_rate/100)*yrs)):null;
     rows.push(['Depreciation',`${item.depreciation_rate}% /yr${curVal!=null?' · <strong>Current value: $'+curVal.toFixed(2)+'</strong>':''}`]);
   }
+  if(item.warranty_expiry){
+    const today=new Date();today.setHours(0,0,0,0);
+    const wExp=new Date(item.warranty_expiry);
+    const wDiff=Math.round((wExp-today)/(1000*60*60*24));
+    const wStr=wDiff<0?`<span style="color:#b91c1c;font-weight:600">${item.warranty_expiry} — EXPIRED</span>`:
+      wDiff<=30?`<span style="color:#b45309;font-weight:600">${item.warranty_expiry} ⚠ ${wDiff}d left</span>`:
+      item.warranty_expiry;
+    rows.push(['Warranty Expiry', wStr+(item.warranty_notes?` <span style="color:#94a3b8;font-size:11px">· ${item.warranty_notes}</span>`:'')]);
+  }
+  if(item.contract_expiry){
+    const today2=new Date();today2.setHours(0,0,0,0);
+    const cExp=new Date(item.contract_expiry);
+    const cDiff=Math.round((cExp-today2)/(1000*60*60*24));
+    const cStr=cDiff<0?`<span style="color:#b91c1c;font-weight:600">${item.contract_expiry} — EXPIRED</span>`:
+      cDiff<=30?`<span style="color:#b45309;font-weight:600">${item.contract_expiry} ⚠ ${cDiff}d left</span>`:
+      item.contract_expiry;
+    rows.push(['Contract Expiry', cStr]);
+  }
   if(item.notes) rows.push(['Notes',item.notes]);
   document.getElementById('dp-fields').innerHTML=rows.map(([l,v])=>`<div class="dl-row"><div class="dl-l">${l}</div><div class="dl-v">${v}</div></div>`).join('');
   let acts='';
@@ -1074,6 +1097,9 @@ function _clearItemForm(){
   document.getElementById('fi-taxrate-row').style.display='none';
   document.getElementById('fi-scan-checkout').value='-1';
   document.getElementById('fi-depreciation').value='';
+  document.getElementById('fi-warranty-expiry').value='';
+  document.getElementById('fi-contract-expiry').value='';
+  document.getElementById('fi-warranty-notes').value='';
   document.getElementById('fi-ebay-status').value='not_listed';
   document.getElementById('fi-ebay-id').value='';
   document.getElementById('fi-ebay-price').value='';
@@ -1125,6 +1151,9 @@ function editItem(item){
     document.getElementById('fi-taxrate').value=item.tax_rate||'';
     document.getElementById('fi-scan-checkout').value=item.require_scan_checkout!=null?item.require_scan_checkout:'-1';
     document.getElementById('fi-depreciation').value=item.depreciation_rate||'';
+    document.getElementById('fi-warranty-expiry').value=item.warranty_expiry||'';
+    document.getElementById('fi-contract-expiry').value=item.contract_expiry||'';
+    document.getElementById('fi-warranty-notes').value=item.warranty_notes||'';
     const es=item.ebay_status||'not_listed';
     document.getElementById('fi-ebay-status').value=es;
     document.getElementById('fi-ebay-id').value=item.ebay_listing_id||'';
@@ -1181,6 +1210,9 @@ async function saveItem(){
     tax_rate:parseFloat(document.getElementById('fi-taxrate').value)||0,
     require_scan_checkout:parseInt(document.getElementById('fi-scan-checkout').value),
     depreciation_rate:parseFloat(document.getElementById('fi-depreciation').value)||null,
+    warranty_expiry:document.getElementById('fi-warranty-expiry').value||null,
+    contract_expiry:document.getElementById('fi-contract-expiry').value||null,
+    warranty_notes:document.getElementById('fi-warranty-notes').value.trim()||null,
     ebay_status:document.getElementById('fi-ebay-status').value,
     ebay_listing_id:document.getElementById('fi-ebay-id').value.trim()||null,
     ebay_listed_price:document.getElementById('fi-ebay-price').value||null,
