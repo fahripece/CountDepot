@@ -664,6 +664,11 @@ def api_items():
              LEFT JOIN locations l    ON l.id=i.location_id
              LEFT JOIN departments d  ON d.id=i.department_id
              LEFT JOIN (SELECT item_id, COUNT(*) as photo_count FROM item_photos GROUP BY item_id) ph ON ph.item_id=i.id
+             LEFT JOIN (SELECT item_id, COUNT(*) as res_count,
+                               GROUP_CONCAT(reserved_by || '|' || start_date || '|' || end_date, ';;') as res_details
+                        FROM reservations
+                        WHERE status NOT IN ('cancelled','completed') AND end_date >= date('now')
+                        GROUP BY item_id) rv ON rv.item_id=i.id
              WHERE i.active=1 AND COALESCE(i.retired,0)=""" + ("1" if show_retired else "0")
     sql  = """SELECT i.*, c.name as category, c.color,
                     p.name as product_name, p.serial_tracked, p.qty_tracked,
@@ -675,7 +680,9 @@ def api_items():
                     co.name as company_name,
                     l.name as location_name,
                     d.name as department_name, d.color as department_color,
-                    COALESCE(ph.photo_count, 0) as photo_count
+                    COALESCE(ph.photo_count, 0) as photo_count,
+                    COALESCE(rv.res_count, 0) as reservation_count,
+                    rv.res_details as reservation_details
              """ + base_where
     args = []
     if search:
@@ -768,8 +775,10 @@ def api_items():
         if d.get("product_req_vendor_sku") and not d.get("sku"):    missing.append("vendor SKU")
         if d.get("cost_price") is None: missing.append("cost")
         if not d.get("shelf"):          missing.append("shelf")
-        d["is_incomplete"]  = len(missing) > 0
-        d["missing_fields"] = missing
+        d["is_incomplete"]       = len(missing) > 0
+        d["missing_fields"]      = missing
+        d["reservation_count"]   = d.get("reservation_count") or 0
+        d["reservation_details"] = d.get("reservation_details") or ""
         result.append(d)
 
     if no_paginate:
@@ -1546,11 +1555,24 @@ def api_item_sell():
     now     = datetime.now().strftime("%Y-%m-%d")
     execute("UPDATE items SET sold=1,sold_date=?,sold_price=?,sold_to=?,checked_out=0 WHERE id=?",
             [now, price, sold_to, item["id"]])
+    execute("DELETE FROM tasks WHERE item_id=?", [item["id"]])
     profit = round(price - (item["cost_price"] or 0), 2)
     log_action("ITEM_SOLD", item["id"], item["name"],
                f"Sold to: {sold_to or 'unknown'} | Price: ${price:.2f} | Profit: ${profit:.2f}",
                {"sold": 0}, {"sold": 1, "price": price})
     notify_low_stock_if_needed(item.get("product_id"))
+    try:
+        from app.webhooks import fire as _wh
+        _wh("item.sold", {"id": item["id"], "name": item["name"],
+                          "sold_to": sold_to, "price": price, "profit": profit})
+    except Exception:
+        pass
+    try:
+        from app.helpers import push_notification
+        push_notification("item_sold", f"Item sold: {item['name']}",
+                          f"Sold to {sold_to or 'unknown'} for ${price:.2f}", "/inventory")
+    except Exception:
+        pass
     return jsonify({"ok": True, "profit": profit})
 
 
@@ -1586,8 +1608,21 @@ def api_item_retire():
     execute("UPDATE items SET retired=1,retired_at=?,retirement_method=?,retirement_notes=?,"
             "final_book_value=?,checked_out=0 WHERE id=?",
             [now, method or None, notes, book_v, iid])
+    execute("DELETE FROM tasks WHERE item_id=?", [iid])
     log_action("ITEM_RETIRED", iid, item["name"],
                f"Method: {method or 'unspecified'} | {notes or ''}")
+    try:
+        from app.webhooks import fire as _wh
+        _wh("item.retired", {"id": iid, "name": item["name"],
+                             "method": method or "unspecified", "notes": notes})
+    except Exception:
+        pass
+    try:
+        from app.helpers import push_notification
+        push_notification("item_retired", f"Item retired: {item['name']}",
+                          f"Method: {method or 'unspecified'}", "/inventory")
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 
@@ -1809,6 +1844,11 @@ def api_item_delete():
         deleted += 1
         if item.get("product_id"):
             product_ids.add(item["product_id"])
+        try:
+            from app.webhooks import fire as _wh
+            _wh("item.deleted", {"id": iid, "name": item["name"]})
+        except Exception:
+            pass
     for pid in product_ids:
         notify_low_stock_if_needed(pid)
     return jsonify({"ok": True, "deleted": deleted})
@@ -2167,6 +2207,7 @@ def api_item_lineage():
 @login_required
 @perm_required("sell_items")
 def api_item_ebay():
+    """Manually set eBay status/fields (no API call — just a DB update)."""
     d   = request.json
     iid = d.get("item_id")
     if not iid: return jsonify({"ok": False, "msg": "item_id required"})
@@ -2185,6 +2226,111 @@ def api_item_ebay():
                f"eBay: {old_status} -> {status}" + (f" | Listing: {listing_id}" if listing_id else ""),
                {"ebay_status": old_status}, {"ebay_status": status})
     return jsonify({"ok": True})
+
+
+@bp.route("/api/item/ebay/list", methods=["POST"])
+@login_required
+@perm_required("sell_items")
+def api_item_ebay_list():
+    """Create a real eBay listing via the Inventory API."""
+    d   = request.json or {}
+    iid = d.get("item_id")
+    if not iid:
+        return jsonify({"ok": False, "msg": "item_id required"})
+    item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Not found"})
+    if item.get("ebay_status") == "listed":
+        return jsonify({"ok": False, "msg": "Item is already listed on eBay"})
+    price = float(d.get("price") or item.get("sale_price") or 0)
+    if price <= 0:
+        return jsonify({"ok": False, "msg": "A listing price is required"})
+    condition   = d.get("condition", "USED_EXCELLENT")
+    quantity    = int(d.get("quantity", 1))
+    category_id = d.get("ebay_category_id") or "175672"
+    title       = (d.get("title") or item["name"])[:80]
+    description = d.get("description") or item.get("notes") or title
+    try:
+        from app.ebay import ebay_list_item
+        result = ebay_list_item(dict(item), price, condition=condition,
+                                quantity=quantity, title=title,
+                                description=description, category_id=category_id)
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
+    now = datetime.now().strftime("%Y-%m-%d")
+    execute("UPDATE items SET ebay_status='listed', ebay_listing_id=?, "
+            "ebay_listed_price=?, ebay_listed_date=? WHERE id=?",
+            [result["listing_id"], price, now, iid])
+    log_action("EBAY_LIST", iid, item["name"],
+               f"Listed on eBay at ${price:.2f} | Listing ID: {result['listing_id']}",
+               {"ebay_status": "not_listed"}, {"ebay_status": "listed"})
+    return jsonify({"ok": True, "listing_id": result["listing_id"],
+                    "offer_id": result["offer_id"],
+                    "listing_url": result["listing_url"]})
+
+
+@bp.route("/api/item/ebay/end", methods=["POST"])
+@login_required
+@perm_required("sell_items")
+def api_item_ebay_end():
+    """End (withdraw) an active eBay listing."""
+    d   = request.json or {}
+    iid = d.get("item_id")
+    if not iid:
+        return jsonify({"ok": False, "msg": "item_id required"})
+    item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Not found"})
+    offer_id = d.get("offer_id") or item.get("ebay_listing_id")
+    if offer_id:
+        try:
+            from app.ebay import ebay_end_listing
+            ebay_end_listing(offer_id)
+        except Exception as e:
+            return jsonify({"ok": False, "msg": str(e)})
+    execute("UPDATE items SET ebay_status='not_listed', ebay_listing_id=NULL WHERE id=?", [iid])
+    log_action("EBAY_END", iid, item["name"],
+               f"eBay listing ended | Offer: {offer_id}",
+               {"ebay_status": "listed"}, {"ebay_status": "not_listed"})
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/ebay/settings", methods=["POST"])
+@login_required
+@admin_required
+def api_ebay_settings_save():
+    """Save eBay API credentials (client_id, client_secret, ru_name, policy IDs, sandbox)."""
+    from app.ebay import _set_setting
+    d = request.json or {}
+    fields = ["ebay_client_id", "ebay_client_secret", "ebay_ru_name", "ebay_sandbox",
+              "ebay_fulfillment_policy_id", "ebay_payment_policy_id", "ebay_return_policy_id"]
+    for f in fields:
+        if f in d:
+            _set_setting(f, str(d[f]).strip())
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/ebay/disconnect", methods=["POST"])
+@login_required
+@admin_required
+def api_ebay_disconnect():
+    """Clear eBay OAuth tokens."""
+    from app.ebay import _set_setting
+    for key in ("ebay_access_token", "ebay_refresh_token", "ebay_token_expiry"):
+        _set_setting(key, "")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/ebay/policies")
+@login_required
+@admin_required
+def api_ebay_policies():
+    """Fetch fulfillment/payment/return policies from eBay."""
+    try:
+        from app.ebay import ebay_get_policies
+        return jsonify({"ok": True, "policies": ebay_get_policies()})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
 
 
 # ── Products ──────────────────────────────────────────────────────────────────
@@ -2474,23 +2620,36 @@ def api_distributor_delete():
 @bp.route("/api/tasks")
 @login_required
 def api_tasks():
-    # Purge stale auto-tasks whose item has been deleted
-    execute("DELETE FROM tasks WHERE item_id IS NOT NULL "
-            "AND item_id NOT IN (SELECT id FROM items WHERE active=1)")
-    rows = query(
-        "SELECT t.*, i.name AS item_name "
-        "FROM tasks t "
-        "LEFT JOIN items i ON i.id = t.item_id AND i.active = 1 "
-        "WHERE t.item_id IS NULL OR i.id IS NOT NULL "
-        "ORDER BY CASE t.urgency WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, t.created_at DESC")
+    # Purge stale auto-tasks whose item has been deleted/deactivated.
+    # Use COALESCE in case items.active column is missing on older tenant DBs.
+    try:
+        execute("DELETE FROM tasks WHERE item_id IS NOT NULL "
+                "AND item_id NOT IN (SELECT id FROM items WHERE COALESCE(active,1)=1 "
+                "AND COALESCE(sold,0)=0 AND COALESCE(retired,0)=0)")
+    except Exception:
+        pass  # table/column may not exist yet — migration will fix it on restart
+    try:
+        rows = query(
+            "SELECT t.*, i.name AS item_name "
+            "FROM tasks t "
+            "LEFT JOIN items i ON i.id = t.item_id AND COALESCE(i.active,1)=1 "
+            "AND COALESCE(i.sold,0)=0 AND COALESCE(i.retired,0)=0 "
+            "WHERE t.item_id IS NULL OR i.id IS NOT NULL "
+            "ORDER BY CASE t.urgency WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, t.created_at DESC")
+    except Exception:
+        # Fallback: return tasks without item join if items table is broken
+        rows = query(
+            "SELECT *, NULL AS item_name FROM tasks "
+            "WHERE item_id IS NULL "
+            "ORDER BY CASE urgency WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at DESC")
     return jsonify([dict(r) for r in rows])
 
 
 @bp.route("/api/tasks/clear-done", methods=["POST"])
 @login_required
 def api_tasks_clear_done():
-    """Delete all manually-created done tasks (item-linked tasks are managed by the system)."""
-    execute("DELETE FROM tasks WHERE status='done' AND item_id IS NULL")
+    """Delete all done tasks (manual + auto item-linked)."""
+    execute("DELETE FROM tasks WHERE status='done'")
     return jsonify({"ok": True})
 
 
@@ -2704,7 +2863,8 @@ def api_user_force_logout():
 def api_user_me():
     from app.helpers import _auth_user_id
     uid = _auth_user_id()
-    row = query("SELECT id, username, email, role, two_fa_enabled FROM users WHERE id=?",
+    row = query("SELECT id, username, email, role, two_fa_enabled, "
+                "COALESCE(totp_enabled,0) AS totp_enabled FROM users WHERE id=?",
                 [uid], one=True)
     if not row:
         return jsonify({"ok": False, "msg": "Not found"})
@@ -3417,6 +3577,65 @@ def api_toggle_2fa():
     execute("UPDATE users SET two_fa_enabled=? WHERE id=?", [1 if enabled else 0, uid])
     log_action("2FA_TOGGLE", detail=f"2FA {'enabled' if enabled else 'disabled'} for user #{uid}")
     return jsonify({"ok": True, "enabled": enabled})
+
+
+# ── TOTP (authenticator app) 2FA ─────────────────────────────────────────────
+
+@bp.route("/api/user/totp/setup", methods=["POST"])
+@login_required
+def api_totp_setup():
+    """Generate a new TOTP secret and return the provisioning URI for QR code display."""
+    try:
+        import pyotp
+    except ImportError:
+        return jsonify({"ok": False, "msg": "pyotp not installed. Run: pip install pyotp"})
+    uid  = session.get("user_id")
+    user = query("SELECT username, email, totp_enabled FROM users WHERE id=?", [uid], one=True)
+    if not user:
+        return jsonify({"ok": False, "msg": "User not found"})
+    if user["totp_enabled"]:
+        return jsonify({"ok": False, "msg": "TOTP is already enabled. Disable it first to re-setup."})
+    secret = pyotp.random_base32()
+    # Store provisionally (not yet confirmed) — we'll finalize on verify
+    execute("UPDATE users SET totp_secret=? WHERE id=?", [secret, uid])
+    issuer  = "CountDepot"
+    account = user["email"] or user["username"]
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=account, issuer_name=issuer)
+    return jsonify({"ok": True, "secret": secret, "uri": uri})
+
+
+@bp.route("/api/user/totp/verify", methods=["POST"])
+@login_required
+def api_totp_verify():
+    """Verify a TOTP code and enable TOTP 2FA for this user."""
+    try:
+        import pyotp
+    except ImportError:
+        return jsonify({"ok": False, "msg": "pyotp not installed."})
+    d    = request.json or {}
+    code = (d.get("code") or "").strip()
+    if not code:
+        return jsonify({"ok": False, "msg": "Code required"})
+    uid  = session.get("user_id")
+    user = query("SELECT totp_secret, totp_enabled FROM users WHERE id=?", [uid], one=True)
+    if not user or not user["totp_secret"]:
+        return jsonify({"ok": False, "msg": "Run setup first"})
+    totp = pyotp.TOTP(user["totp_secret"])
+    if not totp.verify(code, valid_window=1):
+        return jsonify({"ok": False, "msg": "Invalid code. Check your authenticator app and try again."})
+    execute("UPDATE users SET totp_enabled=1 WHERE id=?", [uid])
+    log_action("TOTP_ENABLED", detail=f"TOTP authenticator enabled for user #{uid}")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/user/totp/disable", methods=["POST"])
+@login_required
+def api_totp_disable():
+    """Disable TOTP for the current user."""
+    uid = session.get("user_id")
+    execute("UPDATE users SET totp_enabled=0, totp_secret=NULL WHERE id=?", [uid])
+    log_action("TOTP_DISABLED", detail=f"TOTP authenticator disabled for user #{uid}")
+    return jsonify({"ok": True})
 
 
 # ── Item limit enforcement ────────────────────────────────────────────────────
@@ -5413,6 +5632,24 @@ def api_inventory_commit():
     if not rows:
         return jsonify({"ok": False, "msg": "No rows to import"})
 
+    # ── Plan item-limit check (before we create anything) ────────────────────
+    try:
+        from flask import g
+        from app.stripe_billing import PLANS
+        plan_key  = g.tenant.get("plan", "starter") if hasattr(g, "tenant") and g.tenant else "starter"
+        max_items = PLANS.get(plan_key, PLANS["starter"]).get("max_items")
+        if max_items is not None:
+            current   = query("SELECT COUNT(*) FROM items WHERE active=1", one=True)[0]
+            remaining = max_items - current
+            if remaining <= 0:
+                plan_name = PLANS.get(plan_key, {}).get("name", plan_key)
+                return jsonify({"ok": False, "msg": f"Item limit reached ({max_items} on {plan_name} plan). Upgrade to import more items."})
+            if len(rows) > remaining:
+                plan_name = PLANS.get(plan_key, {}).get("name", plan_key)
+                return jsonify({"ok": False, "msg": f"This import would add {len(rows)} items but your {plan_name} plan only allows {remaining} more (limit {max_items}). Reduce the import or upgrade your plan."})
+    except Exception:
+        pass
+
     now = datetime.utcnow().isoformat()
     created_ids = []
     custom_field_candidates = d.get("custom_field_candidates", [])
@@ -5567,6 +5804,7 @@ def api_inventory_commit():
     execute("""INSERT INTO invoice_imports (reference, vendor, site_id, imported_by, imported_at, line_count, notes)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             [None, None, site_id, session.get("username"), now, len(created_ids), notes_global])
+    return jsonify({"ok": True, "created": len(created_ids), "ids": created_ids})
 
 
 # ── Procurement ───────────────────────────────────────────────────────────────

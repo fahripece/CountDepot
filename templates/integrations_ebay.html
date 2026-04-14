@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}eBay Integration · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">eBay Integration</span>
+  <span class="topbar-sub">List inventory directly on eBay</span>
+</div>
+<div style="flex:1;overflow-y:auto;padding:20px 24px;max-width:760px">
+  {% if flash_error %}
+  <div style="background:#fee2e2;border:1px solid #fecaca;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#b91c1c">{{ flash_error }}</div>
+  {% endif %}
+  <div id="successBanner" style="display:none;background:#dcfce7;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#15803d"></div>
+
+  <!-- Status Card -->
+  <div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:24px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+      <div style="width:40px;height:40px;background:#e53238;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px">eB</div>
+      <div>
+        <div style="font-size:15px;font-weight:600">eBay Marketplace</div>
+        <div id="ebay-status" style="font-size:12px;color:#94a3b8">
+          {% if creds.connected %}
+            <span style="color:#16a34a">Connected</span>
+            {% if creds.sandbox == "1" %}<span style="margin-left:8px;background:#fef9c3;color:#854d0e;border-radius:4px;padding:1px 6px;font-size:11px">Sandbox</span>{% endif %}
+          {% else %}
+            Not connected
+          {% endif %}
+        </div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        {% if creds.connected %}
+        <button class="btn btn-secondary btn-sm" onclick="disconnectEbay()">Disconnect</button>
+        {% endif %}
+        <button class="btn btn-secondary btn-sm" onclick="toggleConfig()">Configure</button>
+      </div>
+    </div>
+
+    <!-- Config Form -->
+    <div id="ebay-config" style="display:{% if not creds.connected %}block{% else %}none{% endif %}">
+      <div style="background:#f8f7f5;border-radius:8px;padding:16px;margin-bottom:16px;font-size:12px;color:#64748b;line-height:1.6">
+        <strong>Setup:</strong> Create an app at
+        <a href="https://developer.ebay.com/my/keys" target="_blank" rel="noopener noreferrer" style="color:#6366f1">developer.ebay.com/my/keys</a>.
+        Use <code style="background:#e2e0db;padding:1px 4px;border-radius:3px">{{ request.host_url }}integrations/ebay/callback</code>
+        as the OAuth redirect URI. Copy the App ID, Cert ID, and RuName below.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">App ID (Client ID)</label>
+          <input id="eb-client-id" class="input" placeholder="App ID" value="{{ creds.client_id or '' }}">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Cert ID (Client Secret)</label>
+          <input id="eb-client-secret" class="input" type="password" placeholder="Cert ID" value="">
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">RuName (OAuth Redirect Name)</label>
+        <input id="eb-ru-name" class="input" placeholder="Your-AppName-RuName" value="{{ creds.ru_name or '' }}">
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <input type="checkbox" id="eb-sandbox" style="width:14px;height:14px" {% if creds.sandbox == "1" %}checked{% endif %}>
+        <label for="eb-sandbox" style="font-size:12px;color:#475569">Use Sandbox environment (for testing)</label>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveAndConnect()">Save &amp; Connect eBay</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleConfig()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Policy IDs (visible when connected) -->
+  {% if creds.connected %}
+  <div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:24px;margin-bottom:16px">
+    <div style="font-size:14px;font-weight:600;margin-bottom:4px">Listing Policies</div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:16px">
+      eBay requires fulfillment, payment, and return policies on every listing.
+      <a href="#" onclick="loadPolicies(event)" style="color:#6366f1">Load from eBay</a>
+    </div>
+    <div id="policy-selects" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Fulfillment Policy ID</label>
+        <input id="pol-fulfillment" class="input" placeholder="Policy ID" value="{{ creds.get('fulfillment_policy_id', '') or '' }}">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Payment Policy ID</label>
+        <input id="pol-payment" class="input" placeholder="Policy ID" value="{{ creds.get('payment_policy_id', '') or '' }}">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Return Policy ID</label>
+        <input id="pol-return" class="input" placeholder="Policy ID" value="{{ creds.get('return_policy_id', '') or '' }}">
+      </div>
+    </div>
+    <div id="policy-list" style="display:none;margin-bottom:12px;font-size:12px;color:#64748b"></div>
+    <button class="btn btn-primary btn-sm" onclick="savePolicies()">Save Policies</button>
+  </div>
+  {% endif %}
+
+  <!-- How to use -->
+  <div style="background:#f8f7f5;border:1px solid #e5e3de;border-radius:12px;padding:20px">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:#1e293b">How to list items on eBay</div>
+    <ol style="font-size:12px;color:#64748b;margin:0;padding-left:18px;line-height:2">
+      <li>Connect your eBay account above (one-time setup)</li>
+      <li>Set fulfillment, payment, and return policy IDs</li>
+      <li>Open any item in your inventory → click the <strong>eBay</strong> tab</li>
+      <li>Set a price, condition, and click <strong>List on eBay</strong></li>
+      <li>When sold on eBay, the item is automatically marked as sold in CountDepot</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+function toggleConfig() {
+  const el = document.getElementById('ebay-config');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveAndConnect() {
+  const clientId = document.getElementById('eb-client-id').value.trim();
+  const clientSecret = document.getElementById('eb-client-secret').value.trim();
+  const ruName = document.getElementById('eb-ru-name').value.trim();
+  const sandbox = document.getElementById('eb-sandbox').checked ? '1' : '0';
+  if (!clientId || !ruName) {
+    alert('App ID and RuName are required.');
+    return;
+  }
+  const body = { ebay_client_id: clientId, ebay_ru_name: ruName, ebay_sandbox: sandbox };
+  if (clientSecret) body.ebay_client_secret = clientSecret;
+  const r = await fetch('/api/integrations/ebay/settings', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  if (!d.ok) { alert(d.msg); return; }
+  // Build eBay auth URL
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: 'code',
+    redirect_uri: ruName,
+    scope: 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.fulfillment',
+    state: 'countdepot',
+  });
+  const authBase = sandbox === '1'
+    ? 'https://auth.sandbox.ebay.com/oauth2/authorize'
+    : 'https://auth.ebay.com/oauth2/authorize';
+  window.location.href = `${authBase}?${params.toString()}`;
+}
+
+async function disconnectEbay() {
+  if (!confirm('Disconnect eBay? Existing listings will not be affected.')) return;
+  const r = await fetch('/api/integrations/ebay/disconnect', { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) location.reload();
+  else alert(d.msg);
+}
+
+async function loadPolicies(e) {
+  e.preventDefault();
+  const r = await fetch('/api/integrations/ebay/policies');
+  const d = await r.json();
+  if (!d.ok) { alert(d.msg); return; }
+  const p = d.policies;
+  let html = '<strong>Available policies:</strong><br>';
+  if (p.fulfillment?.length) {
+    html += '<em>Fulfillment:</em> ' + p.fulfillment.map(x => `${x.name} (${x.fulfillmentPolicyId})`).join(', ') + '<br>';
+  }
+  if (p.payment?.length) {
+    html += '<em>Payment:</em> ' + p.payment.map(x => `${x.name} (${x.paymentPolicyId})`).join(', ') + '<br>';
+  }
+  if (p.return?.length) {
+    html += '<em>Return:</em> ' + p.return.map(x => `${x.name} (${x.returnPolicyId})`).join(', ');
+  }
+  const el = document.getElementById('policy-list');
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+async function savePolicies() {
+  const body = {
+    ebay_fulfillment_policy_id: document.getElementById('pol-fulfillment').value.trim(),
+    ebay_payment_policy_id:     document.getElementById('pol-payment').value.trim(),
+    ebay_return_policy_id:      document.getElementById('pol-return').value.trim(),
+  };
+  const r = await fetch('/api/integrations/ebay/settings', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  if (d.ok) {
+    const b = document.getElementById('successBanner');
+    b.textContent = 'Policies saved.';
+    b.style.display = 'block';
+    setTimeout(() => b.style.display = 'none', 3000);
+  } else alert(d.msg);
+}
+
+// Show connected banner if redirected back from eBay
+if (new URLSearchParams(location.search).get('connected') === '1') {
+  const b = document.getElementById('successBanner');
+  b.textContent = 'eBay connected successfully!';
+  b.style.display = 'block';
+}
+</script>
+{% endblock %}

@@ -467,6 +467,45 @@ def qb_oauth_callback():
     return redirect(url_for("main.integrations_accounting") + "?connected=qb")
 
 
+@bp.route("/integrations/ebay")
+@login_required
+@admin_required
+def integrations_ebay():
+    from app.ebay import ebay_get_credentials
+    creds = ebay_get_credentials()
+    return render_template("integrations_ebay.html", creds=creds)
+
+
+@bp.route("/integrations/ebay/callback")
+@login_required
+@admin_required
+def ebay_oauth_callback():
+    """eBay OAuth2 callback — exchange code for tokens."""
+    from app.ebay import (ebay_exchange_code, _get_setting, _set_setting)
+    from datetime import datetime, timedelta
+    code  = request.args.get("code", "")
+    error = request.args.get("error", "")
+    if error or not code:
+        return render_template("integrations_ebay.html",
+                               creds={},
+                               flash_error=f"eBay authorization failed: {error or 'No code received'}")
+    try:
+        tokens = ebay_exchange_code(
+            _get_setting("ebay_client_id", ""),
+            _get_setting("ebay_client_secret", ""),
+            _get_setting("ebay_ru_name", ""),
+            code)
+        expiry = (datetime.utcnow() + timedelta(seconds=tokens.get("expires_in", 7200))).isoformat()
+        _set_setting("ebay_access_token",  tokens["access_token"])
+        _set_setting("ebay_refresh_token", tokens.get("refresh_token", ""))
+        _set_setting("ebay_token_expiry",  expiry)
+    except Exception as e:
+        return render_template("integrations_ebay.html",
+                               creds={},
+                               flash_error=f"eBay token exchange failed: {e}")
+    return redirect(url_for("main.integrations_ebay") + "?connected=1")
+
+
 @bp.route("/integrations/accounting/xero/callback")
 @login_required
 @admin_required

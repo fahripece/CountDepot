@@ -411,6 +411,10 @@
         <div style="font-weight:600" id="co-item-name"></div>
         <div style="font-size:12px;color:#888;font-family:monospace;margin-top:2px" id="co-serial"></div>
       </div>
+      <div id="co-res-warning" style="display:none;background:#fef3c7;border:1px solid #fcd34d;border-radius:7px;padding:10px 12px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:3px">⚠️ Reservation Conflict</div>
+        <div id="co-res-detail" style="font-size:12px;color:#92400e;line-height:1.5"></div>
+      </div>
       <div id="co-scan-required" style="display:none;background:#fef3c7;border:1px solid #fcd34d;border-radius:7px;padding:10px 12px;margin-bottom:14px">
         <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:6px">⚠️ Scan Required — scan the item barcode before checkout</div>
         <div style="display:flex;gap:6px">
@@ -835,6 +839,8 @@ function renderTable(items){
         status=`<span class="tag tag-in">✓ In</span>`;
       }
     }
+    // Reservation badge
+    const resBadge=_resBadge(item);
     const cost=item.cost_price!=null?`<span style="font-size:12px;color:#475569">$${parseFloat(item.cost_price).toFixed(2)}</span>`:'<span style="color:#ddd">—</span>';
     let saleProfit='<span style="color:#ddd">—</span>';
     if(item.sale_price){
@@ -853,7 +859,7 @@ function renderTable(items){
       <td>${serialSku}</td>
       <td>${shelf}</td>
       <td>${cond}${tagsHtml}</td>
-      <td>${status}</td>
+      <td>${status}${resBadge?`<br>${resBadge}`:''}</td>
       <td>${cost}<br>${saleProfit}</td>
       <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();printLabel(${item.id})" title="Print label" style="padding:5px 7px;margin-right:4px">🏷</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button></td>
     </tr>`;
@@ -872,6 +878,7 @@ function showDetail(item){
   } else {
     statusHtml=`<span class="tag tag-in">✓ Available</span>`;
   }
+  const _rb=_resBadge(item);if(_rb)statusHtml+=` ${_rb}`;
   document.getElementById('dp-status').innerHTML=statusHtml;
   const rows=[];
   if(item.product_name) rows.push(['Product',`<span class="product-badge">📦 ${item.product_name}</span>`]);

@@ -48,6 +48,7 @@ MIGRATIONS = [
     ("products", "low_stock_last_alerted", "TEXT"),
 
     # items additions
+    ("items", "active",          "INTEGER NOT NULL DEFAULT 1"),
     ("items", "extra_fields",    "TEXT DEFAULT '{}'"),
     ("items", "parent_item_id", "INTEGER"),
 
@@ -65,8 +66,11 @@ MIGRATIONS = [
     # users — session token for server-side invalidation
     ("users", "session_token",   "TEXT"),
 
-    # users — 2FA
+    # users — 2FA (email OTP)
     ("users", "two_fa_enabled", "INTEGER NOT NULL DEFAULT 0"),
+    # users — TOTP (authenticator app)
+    ("users", "totp_secret",    "TEXT"),
+    ("users", "totp_enabled",   "INTEGER NOT NULL DEFAULT 0"),
 
     # items — inventory features
     ("items", "expected_return_date",  "TEXT"),

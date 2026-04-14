@@ -151,7 +151,7 @@ async function moveTask(id,newStatus){
 }
 
 async function clearDone(){
-  if(!confirm('Remove all completed manual tasks? Auto-tasks linked to items are not affected.'))return;
+  if(!confirm('Remove all completed tasks from the Done column?'))return;
   const res=await api('/api/tasks/clear-done',{});
   if(res.ok){toast('Done tasks cleared ✓','ok');loadTasks();}
   else toast(res.msg||'Error','err');
@@ -203,7 +203,6 @@ async function loadTasks(){
   const todo=allTasks.filter(t=>t.status==='todo');
   const progress=allTasks.filter(t=>t.status==='progress');
   const done=allTasks.filter(t=>t.status==='done');
-  const doneManual=done.filter(t=>!t.item_id);
   document.getElementById('col-todo').innerHTML=todo.map(renderCard).join('')||'<div style="color:#ccc;font-size:12px;text-align:center;padding:20px">No tasks</div>';
   document.getElementById('col-progress').innerHTML=progress.map(renderCard).join('')||'<div style="color:#ccc;font-size:12px;text-align:center;padding:20px">No tasks</div>';
   document.getElementById('col-done').innerHTML=done.map(renderCard).join('')||'<div style="color:#ccc;font-size:12px;text-align:center;padding:20px">No tasks</div>';
@@ -211,7 +210,7 @@ async function loadTasks(){
   document.getElementById('cnt-progress').textContent=progress.length;
   document.getElementById('cnt-done').textContent=done.length;
   document.getElementById('taskCount').textContent=allTasks.length+' task'+(allTasks.length===1?'':'s');
-  document.getElementById('clearDoneBtn').style.display=doneManual.length>0?'':'none';
+  document.getElementById('clearDoneBtn').style.display=done.length>0?'':'none';
 }
 
 loadTasks();

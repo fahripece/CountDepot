@@ -85,9 +85,16 @@ def login_page():
                 error = "Please verify your email address before logging in. Check your inbox for the verification link."
                 return render_template("login.html", error=error,
                                        unverified=True, unverified_email=email)
-            # 2FA check
-            two_fa = user["two_fa_enabled"] if "two_fa_enabled" in user.keys() else 0
+            # 2FA check — TOTP takes priority over email OTP if both are enabled
+            totp_enabled = user["totp_enabled"] if "totp_enabled" in user.keys() else 0
+            two_fa       = user["two_fa_enabled"] if "two_fa_enabled" in user.keys() else 0
             from config import Config as _Cfg
+            if totp_enabled and user.get("totp_secret"):
+                session["pending_2fa_user_id"] = user["id"]
+                session["pending_2fa_method"]  = "totp"
+                log_auth_event("2FA_TOTP_CHALLENGE", username=user["username"], ip=ip,
+                               tenant=getattr(g, "tenant_slug", ""))
+                return render_template("verify_2fa.html", method="totp")
             if two_fa and email and _Cfg.SMTP_HOST:
                 import random
                 from app.mailer import send_email as _send_email
@@ -102,9 +109,10 @@ def login_page():
                     f"<p style='font-family:sans-serif;font-size:12px;color:#888'>Expires in 10 minutes. If you didn't request this, ignore it.</p>",
                     f"Your CountDepot login code: {otp}\nExpires in 10 minutes.")
                 session["pending_2fa_user_id"] = user["id"]
+                session["pending_2fa_method"]  = "email"
                 log_auth_event("2FA_SENT", username=user["username"], ip=ip,
                                tenant=getattr(g, "tenant_slug", ""))
-                return render_template("verify_2fa.html")
+                return render_template("verify_2fa.html", method="email")
             clear_login_rate(ip)
             perms = get_user_perms(
                 user["id"], user["role"],
@@ -176,7 +184,8 @@ def change_password():
 
 @bp.route("/verify-2fa", methods=["GET", "POST"])
 def verify_2fa():
-    uid = session.get("pending_2fa_user_id")
+    uid    = session.get("pending_2fa_user_id")
+    method = session.get("pending_2fa_method", "email")
     if not uid:
         return redirect(url_for("auth.login_page"))
     error = None
@@ -185,20 +194,36 @@ def verify_2fa():
         allowed, retry_in = check_rate_limit(ip, "2fa", max_attempts=5, window=300)
         if not allowed:
             session.pop("pending_2fa_user_id", None)
+            session.pop("pending_2fa_method", None)
             log_auth_event("RATE_LIMITED", username=str(uid), ip=ip,
                            tenant=getattr(g, "tenant_slug", ""),
                            detail="2FA rate limit hit")
-            return render_template("verify_2fa.html",
+            return render_template("verify_2fa.html", method=method,
                                    error=f"Too many attempts. Try again in {retry_in} seconds."), 429
         otp = request.form.get("otp", "").strip()
-        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        row = query("SELECT * FROM login_otp WHERE user_id=? AND used=0 AND expires_at > ? ORDER BY id DESC LIMIT 1",
-                    [uid, now], one=True)
-        if row and row["otp"] == otp:
-            execute("UPDATE login_otp SET used=1 WHERE id=?", [row["id"]])
+        verified = False
+
+        if method == "totp":
+            try:
+                import pyotp
+                user_row = query("SELECT totp_secret FROM users WHERE id=?", [uid], one=True)
+                if user_row and user_row["totp_secret"]:
+                    verified = pyotp.TOTP(user_row["totp_secret"]).verify(otp, valid_window=1)
+            except Exception:
+                pass
+        else:
+            now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            row = query("SELECT * FROM login_otp WHERE user_id=? AND used=0 AND expires_at > ? ORDER BY id DESC LIMIT 1",
+                        [uid, now], one=True)
+            if row and row["otp"] == otp:
+                execute("UPDATE login_otp SET used=1 WHERE id=?", [row["id"]])
+                verified = True
+
+        if verified:
             user = query("SELECT * FROM users WHERE id=?", [uid], one=True)
             if not user:
                 session.pop("pending_2fa_user_id", None)
+                session.pop("pending_2fa_method", None)
                 return redirect(url_for("auth.login_page"))
             clear_login_rate(ip)
             perms = get_user_perms(user["id"], user["role"],
@@ -214,13 +239,14 @@ def verify_2fa():
             log_auth_event("LOGIN_OK_2FA", username=user["username"], ip=ip,
                            tenant=getattr(g, "tenant_slug", ""))
             return redirect(url_for("main.inventory"))
+
         error = "Invalid or expired code. Please try again."
         execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
                 [uid, str(uid), ip, request.user_agent.string, "2fa_fail",
                  datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")])
         log_auth_event("2FA_FAIL", username=str(uid), ip=ip,
                        tenant=getattr(g, "tenant_slug", ""))
-    return render_template("verify_2fa.html", error=error)
+    return render_template("verify_2fa.html", method=method, error=error)
 
 
 @bp.route("/forgot-password", methods=["GET", "POST"])

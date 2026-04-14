@@ -216,12 +216,13 @@ def get_user_location_ids(user_id: int, role: str) -> list:
 
 def location_filter_sql(alias: str = "i") -> tuple:
     """Return (sql_fragment, args) to filter items by the current user's sites.
-    Returns ('', []) if no restriction applies."""
+    Returns ('', []) if no restriction applies.
+    Items with no location (NULL) are always visible to everyone."""
     loc_ids = session.get("location_ids") or []
     if not loc_ids:
         return "", []
     placeholders = ",".join("?" * len(loc_ids))
-    return f" AND {alias}.location_id IN ({placeholders})", list(loc_ids)
+    return f" AND ({alias}.location_id IN ({placeholders}) OR {alias}.location_id IS NULL)", list(loc_ids)
 
 
 def has_perm(perm):
@@ -402,6 +403,14 @@ def notify_low_stock_if_needed(product_id):
                     f"Low Stock: {product['name']}",
                     f"Only {product['available_count']} available (threshold {product['low_stock_threshold']})",
                     "/inventory")
+        except Exception:
+            pass
+        try:
+            push_notification(
+                "low_stock",
+                f"Low stock: {product['name']}",
+                f"Only {product['available_count']} available (threshold {product['low_stock_threshold']})",
+                "/inventory")
         except Exception:
             pass
     except Exception:
