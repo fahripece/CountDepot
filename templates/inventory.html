@@ -837,6 +837,13 @@ function renderPagination(){
   `;
 }
 
+function _resBadge(item){
+  const count=parseInt(item.reservation_count||0,10);
+  if(!count)return '';
+  const title=(item.reservation_details||'').replace(/;;/g,'\n').replace(/\|/g,' - ');
+  return `<span class="tag" title="${title}" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-size:10px">${count} reserved</span>`;
+}
+
 function renderTable(items){
   const tb=document.getElementById('itemTableBody');
   if(!items.length){tb.innerHTML='<tr class="empty-row"><td colspan="10">No items found.</td></tr>';return}
