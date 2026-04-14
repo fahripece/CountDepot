@@ -11,7 +11,7 @@
   <p style="font-size:13px;color:#64748b;margin-bottom:20px;line-height:1.6">
     Webhooks send real-time POST requests to your URL when events happen in CountDepot.
     Each payload is signed with HMAC-SHA256 using your secret — verify with
-    <code>X-CountDepot-Signature</code>. <a href="/api-docs" style="color:#7c3aed">View API docs →</a>
+    <code>X-CountDepot-Signature</code>. <a href="/api-docs" style="color:#1d4ed8">View API docs →</a>
   </p>
 
   <div id="webhookList" style="margin-bottom:28px"></div>
@@ -64,7 +64,7 @@ function toggleEvent(ev,el){
   const evts=inp.value?inp.value.split(',').map(s=>s.trim()).filter(Boolean):[];
   const idx=evts.indexOf(ev);
   if(idx>=0){evts.splice(idx,1);el.style.background='#f1f5f9';el.style.color='#475569';}
-  else{evts.push(ev);el.style.background='#ede9fe';el.style.color='#7c3aed';}
+  else{evts.push(ev);el.style.background='#eff6ff';el.style.color='#1d4ed8';}
   inp.value=evts.join(',');
 }
 function renderWebhooks(list){

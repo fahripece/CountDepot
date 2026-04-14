@@ -80,7 +80,7 @@ async function loadReport(){
     <div class="kcard" onclick="cardClick('out')" style="border-color:${t.checked_out?'#fecaca':''}"><div class="kcard-l">Checked Out</div><div class="kcard-v" style="color:${t.checked_out?'#b91c1c':'#94a3b8'}">${t.checked_out}</div></div>
     <div class="kcard" onclick="cardClick('low')" style="border-color:${t.low_stock?'#fecaca':''}"><div class="kcard-l">Low Stock</div><div class="kcard-v" style="color:${t.low_stock?'#b91c1c':'#94a3b8'}">${t.low_stock}</div></div>
     <div class="kcard" onclick="cardClick('incomplete')" style="border-color:${t.incomplete?'#fde68a':''}"><div class="kcard-l">Incomplete</div><div class="kcard-v" style="color:${t.incomplete?'#92400e':'#94a3b8'}">${t.incomplete}</div></div>
-    <div class="kcard" onclick="cardClick('sold')"><div class="kcard-l">Sold</div><div class="kcard-v" style="color:#7c3aed">${t.sold}</div></div>`;
+    <div class="kcard" onclick="cardClick('sold')"><div class="kcard-l">Sold</div><div class="kcard-v" style="color:#1d4ed8">${t.sold}</div></div>`;
   renderItems();
 }
 function renderItems(){
@@ -97,7 +97,7 @@ function renderItems(){
     const catPill=i.category?`<span class="tag" style="background:${i.color}18;color:${i.color}">${i.category}</span>`:'\u2014';
     const sn=i.serial||i.sku||i.internal_sku||'\u2014';
     let status='';
-    if(i.sold) status='<span class="tag" style="background:#f5f3ff;color:#7c3aed">Sold</span>';
+    if(i.sold) status='<span class="tag" style="background:#eff6ff;color:#1d4ed8">Sold</span>';
     else if(i.qty!==null){const avail=(i.qty||0)-(i.qty_out||0);status=i.is_low?`<span style="color:#b91c1c;font-weight:600">${avail}/${i.qty} \ud83d\udd34</span>`:`${avail}/${i.qty}`;}
     else status=i.checked_out?`<span class="tag tag-out">\ud83d\udce4 ${i.checkout_by||'?'}</span>`:'<span class="tag tag-in">\u2713 In</span>';
     const inc=i.is_incomplete?` <span class="tag-incomplete">\u26a0 ${i.missing_fields.join(', ')}</span>`:'';

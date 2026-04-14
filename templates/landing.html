@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CountDepot — Inventory Management Made Easy</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -22,7 +23,7 @@
 }
 html{scroll-behavior:smooth;overflow-x:hidden}
 body{
-  font-family:'DM Sans',sans-serif;
+  font-family:'Inter',sans-serif;
   background:var(--bg);
   color:var(--text);
   min-height:100vh;
@@ -39,7 +40,7 @@ nav{
   border-bottom:1px solid rgba(255,255,255,0.04);
 }
 .nav-logo{
-  font-family:'Syne',sans-serif;
+  font-family:'Inter',sans-serif;
   font-weight:800;font-size:22px;
   color:var(--text);
   letter-spacing:-0.5px;
@@ -118,11 +119,11 @@ nav{
 @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 
 h1{
-  font-family:'Syne',sans-serif;
-  font-size:clamp(42px,7vw,84px);
+  font-family:'Inter',sans-serif;
+  font-size:clamp(38px,6vw,76px);
   font-weight:800;
-  line-height:1.05;
-  letter-spacing:-2px;
+  line-height:1.08;
+  letter-spacing:-1.5px;
   margin-bottom:24px;
   animation:fadeUp .6s .1s ease both;
 }
@@ -187,7 +188,7 @@ h1 span{
 }
 .stat:last-child{border-right:none}
 .stat-val{
-  font-family:'Syne',sans-serif;
+  font-family:'Inter',sans-serif;
   font-size:32px;font-weight:800;
   color:var(--text);
   letter-spacing:-1px;
@@ -204,11 +205,11 @@ section{padding:100px 24px}
   color:var(--accent);margin-bottom:16px;
 }
 .section-title{
-  font-family:'Syne',sans-serif;
-  font-size:clamp(28px,4vw,48px);
-  font-weight:800;
-  letter-spacing:-1px;
-  line-height:1.1;
+  font-family:'Inter',sans-serif;
+  font-size:clamp(26px,4vw,44px);
+  font-weight:700;
+  letter-spacing:-0.5px;
+  line-height:1.15;
   margin-bottom:16px;
 }
 .section-sub{
@@ -236,15 +237,17 @@ section{padding:100px 24px}
 }
 .feature:hover{background:#18243f}
 .feature-icon{
-  font-size:28px;margin-bottom:20px;
-  width:52px;height:52px;
+  margin-bottom:20px;
+  width:48px;height:48px;
   background:rgba(37,99,235,0.1);
   border:1px solid rgba(37,99,235,0.2);
-  border-radius:12px;
+  border-radius:10px;
   display:flex;align-items:center;justify-content:center;
+  color:#60a5fa;
+  flex-shrink:0;
 }
 .feature h3{
-  font-family:'Syne',sans-serif;
+  font-family:'Inter',sans-serif;
   font-size:18px;font-weight:700;
   margin-bottom:10px;letter-spacing:-0.3px;
 }
@@ -259,14 +262,14 @@ section{padding:100px 24px}
 }
 .step{position:relative;padding-left:0;text-align:center}
 .step-num{
-  font-family:'Syne',sans-serif;
+  font-family:'Inter',sans-serif;
   font-size:64px;font-weight:800;
   color:rgba(37,99,235,0.12);
   line-height:1;
   margin-bottom:16px;
 }
 .step h3{
-  font-family:'Syne',sans-serif;
+  font-family:'Inter',sans-serif;
   font-size:17px;font-weight:700;
   margin-bottom:8px;
 }
@@ -303,7 +306,7 @@ section{padding:100px 24px}
   white-space:nowrap;
 }
 .plan-name{
-  font-family:'Syne',sans-serif;
+  font-family:'Inter',sans-serif;
   font-size:18px;font-weight:700;
   margin-bottom:8px;
 }
@@ -312,7 +315,7 @@ section{padding:100px 24px}
   margin-bottom:4px;
 }
 .plan-price .amount{
-  font-family:'Syne',sans-serif;
+  font-family:'Inter',sans-serif;
   font-size:48px;font-weight:800;
   letter-spacing:-2px;
   color:var(--text);
@@ -386,7 +389,7 @@ section{padding:100px 24px}
   pointer-events:none;
 }
 .trial-section h2{
-  font-family:'Syne',sans-serif;
+  font-family:'Inter',sans-serif;
   font-size:clamp(32px,5vw,56px);
   font-weight:800;letter-spacing:-1.5px;
   margin-bottom:16px;
@@ -405,7 +408,7 @@ footer{
   flex-wrap:wrap;gap:16px;
 }
 .footer-logo{
-  font-family:'Syne',sans-serif;
+  font-family:'Inter',sans-serif;
   font-weight:800;font-size:18px;
 }
 .footer-logo span{color:var(--accent)}
@@ -562,7 +565,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 <div id="signin-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center">
   <div style="background:#0f1628;border:1px solid #1e2d50;border-radius:16px;padding:40px;width:100%;max-width:440px;margin:0 20px;position:relative;max-height:90vh;overflow-y:auto">
     <button onclick="closeSignin()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1">×</button>
-    <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:6px">Sign in</div>
+    <div style="font-family:'Inter',sans-serif;font-size:22px;font-weight:800;margin-bottom:6px">Sign in</div>
     <div style="font-size:14px;color:#64748b;margin-bottom:20px">Enter your email and password to continue.</div>
     <a href="/auth/google?mode=signin" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#0f172a;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;font-size:14px;font-weight:500;text-decoration:none;margin-bottom:16px;transition:border-color .15s" onmouseover="this.style.borderColor='#94a3b8'" onmouseout="this.style.borderColor='#e2e8f0'">
       <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
@@ -572,20 +575,20 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
     <div id="signin-error" style="display:none;background:#1e0a0a;border:1px solid #7f1d1d;border-radius:8px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:16px"></div>
     <label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Email address</label>
     <input id="signin-email" type="email" placeholder="you@company.com" autocomplete="email"
-      style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:13px 16px;color:#f1f5f9;font-size:15px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:14px"
+      style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:13px 16px;color:#f1f5f9;font-size:15px;font-family:'Inter',sans-serif;outline:none;margin-bottom:14px"
       onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#1e2d50'"
       onkeydown="if(event.key==='Enter')doSignin()">
     <label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Password</label>
     <input id="signin-password" type="password" placeholder="Enter password" autocomplete="current-password"
-      style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:13px 16px;color:#f1f5f9;font-size:15px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:20px"
+      style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:13px 16px;color:#f1f5f9;font-size:15px;font-family:'Inter',sans-serif;outline:none;margin-bottom:20px"
       onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#1e2d50'"
       onkeydown="if(event.key==='Enter')doSignin()">
-    <button id="signin-btn" onclick="doSignin()" style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .2s"
+    <button id="signin-btn" onclick="doSignin()" style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;transition:background .2s"
       onmouseover="this.style.background='#3b82f6'" onmouseout="this.style.background='#2563eb'">
       Sign in →
     </button>
     <div style="margin-top:14px;text-align:center">
-      <button onclick="showForgot()" style="background:none;border:none;color:#64748b;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:underline;padding:0">Forgot password?</button>
+      <button onclick="showForgot()" style="background:none;border:none;color:#64748b;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif;text-decoration:underline;padding:0">Forgot password?</button>
     </div>
     <div style="margin-top:10px;text-align:center;font-size:13px;color:#64748b">
       Don't have an account? <a href="/signup" style="color:#38bdf8;text-decoration:none">Start free trial</a>
@@ -598,7 +601,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
       <div id="forgot-success" style="display:none;background:#0d2618;border:1px solid #14532d;border-radius:8px;padding:10px 14px;font-size:13px;color:#86efac;margin-bottom:12px">Reset link sent — check your inbox.</div>
       <div id="forgot-error" style="display:none;background:#1e0a0a;border:1px solid #7f1d1d;border-radius:8px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:12px"></div>
       <input id="forgot-email" type="email" placeholder="you@company.com"
-        style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:12px 16px;color:#f1f5f9;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:12px"
+        style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:12px 16px;color:#f1f5f9;font-size:14px;font-family:'Inter',sans-serif;outline:none;margin-bottom:12px"
         onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#1e2d50'"
         onkeydown="if(event.key==='Enter')doForgot()">
       <button id="forgot-btn" onclick="doForgot()" style="width:100%;background:#1e2d50;color:#f1f5f9;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">
@@ -691,7 +694,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
                 <td><span class="pt-tag pt-tag-indigo">Servers</span></td>
                 <td><span class="pt-mono">SN-9810-DLL</span></td>
                 <td><span class="pt-shelf">DC-02</span></td>
-                <td><span class="pt-tag pt-tag-amber">📤 J.Smith</span></td>
+                <td><span class="pt-tag pt-tag-amber">Out · J.Smith</span></td>
                 <td><span class="pt-cost">$8,200</span></td>
               </tr>
               <tr>
@@ -715,7 +718,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
                 <td><span class="pt-tag pt-tag-slate">Power</span></td>
                 <td><span class="pt-mono">SN-0054-APC</span></td>
                 <td><span class="pt-shelf">C-01</span></td>
-                <td><span class="pt-tag pt-tag-amber">📤 M.Torres</span></td>
+                <td><span class="pt-tag pt-tag-amber">Out · M.Torres</span></td>
                 <td><span class="pt-cost">$620</span></td>
               </tr>
             </tbody>
@@ -729,7 +732,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 <!-- STATS -->
 <div class="stats">
   <div class="stat">
-    <div class="stat-val">7<span>-day</span></div>
+    <div class="stat-val">30<span>-day</span></div>
     <div class="stat-label">Free trial</div>
   </div>
   <div class="stat">
@@ -755,47 +758,47 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 
     <div class="features-grid">
       <div class="feature">
-        <div class="feature-icon">📦</div>
+        <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
         <h3>Asset Tracking</h3>
         <p>Track every item by serial number, SKU, or barcode. Know exactly where every asset is at all times — across locations, jobs, and teams.</p>
       </div>
       <div class="feature">
-        <div class="feature-icon">🔄</div>
+        <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></div>
         <h3>Check In / Check Out</h3>
         <p>Assign items to jobs, locations, or team members. Log who took what and when — with a full audit trail and one-click return.</p>
       </div>
       <div class="feature">
-        <div class="feature-icon">📱</div>
+        <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="4" height="18" rx="1"/><rect x="9" y="3" width="2" height="18" rx="1"/><rect x="13" y="3" width="4" height="18" rx="1"/><rect x="19" y="3" width="2" height="18" rx="1"/></svg></div>
         <h3>Barcode Scanning</h3>
         <p>Plug in any USB barcode scanner and it works instantly. Scan to check items in or out without typing a thing.</p>
       </div>
       <div class="feature">
-        <div class="feature-icon">📊</div>
+        <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
         <h3>Financial Reports</h3>
         <p>Know your stock value, track what you've sold, calculate profit margins. Real numbers, not guesses.</p>
       </div>
       <div class="feature">
-        <div class="feature-icon">🔔</div>
+        <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div>
         <h3>Low Stock Alerts</h3>
         <p>Set thresholds on any item and get alerted before you run out. Stay stocked and keep operations running without interruption.</p>
       </div>
       <div class="feature">
-        <div class="feature-icon">👥</div>
+        <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
         <h3>Team Permissions</h3>
         <p>Control what each team member can see and do. Staff can check items in and out without ever touching financial data.</p>
       </div>
       <div class="feature">
-        <div class="feature-icon">🏷️</div>
+        <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>
         <h3>Label Printing</h3>
         <p>Print barcoded asset labels directly from the app. Works with standard label printers and Avery sheets.</p>
       </div>
       <div class="feature">
-        <div class="feature-icon">🗂️</div>
+        <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
         <h3>Custom Categories</h3>
         <p>Choose your industry on setup and get pre-configured categories. IT, Healthcare, Retail, Construction — all covered.</p>
       </div>
       <div class="feature">
-        <div class="feature-icon">📋</div>
+        <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
         <h3>Full Audit Log</h3>
         <p>Every action is permanently recorded. See exactly who did what and when — immutable and searchable.</p>
       </div>
@@ -938,7 +941,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
         </div>
         <p style="font-size:14px;line-height:1.7;color:var(--muted2);margin-bottom:16px">"The purchase order workflow alone saved us hours every week. POs, 3-way matching, and vendor catalog all in one place."</p>
         <div style="display:flex;align-items:center;gap:10px">
-          <div style="width:36px;height:36px;border-radius:50%;background:#7c3aed;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">RK</div>
+          <div style="width:36px;height:36px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">RK</div>
           <div><div style="font-size:13px;font-weight:600">Operations Director</div><div style="font-size:11px;color:var(--muted)">Construction Company, 80 employees</div></div>
         </div>
       </div>
@@ -958,12 +961,12 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
     <div style="margin-top:48px;text-align:center">
       <div style="font-size:12px;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:20px">Built for these industries</div>
       <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center">
-        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">🏥 Healthcare</span>
-        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">💻 IT / MSP</span>
-        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">🏗️ Construction</span>
-        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">🎓 Education</span>
-        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">🛒 Retail</span>
-        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">⚙️ General</span>
+        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">Healthcare</span>
+        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">IT / MSP</span>
+        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">Construction</span>
+        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">Education</span>
+        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">Retail</span>
+        <span style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:500;color:var(--muted2)">General</span>
       </div>
     </div>
   </div>
@@ -997,15 +1000,15 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
     <p class="section-sub">For teams of 20+, we'll walk you through the full platform, answer your questions, and help you decide if CountDepot is the right fit — no pressure.</p>
     <div id="demo-form" style="margin-top:32px;text-align:left">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-        <input id="demo-name" placeholder="Your name" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;width:100%">
-        <input id="demo-company" placeholder="Company name" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;width:100%">
+        <input id="demo-name" placeholder="Your name" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;width:100%">
+        <input id="demo-company" placeholder="Company name" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;width:100%">
       </div>
-      <input id="demo-email" type="email" placeholder="Work email" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;width:100%;margin-bottom:12px">
-      <select id="demo-size" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;width:100%;margin-bottom:12px;appearance:none">
+      <input id="demo-email" type="email" placeholder="Work email" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;width:100%;margin-bottom:12px">
+      <select id="demo-size" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;width:100%;margin-bottom:12px;appearance:none">
         <option value="">Team size…</option>
         <option>1–10 people</option><option>11–50 people</option><option>51–200 people</option><option>200+ people</option>
       </select>
-      <button onclick="submitDemoRequest()" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .2s">Request a live demo →</button>
+      <button onclick="submitDemoRequest()" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;transition:background .2s">Request a live demo →</button>
       <div id="demo-success" style="display:none;margin-top:14px;background:#0d2618;border:1px solid #14532d;border-radius:10px;padding:14px;font-size:14px;color:#86efac;text-align:center">
         ✓ Got it! We'll reach out within one business day.
       </div>
@@ -1021,7 +1024,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   <p>Start your 30-day free trial today. No credit card required.</p>
   <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
     <a href="/signup" class="btn-primary" style="font-size:17px;padding:16px 40px">Create your workspace →</a>
-    <button onclick="openDemoRequest()" style="font-size:17px;padding:16px 40px;background:transparent;border:2px solid rgba(255,255,255,0.3);color:#fff;border-radius:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(255,255,255,0.7)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.3)'">Request a demo</button>
+    <button onclick="openDemoRequest()" style="font-size:17px;padding:16px 40px;background:transparent;border:2px solid rgba(255,255,255,0.3);color:#fff;border-radius:12px;cursor:pointer;font-family:'Inter',sans-serif;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(255,255,255,0.7)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.3)'">Request a demo</button>
   </div>
   <p class="trial-note">Takes 2 minutes · Your data stays yours · Cancel anytime</p>
 </section>

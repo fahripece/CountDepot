@@ -886,7 +886,7 @@ function showDetail(item){
   if(item.is_incomplete) rows.push(['⚠ Incomplete',`<span style="color:#92400e;font-size:12px">Missing: ${item.missing_fields.join(', ')}</span>`]);
   if(item.condition){const cc={'New':'#1d4ed8','Used-VG':'#15803d','Used-Good':'#15803d','Used':'#64748b','For Parts':'#b45309'}[item.condition]||'#64748b';rows.push(['Condition',`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:${cc}18;color:${cc}">${item.condition}</span>`]);}
   if(item.tags){const tc=(item.tags||'').split(',').map(t=>t.trim()).filter(Boolean);if(tc.length)rows.push(['Tags',tc.map(t=>`<span style="font-size:11px;padding:2px 8px;background:#f1f5f9;color:#475569;border-radius:4px;cursor:pointer;margin-right:3px" onclick="document.getElementById('tagFilter').value='${t}';closeDetail();loadItems()">${t}</span>`).join('')]);}
-  if(item.kit_id&&item.kit_name)rows.push(['Kit',`<span style="font-size:12px;padding:2px 8px;background:#ede9fe;color:#6d28d9;border-radius:4px">📦 ${item.kit_name}</span>`]);
+  if(item.kit_id&&item.kit_name)rows.push(['Kit',`<span style="font-size:12px;padding:2px 8px;background:#eff6ff;color:#1d4ed8;border-radius:4px">${item.kit_name}</span>`]);
   if(item.owner_company) rows.push(['Owner',item.owner_company]);
   if(item.purchased_from) rows.push(['Purchased From',item.purchased_from]);
   if(item.purchase_date) rows.push(['Purchased',item.purchase_date]);
@@ -963,7 +963,7 @@ function showDetail(item){
     acts=`<div style="background:#f1f5f9;border-radius:7px;padding:10px 12px;font-size:12.5px;color:#475569;font-weight:500">♻ Retired${item.retired_at?' on '+item.retired_at.slice(0,10):''}</div>`;
     acts+=`<button class="btn btn-secondary btn-sm" onclick="undoRetire(${item.id})" style="font-size:11px">↩ Undo Retirement</button>`;
   } else if(item.sold){
-    acts=`<div style="background:#f5f3ff;border-radius:7px;padding:10px 12px;font-size:12.5px;color:#7c3aed;font-weight:500">✓ Sold — $${parseFloat(item.sold_price||0).toFixed(2)}${item.sold_to?' to '+item.sold_to:''}<br><span style="font-weight:400;color:#94a3b8">${item.sold_date||''}</span></div>`;
+    acts=`<div style="background:#eff6ff;border-radius:7px;padding:10px 12px;font-size:12.5px;color:#1d4ed8;font-weight:500">✓ Sold — $${parseFloat(item.sold_price||0).toFixed(2)}${item.sold_to?' to '+item.sold_to:''}<br><span style="font-weight:400;color:#94a3b8">${item.sold_date||''}</span></div>`;
   } else if(item.qty!==null){
     acts=`<button class="btn btn-primary" onclick="openQtyAdjust(${item.id})">Adjust Quantity</button>`;
   } else if(item.checked_out){
@@ -1619,7 +1619,7 @@ async function undoRetire(itemId){
 }
 
 // ── Timeline ──
-const TL_COLORS={checkout:'#1d4ed8',checkin:'#16a34a',edit:'#7c3aed',note:'#d97706',service:'#0891b2',photo:'#be185d',audit:'#64748b'};
+const TL_COLORS={checkout:'#1d4ed8',checkin:'#16a34a',edit:'#1d4ed8',note:'#d97706',service:'#0891b2',photo:'#be185d',audit:'#64748b'};
 const TL_ICONS={checkout:'📤',checkin:'📥',edit:'✏️',note:'📝',service:'🔧',photo:'📷',audit:'⚙️'};
 async function loadTimeline(itemId){
   const el=document.getElementById('dp-timeline-list');
