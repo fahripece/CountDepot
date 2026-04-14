@@ -44,6 +44,111 @@ def _ensure_internal_sku(item_id, category_id):
         execute("UPDATE items SET internal_sku=? WHERE id=?", [sku, item_id])
 
 
+def _reservation_qty(row):
+    return max(0, int(row.get("qty_remaining") or row.get("qty_reserved") or 1))
+
+
+def _reservation_active_sql(alias="r"):
+    return (f"COALESCE({alias}.cancelled,0)=0 "
+            f"AND COALESCE({alias}.fulfilled,0)=0 "
+            f"AND COALESCE({alias}.qty_remaining,{alias}.qty_reserved,1)>0")
+
+
+def _reservation_overlap_sql(alias="r"):
+    return f"NOT ({alias}.reserved_to < ? OR {alias}.reserved_from > ?)"
+
+
+def _overlapping_reserved_qty(item_id, start_date, end_date, exclude_id=None):
+    sql = f"""SELECT COALESCE(SUM(COALESCE(qty_remaining, qty_reserved, 1)),0) AS qty
+              FROM item_reservations r
+              WHERE r.item_id=? AND {_reservation_active_sql("r")}
+                AND {_reservation_overlap_sql("r")}"""
+    args = [item_id, start_date, end_date]
+    if exclude_id:
+        sql += " AND r.id != ?"
+        args.append(exclude_id)
+    row = query(sql, args, one=True)
+    return int(row["qty"] or 0) if row else 0
+
+
+def _item_reservation_capacity(item, start_date, end_date):
+    if item.get("qty") is not None:
+        total = int(item.get("qty") or 0)
+        out = int(item.get("qty_out") or 0)
+        reserved = _overlapping_reserved_qty(item["id"], start_date, end_date)
+        return max(0, total - out - reserved)
+    if item.get("checked_out"):
+        return 0
+    return 0 if _overlapping_reserved_qty(item["id"], start_date, end_date) else 1
+
+
+def _active_item_reservations(item_id, include_future=True):
+    today = datetime.now().strftime("%Y-%m-%d")
+    sql = f"""SELECT * FROM item_reservations r
+              WHERE r.item_id=? AND {_reservation_active_sql("r")}"""
+    args = [item_id]
+    if include_future:
+        sql += " AND r.reserved_to >= ?"
+        args.append(today)
+    sql += " ORDER BY r.reserved_from, r.id"
+    return query(sql, args)
+
+
+def _use_reservation_units(reservation_id, item_id, qty, username):
+    if not reservation_id:
+        return False, "Select the reservation being used"
+    qty = max(1, int(qty or 1))
+    row = query(f"""SELECT * FROM item_reservations r
+                    WHERE r.id=? AND r.item_id=? AND {_reservation_active_sql("r")}""",
+                [reservation_id, item_id], one=True)
+    if not row:
+        return False, "Reservation not found or already fulfilled"
+    remaining = _reservation_qty(row)
+    if qty > remaining:
+        return False, f"Reservation only has {remaining} unit(s) remaining"
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    new_remaining = remaining - qty
+    if new_remaining <= 0:
+        execute("""UPDATE item_reservations
+                   SET qty_remaining=0, fulfilled=1, fulfilled_at=?, fulfilled_by=?
+                   WHERE id=?""", [now, username, reservation_id])
+    else:
+        execute("UPDATE item_reservations SET qty_remaining=? WHERE id=?",
+                [new_remaining, reservation_id])
+    return True, ""
+
+
+def _reservation_conflict_payload(item_id):
+    rows = _active_item_reservations(item_id)
+    if not rows:
+        return None
+    return [{
+        "id": r["id"],
+        "reserved_by": r["reserved_by"],
+        "reserved_from": r["reserved_from"],
+        "reserved_to": r["reserved_to"],
+        "qty_remaining": _reservation_qty(r),
+    } for r in rows]
+
+
+def _record_reservation_override(item, qty, username, note=""):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    detail = f"Reservation override by {username}: used {qty} unit(s)"
+    if note:
+        detail += f". {note}"
+    execute("INSERT INTO item_notes (item_id,note,username,created_at) VALUES (?,?,?,?)",
+            [item["id"], detail, username, now])
+    log_action("RESERVATION_OVERRIDE", item["id"], item["name"], detail)
+    try:
+        from app.helpers import push_notification
+        push_notification("reservation_override",
+                          f"Reservation override: {item['name']}",
+                          detail,
+                          f"/?item={item['id']}")
+    except Exception:
+        pass
+
+
 # ── Save item (shared for add + edit) ─────────────────────────────────────────
 
 def _save_item(d, iid=None):
@@ -664,10 +769,16 @@ def api_items():
              LEFT JOIN locations l    ON l.id=i.location_id
              LEFT JOIN departments d  ON d.id=i.department_id
              LEFT JOIN (SELECT item_id, COUNT(*) as photo_count FROM item_photos GROUP BY item_id) ph ON ph.item_id=i.id
-             LEFT JOIN (SELECT item_id, COUNT(*) as res_count,
-                               GROUP_CONCAT(reserved_by || '|' || start_date || '|' || end_date, ';;') as res_details
-                        FROM reservations
-                        WHERE status NOT IN ('cancelled','completed') AND end_date >= date('now')
+             LEFT JOIN (SELECT item_id,
+                               COUNT(*) as res_count,
+                               COALESCE(SUM(COALESCE(qty_remaining, qty_reserved, 1)),0) as reserved_qty,
+                               GROUP_CONCAT(reserved_by || '|' || reserved_from || '|' || reserved_to || '|' ||
+                                            COALESCE(qty_remaining, qty_reserved, 1), ';;') as res_details
+                        FROM item_reservations
+                        WHERE COALESCE(cancelled,0)=0
+                          AND COALESCE(fulfilled,0)=0
+                          AND COALESCE(qty_remaining, qty_reserved, 1)>0
+                          AND reserved_to >= date('now')
                         GROUP BY item_id) rv ON rv.item_id=i.id
              WHERE i.active=1 AND COALESCE(i.retired,0)=""" + ("1" if show_retired else "0")
     sql  = """SELECT i.*, c.name as category, c.color,
@@ -682,6 +793,7 @@ def api_items():
                     d.name as department_name, d.color as department_color,
                     COALESCE(ph.photo_count, 0) as photo_count,
                     COALESCE(rv.res_count, 0) as reservation_count,
+                    COALESCE(rv.reserved_qty, 0) as reserved_qty,
                     rv.res_details as reservation_details
              """ + base_where
     args = []
@@ -763,7 +875,9 @@ def api_items():
     result = []
     for r in query(sql, args):
         d = dict(r)
-        d["available"]   = ((d["qty"] or 0) - (d["qty_out"] or 0) if d["qty"] is not None else None)
+        d["reserved_qty"] = int(d.get("reserved_qty") or 0)
+        d["physical_available"] = ((d["qty"] or 0) - (d["qty_out"] or 0) if d["qty"] is not None else None)
+        d["available"]   = (max(0, d["physical_available"] - d["reserved_qty"]) if d["qty"] is not None else None)
         d["is_low"]      = False
         d["profit"]      = (round(d["sale_price"] - d["cost_price"], 2) if d["sale_price"] and d["cost_price"] else None)
         today_s = datetime.now().strftime("%Y-%m-%d")
@@ -842,6 +956,23 @@ def api_checkout():
     expected_return = d.get("expected_return_date") or None
     if new_sale is not None:
         execute("UPDATE items SET sale_price=? WHERE id=?", [new_sale, item["id"]])
+    reservation_conflicts = _reservation_conflict_payload(item["id"])
+    use_reservation = bool(d.get("use_reservation"))
+    override_reservation = bool(d.get("override_reservation") or d.get("reservation_override"))
+    if reservation_conflicts:
+        if use_reservation:
+            ok, msg = _use_reservation_units(d.get("reservation_id"), item["id"], 1, who)
+            if not ok:
+                return jsonify({"ok": False, "msg": msg})
+        elif not override_reservation:
+            return jsonify({
+                "ok": False,
+                "msg": "reservation_conflict",
+                "detail": "This item is reserved. Use it for a reservation or override the warning.",
+                "reservations": reservation_conflicts,
+            })
+        else:
+            _record_reservation_override(item, 1, who, d.get("job_ref", ""))
     execute("UPDATE items SET checked_out=1,checkout_date=?,checkout_by=?,job_ref=?,expected_return_date=?,checkout_dept=? WHERE id=?",
             [now, who, d.get("job_ref", ""), expected_return, dept, item["id"]])
     execute("""INSERT INTO checkout_log
@@ -1186,7 +1317,8 @@ def api_item_reservations(item_id):
     if not _item_location_allowed(item_id):
         return jsonify([])
     rows = query("""SELECT * FROM item_reservations
-                    WHERE item_id=? AND cancelled=0 ORDER BY reserved_from""", [item_id])
+                    WHERE item_id=? AND COALESCE(cancelled,0)=0
+                    ORDER BY reserved_from""", [item_id])
     return jsonify([dict(r) for r in rows])
 
 
@@ -1205,17 +1337,26 @@ def api_add_reservation(item_id):
     if frm > to:
         return jsonify({"ok": False, "msg": "Start date must be before end date"})
     # Conflict check — overlapping active reservations for same item
-    conflict = query("""SELECT id FROM item_reservations
-                        WHERE item_id=? AND cancelled=0
-                          AND NOT (reserved_to < ? OR reserved_from > ?)""",
-                     [item_id, frm, to], one=True)
-    if conflict:
+    try:
+        qty_reserved = max(1, int(d.get("qty_reserved") or d.get("quantity_reserved") or 1))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "msg": "Quantity reserved must be a number"})
+    item = query("SELECT * FROM items WHERE id=? AND active=1", [item_id], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Item not found"}), 404
+    if item.get("qty") is None and qty_reserved != 1:
+        return jsonify({"ok": False, "msg": "Serial-tracked items can only reserve quantity 1"})
+    capacity = _item_reservation_capacity(item, frm, to)
+    if qty_reserved > capacity:
+        if item.get("qty") is not None:
+            return jsonify({"ok": False, "msg": f"Only {capacity} unit(s) are available for those dates"})
         return jsonify({"ok": False, "msg": "Conflicts with an existing reservation for this item"})
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     rid = execute("""INSERT INTO item_reservations
-                     (item_id,reserved_by,reserved_from,reserved_to,purpose,created_by,created_at)
-                     VALUES (?,?,?,?,?,?,?)""",
-                  [item_id, by, frm, to, d.get("purpose",""), session.get("username","?"), now])
+                     (item_id,reserved_by,reserved_from,reserved_to,purpose,qty_reserved,qty_remaining,created_by,created_at)
+                     VALUES (?,?,?,?,?,?,?,?,?)""",
+                  [item_id, by, frm, to, d.get("purpose",""), qty_reserved, qty_reserved,
+                   session.get("username","?"), now])
     log_action("RESERVATION_ADD", item_id, None,
                f"Reserved for {by} {frm}→{to}")
     return jsonify({"ok": True, "id": rid})
@@ -1527,6 +1668,26 @@ def api_qty_adjust():
         nq = query("SELECT qty FROM items WHERE id=?", [item["id"]], one=True)["qty"]
         log_action("QTY_ADD", item["id"], item["name"], f"+{amount}. {note}. Total:{nq}", before, {"qty": nq})
     elif action == "remove":
+        conflicts = _reservation_conflict_payload(item["id"])
+        use_reservation = bool(d.get("use_reservation"))
+        override_reservation = bool(d.get("override_reservation") or d.get("reservation_override"))
+        if conflicts:
+            reserved_qty = sum(int(r.get("qty_remaining") or 0) for r in conflicts)
+            physical_available = max(0, int(item["qty"] or 0) - int(item["qty_out"] or 0))
+            dips_into_reserved = amount > max(0, physical_available - reserved_qty)
+            if use_reservation:
+                ok, msg = _use_reservation_units(d.get("reservation_id"), item["id"], amount, session.get("username", "?"))
+                if not ok:
+                    return jsonify({"ok": False, "msg": msg})
+            elif dips_into_reserved and not override_reservation:
+                return jsonify({
+                    "ok": False,
+                    "msg": "reservation_conflict",
+                    "detail": "This removal would use inventory reserved for someone else.",
+                    "reservations": conflicts,
+                })
+            elif dips_into_reserved:
+                _record_reservation_override(item, amount, session.get("username", "?"), note)
         execute("UPDATE items SET qty_out=qty_out+? WHERE id=?", [amount, item["id"]])
         u  = query("SELECT qty, qty_out FROM items WHERE id=?", [item["id"]], one=True)
         log_action("QTY_REMOVE", item["id"], item["name"], f"-{amount}. {note}. Left:{u['qty']-(u['qty_out'] or 0)}", before, {"qty_out": u["qty_out"]})
@@ -4313,19 +4474,25 @@ def api_reservations_list():
     from_d = request.args.get("from", "")
     to_d   = request.args.get("to", "")
     item_id = request.args.get("item_id", "")
-    user_id = request.args.get("user_id", "")
-    sql  = """SELECT r.*, i.name as item_name, i.serial, i.sku, i.internal_sku,
-                     c.name as category, c.color
-              FROM reservations r
+    active_only = request.args.get("active", "1") != "0"
+    sql  = """SELECT r.id, r.item_id, r.reserved_by, r.reserved_from, r.reserved_to,
+                     r.purpose, r.qty_reserved, r.qty_remaining, r.fulfilled,
+                     r.reserved_from AS start_date, r.reserved_to AS end_date,
+                     CASE WHEN COALESCE(r.fulfilled,0)=1 THEN 'completed' ELSE 'confirmed' END AS status,
+                     r.purpose AS notes,
+                     i.name as item_name, i.serial, i.sku, i.internal_sku,
+                     i.qty, i.qty_out, c.name as category, c.color
+              FROM item_reservations r
               JOIN items i ON i.id=r.item_id
               LEFT JOIN categories c ON c.id=i.category_id
-              WHERE r.status != 'cancelled'"""
+              WHERE COALESCE(r.cancelled,0)=0"""
     args = []
     if item_id: sql += " AND r.item_id=?"; args.append(item_id)
-    if user_id: sql += " AND r.user_id=?"; args.append(user_id)
-    if from_d:  sql += " AND r.end_date>=?"; args.append(from_d)
-    if to_d:    sql += " AND r.start_date<=?"; args.append(to_d)
-    sql += " ORDER BY r.start_date ASC"
+    if active_only:
+        sql += " AND COALESCE(r.fulfilled,0)=0 AND COALESCE(r.qty_remaining,r.qty_reserved,1)>0 AND r.reserved_to>=date('now')"
+    if from_d:  sql += " AND r.reserved_to>=?"; args.append(from_d)
+    if to_d:    sql += " AND r.reserved_from<=?"; args.append(to_d)
+    sql += " ORDER BY r.reserved_from ASC"
     rows = query(sql, args)
     return jsonify({"ok": True, "reservations": [dict(r) for r in rows]})
 
@@ -4343,6 +4510,30 @@ def api_reservations_create():
         return jsonify({"ok": False, "msg": "item_id, start_date, end_date, reserved_by required"})
     if end_date < start_date:
         return jsonify({"ok": False, "msg": "end_date must be on or after start_date"})
+    item = query("SELECT * FROM items WHERE id=? AND active=1", [item_id], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Item not found"})
+    try:
+        qty_reserved = max(1, int(d.get("qty_reserved") or d.get("quantity_reserved") or 1))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "msg": "Quantity reserved must be a number"})
+    if item.get("qty") is None and qty_reserved != 1:
+        return jsonify({"ok": False, "msg": "Serial-tracked items can only reserve quantity 1"})
+    capacity = _item_reservation_capacity(item, start_date, end_date)
+    if qty_reserved > capacity:
+        if item.get("qty") is not None:
+            return jsonify({"ok": False, "msg": f"Only {capacity} unit(s) are available for those dates"})
+        return jsonify({"ok": False, "msg": "This item is already reserved for those dates"})
+    now    = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    new_id = execute(
+        """INSERT INTO item_reservations
+           (item_id,reserved_by,reserved_from,reserved_to,purpose,qty_reserved,qty_remaining,created_by,created_at)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        [item_id, reserved_by, start_date, end_date, notes, qty_reserved, qty_reserved,
+         session.get("username", "?"), now])
+    log_action("RESERVATION_CREATE", item_id=item_id, item_name=item["name"],
+               detail=f"Reserved {qty_reserved} {start_date}->{end_date} for {reserved_by}")
+    return jsonify({"ok": True, "id": new_id})
 
     item = query("SELECT * FROM items WHERE id=? AND active=1", [item_id], one=True)
     if not item:
@@ -4380,6 +4571,15 @@ def api_reservations_create():
 @bp.route("/api/reservations/<int:res_id>/cancel", methods=["POST"])
 @login_required
 def api_reservations_cancel(res_id):
+    res = query("SELECT r.*, i.name as item_name FROM item_reservations r JOIN items i ON i.id=r.item_id WHERE r.id=?",
+                [res_id], one=True)
+    if not res:
+        return jsonify({"ok": False, "msg": "Not found"})
+    execute("UPDATE item_reservations SET cancelled=1 WHERE id=?", [res_id])
+    log_action("RESERVATION_CANCEL", item_id=res["item_id"], item_name=res["item_name"],
+               detail=f"Reservation cancelled for {res['reserved_by']}")
+    return jsonify({"ok": True})
+
     res = query("SELECT r.*, i.name as item_name FROM reservations r JOIN items i ON i.id=r.item_id WHERE r.id=?",
                 [res_id], one=True)
     if not res:
@@ -4400,6 +4600,19 @@ def api_reservations_availability():
     item_id = request.args.get("item_id", "")
     if not item_id:
         return jsonify({"ok": False, "msg": "item_id required"})
+    rows = query(
+        """SELECT reserved_from AS start_date, reserved_to AS end_date,
+                  reserved_by,
+                  CASE WHEN COALESCE(fulfilled,0)=1 THEN 'completed' ELSE 'confirmed' END AS status,
+                  COALESCE(qty_remaining, qty_reserved, 1) AS qty_remaining
+           FROM item_reservations
+           WHERE item_id=? AND COALESCE(cancelled,0)=0
+             AND COALESCE(fulfilled,0)=0
+             AND COALESCE(qty_remaining, qty_reserved, 1)>0
+             AND reserved_to>=DATE('now')
+           ORDER BY reserved_from""",
+        [item_id])
+    return jsonify({"ok": True, "booked": [dict(r) for r in rows]})
     rows = query(
         "SELECT start_date, end_date, reserved_by, status FROM reservations "
         "WHERE item_id=? AND status NOT IN ('cancelled') AND end_date>=DATE('now') "

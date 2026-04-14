@@ -108,6 +108,13 @@ MIGRATIONS = [
     ("distributors", "contact_name", "TEXT"),
     ("distributors", "phone", "TEXT"),
 
+    # item reservations — quantity-aware reservation workflow
+    ("item_reservations", "qty_reserved",  "INTEGER NOT NULL DEFAULT 1"),
+    ("item_reservations", "qty_remaining", "INTEGER NOT NULL DEFAULT 1"),
+    ("item_reservations", "fulfilled",     "INTEGER NOT NULL DEFAULT 0"),
+    ("item_reservations", "fulfilled_at",  "TEXT"),
+    ("item_reservations", "fulfilled_by",  "TEXT"),
+
     # purchase_orders — approval workflow
     ("purchase_orders", "rejected_by",     "TEXT"),
     ("purchase_orders", "rejected_at",     "TEXT"),
@@ -479,6 +486,11 @@ def _init_db_conn(db):
             reserved_from TEXT NOT NULL,
             reserved_to   TEXT NOT NULL,
             purpose       TEXT,
+            qty_reserved  INTEGER NOT NULL DEFAULT 1,
+            qty_remaining INTEGER NOT NULL DEFAULT 1,
+            fulfilled     INTEGER NOT NULL DEFAULT 0,
+            fulfilled_at  TEXT,
+            fulfilled_by  TEXT,
             created_by    TEXT,
             created_at    TEXT NOT NULL,
             cancelled     INTEGER DEFAULT 0

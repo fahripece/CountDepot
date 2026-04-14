@@ -164,6 +164,7 @@
           <div class="field"><label class="label">From *</label><input class="input" id="res-from" type="date"></div>
           <div class="field"><label class="label">To *</label><input class="input" id="res-to" type="date"></div>
         </div>
+        <div class="field" id="res-qty-field" style="display:none"><label class="label">Quantity Reserved *</label><input class="input" id="res-qty" type="number" min="1" value="1"></div>
         <button class="btn btn-secondary btn-sm" onclick="addReservation()">+ Add Reservation</button>
       </div>
     </div>
@@ -414,6 +415,9 @@
       <div id="co-res-warning" style="display:none;background:#fef3c7;border:1px solid #fcd34d;border-radius:7px;padding:10px 12px;margin-bottom:14px">
         <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:3px">⚠️ Reservation Conflict</div>
         <div id="co-res-detail" style="font-size:12px;color:#92400e;line-height:1.5"></div>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12px;color:#92400e"><input type="checkbox" id="co-use-res"> Use this checkout for a reservation</label>
+        <select class="select" id="co-res-select" style="display:none;margin-top:7px;font-size:12px"></select>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12px;color:#b91c1c"><input type="checkbox" id="co-res-override"> Override reservation warning</label>
       </div>
       <div id="co-scan-required" style="display:none;background:#fef3c7;border:1px solid #fcd34d;border-radius:7px;padding:10px 12px;margin-bottom:14px">
         <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:6px">⚠️ Scan Required — scan the item barcode before checkout</div>
@@ -533,6 +537,13 @@
         <button id="qa-set-btn" class="btn btn-secondary flex-1" style="justify-content:center" onclick="setQtyAction('set')">= Set</button>
       </div>
       <div class="field"><label class="label" id="qty-action-label">Amount to Add</label><input class="input" id="qty-amount" type="number" min="1"></div>
+      <div id="qty-res-warning" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:7px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#991b1b">
+        <strong>Reserved inventory exists.</strong>
+        <div id="qty-res-detail" style="margin-top:4px;line-height:1.5"></div>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:8px"><input type="checkbox" id="qty-use-res"> Use this removal for a reservation</label>
+        <select class="select" id="qty-res-select" style="display:none;margin-top:7px;font-size:12px"></select>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:8px"><input type="checkbox" id="qty-res-override"> Override reservation warning</label>
+      </div>
       <div class="field"><label class="label">Note (optional)</label><input class="input" id="qty-note"></div>
     </div>
     <div class="modal-footer">
@@ -620,14 +631,41 @@
 <!-- ══ BULK ACTION BAR ══ -->
 <div id="bulkBar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;border-radius:12px;padding:10px 16px;gap:8px;align-items:center;z-index:800;box-shadow:0 8px 32px rgba(0,0,0,0.35);font-size:13px;min-width:480px">
   <span id="bulkCount" style="font-weight:600;min-width:80px"></span>
+  <button class="btn btn-sm" id="selectionDetailsBtn" style="background:#475569;color:#fff;border:none" onclick="openSelectedDetails()">Details</button>
+  <button class="btn btn-sm" style="background:#b91c1c;color:#fff;border:none" onclick="openReserveSelected()">Reserve</button>
   <button class="btn btn-sm" style="background:#1e40af;color:#fff;border:none" onclick="openBulkCheckout()">📤 Checkout</button>
   <button class="btn btn-sm" style="background:#15803d;color:#fff;border:none" onclick="bulkCheckin()">📥 Check In</button>
   <button class="btn btn-sm" style="background:#374151;color:#fff;border:none" onclick="printSelectedLabels()">Print Labels</button>
+  <button class="btn btn-sm" style="background:#475569;color:#fff;border:none" onclick="openBulkEdit()">Edit</button>
   <button class="btn btn-sm" style="background:#991b1b;color:#fff;border:none" onclick="massDelete()">🗑 Delete</button>
-  <button style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:0 4px;margin-left:4px" onclick="selectedIds.clear();updateSelectionUI();document.querySelectorAll('.row-cb').forEach(c=>c.checked=false);document.getElementById('selectAll').checked=false" title="Clear selection">✕</button>
+  <button style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:0 4px;margin-left:4px" onclick="selectedIds.clear();updateSelectionUI();document.querySelectorAll('.row-cb').forEach(c=>c.checked=false);if(document.getElementById('selectAll'))document.getElementById('selectAll').checked=false" title="Clear selection">x</button>
 </div>
 
 <!-- ══ BULK CHECKOUT MODAL ══ -->
+<!-- RESERVE SELECTED MODAL -->
+<div class="overlay" id="reserveModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Reserve Inventory</div><button class="modal-close" onclick="closeModal('reserveModal')">x</button></div>
+    <div class="modal-body">
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12.5px;color:#991b1b">
+        <strong id="reserve-summary"></strong>
+        <div id="reserve-help" style="margin-top:4px;line-height:1.5"></div>
+      </div>
+      <div class="field"><label class="label">Reserved For *</label><input class="input" id="bulk-res-by" placeholder="Name or team"></div>
+      <div class="field-row">
+        <div class="field"><label class="label">From *</label><input class="input" id="bulk-res-from" type="date"></div>
+        <div class="field"><label class="label">To *</label><input class="input" id="bulk-res-to" type="date"></div>
+      </div>
+      <div class="field" id="bulk-res-qty-wrap"><label class="label">Quantity Reserved *</label><input class="input" id="bulk-res-qty" type="number" min="1" value="1"></div>
+      <div class="field"><label class="label">Purpose</label><input class="input" id="bulk-res-purpose" placeholder="Optional"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('reserveModal')">Cancel</button>
+      <button class="btn btn-danger" id="reserveBtn" onclick="confirmReserveSelected()">Reserve</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="bulkCheckoutModal">
   <div class="modal modal-sm">
     <div class="modal-header"><div class="modal-title">📤 Bulk Check Out</div><button class="modal-close" onclick="closeModal('bulkCheckoutModal')">✕</button></div>
@@ -705,6 +743,19 @@
 .lineage-link:hover{background:#dbeafe}
 .product-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:4px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
 .tag-incomplete{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600;padding:1px 7px;border-radius:4px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;margin-left:6px;cursor:help}
+.detail#detailPanel .detail-inner{width:min(1040px,calc(100vw - 48px));max-height:calc(100vh - 48px)}
+.detail#detailPanel .detail-body{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;overflow:auto}
+#dp-fields,#dp-notes-section,#dp-photos-section,#dp-timeline-section{grid-column:1}
+#dp-reservations-section{grid-column:2;grid-row:1 / span 4;margin-top:0!important;position:sticky;top:0;align-self:start;background:#fff;border:1px solid #fee2e2;border-radius:12px;padding:14px;box-shadow:0 8px 24px rgba(220,38,38,.08)}
+.res-card{display:flex;align-items:flex-start;gap:8px;padding:9px 0;border-bottom:1px solid #fee2e2;font-size:12.5px}
+.res-card:last-child{border-bottom:none}
+.res-card.active{background:#fff7f7;margin:0 -8px;padding:9px 8px;border-radius:8px;border-bottom:0}
+.res-pill{font-size:11px;padding:2px 7px;border-radius:999px;background:#fee2e2;color:#b91c1c;font-weight:700;white-space:nowrap}
+tr.selected td{background:#eff6ff!important}
+@media(max-width:900px){
+  .detail#detailPanel .detail-body{display:block}
+  #dp-reservations-section{position:static;margin-top:12px!important}
+}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 <script>
@@ -727,6 +778,7 @@ window.addEventListener('pageshow', scrubBadVendorSkuExample);
 let allItems=[], selectedIds=new Set(), scanOpen=false, scanMode='lookup';
 let pendingCheckoutId=null, pendingQtyId=null, qtyAction='add', debTimer=null, currentDetailId=null;
 let pendingSaveData=null;
+let checkoutReservationConflict=false;
 let currentPage=1, totalItems=0, totalPages=1;
 const PER_PAGE=50;
 
@@ -841,7 +893,9 @@ function _resBadge(item){
   const count=parseInt(item.reservation_count||0,10);
   if(!count)return '';
   const title=(item.reservation_details||'').replace(/;;/g,'\n').replace(/\|/g,' - ');
-  return `<span class="tag" title="${title}" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-size:10px">${count} reserved</span>`;
+  const qty=parseInt(item.reserved_qty||0,10);
+  const label=item.qty!==null&&qty?`${qty} reserved`:`${count} reserved`;
+  return `<span class="tag" title="${title}" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;font-size:10px">${label}</span>`;
 }
 
 function renderTable(items){
@@ -880,7 +934,7 @@ function renderTable(items){
     const incLabel=item.is_incomplete?`<span class="tag-incomplete" title="Missing: ${item.missing_fields.join(', ')}">⚠ Incomplete</span>`:'';
     const photoIcon=item.photo_count>0?`<span title="${item.photo_count} photo${item.photo_count!==1?'s':''}" style="font-size:11px;color:#64748b;margin-left:4px;opacity:.7">📷${item.photo_count>1?'<sup style=font-size:9px>'+item.photo_count+'</sup>':''}</span>`:'';
     const cbCol=IS_ADMIN?`<td style="padding:10px 8px 10px 14px" onclick="event.stopPropagation()"><input type="checkbox" class="row-cb" data-id="${item.id}" onchange="onRowCheck(this)" ${selectedIds.has(item.id)?'checked':''}></td>`:'';
-    return `<tr class="${item.is_low?'low-row':''}${selectedIds.has(item.id)?' selected':''}" onclick="showDetail(allItems.find(i=>i.id===${item.id}))">
+    return `<tr class="${item.is_low?'low-row':''}${selectedIds.has(item.id)?' selected':''}" onclick="toggleRowSelect(${item.id})">
       ${cbCol}
       <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#94a3b8;white-space:nowrap">#${item.id}</td>
       <td><div style="font-weight:500;font-size:13px">${item.name} ${incLabel}${photoIcon}</div>${item.manufacturer?`<div style="font-size:11px;color:#aaa">${item.manufacturer}</div>`:''}${prodLabel}</td>
@@ -897,10 +951,16 @@ function renderTable(items){
 
 function showDetail(item){
   if(!item)return; currentDetailId=item.id;
+  const resQtyField=document.getElementById('res-qty-field');
+  if(resQtyField){
+    resQtyField.style.display=item.qty!==null?'block':'none';
+    document.getElementById('res-qty').max=item.available||item.qty||1;
+    document.getElementById('res-qty').value='1';
+  }
   document.getElementById('dp-name').textContent=item.name;
   document.getElementById('dp-model').textContent=[item.manufacturer,item.model].filter(Boolean).join(' · ');
   let statusHtml='';
-  if(item.qty!==null) statusHtml=`<span class="tag ${item.is_low?'tag-out':'tag-in'}">${item.is_low?'🔴 Low':'✓'} ${item.available} available of ${item.qty}</span>`;
+  if(item.qty!==null) statusHtml=`<span class="tag ${item.is_low?'tag-out':'tag-in'}">${item.is_low?'Low':'Available'} ${item.available} available / ${item.qty} total${item.reserved_qty?` / ${item.reserved_qty} reserved`:''}</span>`;
   else if(item.checked_out){
     const overdueTag=item.overdue?`<span style="display:inline-block;font-size:9px;font-weight:700;padding:1px 7px;background:#b91c1c;color:#fff;border-radius:3px;margin-left:6px">OVERDUE</span>`:'';
     statusHtml=`<span class="tag tag-out">📤 Out — ${item.checkout_by||'?'}</span>${overdueTag}`;
@@ -1000,6 +1060,7 @@ function showDetail(item){
   } else {
     acts=`<button class="btn btn-danger" onclick="closeDetail();openCheckout(${item.id})">📤 Check Out</button>`;
   }
+  acts+=`<button class="btn btn-danger" onclick="selectedIds=new Set([${item.id}]);updateSelectionUI();closeDetail();openReserveSelected()">Reserve</button>`;
   acts+=`<button class="btn btn-secondary" onclick="closeDetail();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button>`;
   acts+=`<button class="btn btn-secondary" onclick="cloneItem(${item.id})" title="Clone this item (copy without serial/SKU)">⧉ Clone</button>`;
   acts+=`<button class="btn btn-secondary" onclick="printLabel(${item.id})" style="font-size:11px">Print Label</button>`;
@@ -1355,9 +1416,16 @@ let _scanVerified=false;
 function openCheckout(id){
   const item=allItems.find(i=>i.id===id);if(!item)return;
   pendingCheckoutId=id;_scanVerified=false;
+  checkoutReservationConflict=false;
   document.getElementById('co-item-name').textContent=item.name;
   document.getElementById('co-serial').textContent=item.serial||item.sku||item.internal_sku||item.model||'';
   document.getElementById('co-who').value='';document.getElementById('co-jobref').value='';document.getElementById('co-return-date').value='';
+  document.getElementById('co-res-warning').style.display='none';
+  document.getElementById('co-res-detail').textContent='';
+  document.getElementById('co-use-res').checked=false;
+  document.getElementById('co-res-override').checked=false;
+  document.getElementById('co-res-select').style.display='none';
+  document.getElementById('co-use-res').onchange=()=>{document.getElementById('co-res-select').style.display=document.getElementById('co-use-res').checked?'block':'none';};
   // Resolve scan requirement from item + product data returned by API
   const itemReq=item.require_scan_checkout!=null?item.require_scan_checkout:-1;
   const prodReq=item.product_scan_req||0;  // returned by JOIN in api_items
@@ -1391,11 +1459,20 @@ async function confirmCheckout(){
   if(!who){toast('Please enter tech name/initials','warn');return;}
   const btn=document.getElementById('coBtn');btn.disabled=true;btn.textContent='Checking out…';
   const scannedCode=document.getElementById('co-scan-input')?.value.trim()||'';
-  const res=await api('/api/checkout',{id:pendingCheckoutId,who,job_ref:document.getElementById('co-jobref').value.trim(),scanned_code:scannedCode,expected_return_date:document.getElementById('co-return-date').value||null});
+  const useRes=document.getElementById('co-use-res')?.checked||false;
+  const res=await api('/api/checkout',{id:pendingCheckoutId,who,job_ref:document.getElementById('co-jobref').value.trim(),scanned_code:scannedCode,expected_return_date:document.getElementById('co-return-date').value||null,use_reservation:useRes,reservation_id:useRes?document.getElementById('co-res-select').value:null,override_reservation:document.getElementById('co-res-override')?.checked||false});
   btn.disabled=false;btn.innerHTML='📤 Check Out';
   if(res.ok){toast('Checked out ✓','ok');closeModal('checkoutModal');await loadItems();const u=allItems.find(i=>i.id===pendingCheckoutId);if(u)showDetail(u);}
   else if(res.msg==='scan_required') toast('Scan required — please verify the barcode first','warn');
   else if(res.msg==='scan_mismatch') toast(res.detail||'Scan mismatch','err');
+  else if(res.msg==='reservation_conflict'){
+    checkoutReservationConflict=true;
+    const rows=res.reservations||[];
+    document.getElementById('co-res-warning').style.display='block';
+    document.getElementById('co-res-detail').innerHTML=(res.detail||'Reserved inventory conflict')+'<br>'+rows.map(r=>`${escHtml(r.reserved_by)} · ${r.reserved_from} → ${r.reserved_to} · ${r.qty_remaining||1} remaining`).join('<br>');
+    document.getElementById('co-res-select').innerHTML=rows.map(r=>`<option value="${r.id}">${escHtml(r.reserved_by)} · ${r.qty_remaining||1} remaining · ${r.reserved_from} → ${r.reserved_to}</option>`).join('');
+    toast('Reservation warning: choose use for reservation or override','warn');
+  }
   else toast(res.msg||'Error','err');
 }
 let pendingCheckinId=null;
@@ -1419,9 +1496,10 @@ async function confirmCheckin(){
 }
 
 // ── Qty, Modify, eBay, Labels ──
-function openQtyAdjust(id){const item=allItems.find(i=>i.id===id);if(!item)return;pendingQtyId=id;document.getElementById('qty-name').textContent=item.name;document.getElementById('qty-avail').textContent=item.available||0;document.getElementById('qty-total').textContent=item.qty;document.getElementById('qty-amount').value='';document.getElementById('qty-note').value='';setQtyAction('add');openModal('qtyModal');}
+function openQtyAdjust(id){const item=allItems.find(i=>i.id===id);if(!item)return;pendingQtyId=id;document.getElementById('qty-name').textContent=item.name;document.getElementById('qty-avail').textContent=item.available||0;document.getElementById('qty-total').textContent=item.qty;document.getElementById('qty-amount').value='';document.getElementById('qty-note').value='';document.getElementById('qty-res-warning').style.display=item.reservation_count?'block':'none';document.getElementById('qty-res-detail').textContent=item.reserved_qty?`${item.reserved_qty} unit(s) reserved. Removing beyond available quantity needs a reservation selection or override.`:'No active quantity reservation.';document.getElementById('qty-use-res').checked=false;document.getElementById('qty-res-override').checked=false;document.getElementById('qty-res-select').style.display='none';document.getElementById('qty-use-res').onchange=()=>{document.getElementById('qty-res-select').style.display=document.getElementById('qty-use-res').checked?'block':'none';};loadQtyReservations(id);setQtyAction('add');openModal('qtyModal');}
+async function loadQtyReservations(id){try{const rows=await fetch('/api/item/'+id+'/reservations').then(r=>r.json());const today=new Date().toISOString().split('T')[0];const active=rows.filter(r=>r.reserved_to>=today&&(parseInt(r.qty_remaining||r.qty_reserved||1,10)>0)&&!r.fulfilled);document.getElementById('qty-res-select').innerHTML=active.map(r=>`<option value="${r.id}">${escHtml(r.reserved_by)} · ${r.qty_remaining||r.qty_reserved||1} remaining · ${r.reserved_from} → ${r.reserved_to}</option>`).join('');}catch(e){}}
 function setQtyAction(action){qtyAction=action;const labels={add:'Amount to Add',remove:'Amount to Use / Remove',set:'Set New Total Quantity'};document.getElementById('qty-action-label').textContent=labels[action];['add','remove','set'].forEach(a=>{document.getElementById(`qa-${a}-btn`).className='btn '+(a===action?'btn-primary':'btn-secondary')+' flex-1';document.getElementById(`qa-${a}-btn`).style.justifyContent='center';});}
-async function confirmQtyAdjust(){const amount=parseInt(document.getElementById('qty-amount').value);if(!amount||amount<0){toast('Enter a valid amount','warn');return}const res=await api('/api/qty_adjust',{id:pendingQtyId,action:qtyAction,amount,note:document.getElementById('qty-note').value.trim()});if(res.ok){toast('Quantity updated ✓','ok');closeModal('qtyModal');await loadItems();const u=allItems.find(i=>i.id===pendingQtyId);if(u)showDetail(u);}else toast(res.msg||'Error','err');}
+async function confirmQtyAdjust(){const amount=parseInt(document.getElementById('qty-amount').value);if(!amount||amount<0){toast('Enter a valid amount','warn');return}const useRes=document.getElementById('qty-use-res')?.checked||false;const res=await api('/api/qty_adjust',{id:pendingQtyId,action:qtyAction,amount,note:document.getElementById('qty-note').value.trim(),use_reservation:useRes,reservation_id:useRes?document.getElementById('qty-res-select').value:null,override_reservation:document.getElementById('qty-res-override')?.checked||false});if(res.ok){toast('Quantity updated ✓','ok');closeModal('qtyModal');await loadItems();const u=allItems.find(i=>i.id===pendingQtyId);if(u)showDetail(u);}else if(res.msg==='reservation_conflict'){const rows=res.reservations||[];document.getElementById('qty-res-warning').style.display='block';document.getElementById('qty-res-detail').innerHTML=(res.detail||'Reserved inventory conflict')+'<br>'+rows.map(r=>`${escHtml(r.reserved_by)} · ${r.qty_remaining||1} remaining · ${r.reserved_from} → ${r.reserved_to}`).join('<br>');document.getElementById('qty-res-select').innerHTML=rows.map(r=>`<option value="${r.id}">${escHtml(r.reserved_by)} · ${r.qty_remaining||1} remaining · ${r.reserved_from} → ${r.reserved_to}</option>`).join('');toast('Reservation warning: choose use for reservation or override','warn');}else toast(res.msg||'Error','err');}
 
 
 async function loadNotes(itemId){
@@ -1453,14 +1531,16 @@ async function loadReservations(itemId){
     const today=new Date().toISOString().split('T')[0];
     if(!rows.length){list.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:4px 0">No reservations.</div>';return;}
     list.innerHTML=rows.map(r=>{
-      const active=r.reserved_to>=today;
-      return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f0efec;font-size:12.5px">
+      const remaining=parseInt(r.qty_remaining||r.qty_reserved||1,10);
+      const active=r.reserved_to>=today&&remaining>0&&!r.fulfilled;
+      return `<div class="res-card ${active?'active':''}">
         <div style="flex:1">
           <span style="font-weight:600">${escHtml(r.reserved_by)}</span>
           <span style="color:#64748b"> · ${r.reserved_from} → ${r.reserved_to}</span>
+          <span class="res-pill">${remaining} reserved</span>
           ${r.purpose?`<span style="color:#94a3b8"> · ${escHtml(r.purpose)}</span>`:''}
         </div>
-        <span style="font-size:11px;padding:1px 7px;border-radius:4px;${active?'background:#eff6ff;color:#1d4ed8':'background:#f5f4f1;color:#94a3b8'}">${active?'Active':'Past'}</span>
+        <span style="font-size:11px;padding:1px 7px;border-radius:4px;${active?'background:#fee2e2;color:#b91c1c':'background:#f5f4f1;color:#94a3b8'}">${active?'Reserved':'Past'}</span>
         <button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 7px" onclick="cancelReservation(${r.id},${itemId})">Cancel</button>
       </div>`;
     }).join('');
@@ -1473,11 +1553,12 @@ async function addReservation(){
   const from=document.getElementById('res-from').value;
   const to=document.getElementById('res-to').value;
   if(!by||!from||!to){toast('Fill in reserved for, from, and to dates','warn');return;}
-  const res=await api('/api/item/'+itemId+'/reservation',{reserved_by:by,reserved_from:from,reserved_to:to,purpose:document.getElementById('res-purpose').value.trim()});
+  const qty=parseInt(document.getElementById('res-qty')?.value||'1',10);
+  const res=await api('/api/item/'+itemId+'/reservation',{reserved_by:by,reserved_from:from,reserved_to:to,purpose:document.getElementById('res-purpose').value.trim(),qty_reserved:qty});
   if(res.ok){
     toast('Reservation added ✓','ok');
     document.getElementById('res-by').value='';document.getElementById('res-from').value='';
-    document.getElementById('res-to').value='';document.getElementById('res-purpose').value='';
+    document.getElementById('res-to').value='';document.getElementById('res-purpose').value='';if(document.getElementById('res-qty'))document.getElementById('res-qty').value='1';
     loadReservations(itemId);
   } else toast(res.msg||'Error','err');
 }
@@ -1725,6 +1806,13 @@ function doPrint(){const content=document.getElementById('labelPreview').innerHT
 
 // ── Selection / Mass ops ──
 function onRowCheck(cb){const id=parseInt(cb.dataset.id);if(cb.checked)selectedIds.add(id);else selectedIds.delete(id);updateSelectionUI();}
+function toggleRowSelect(id){
+  id=parseInt(id);
+  if(selectedIds.has(id))selectedIds.delete(id);else selectedIds.add(id);
+  const cb=document.querySelector(`.row-cb[data-id="${id}"]`);
+  if(cb)cb.checked=selectedIds.has(id);
+  updateSelectionUI();
+}
 function toggleSelectAll(checked){allItems.forEach(i=>{if(checked)selectedIds.add(i.id);else selectedIds.delete(i.id);});updateSelectionUI();document.querySelectorAll('.row-cb').forEach(cb=>{cb.checked=selectedIds.has(parseInt(cb.dataset.id));});}
 function updateSelectionUI(){
   const n=selectedIds.size;
@@ -1733,7 +1821,61 @@ function updateSelectionUI(){
   if(btn){btn.style.display='none';}if(pBtn){pBtn.style.display='none';}
   // floating bulk bar
   const bar=document.getElementById('bulkBar');
-  if(bar){bar.style.display=n>0?'flex':'none';document.getElementById('bulkCount').textContent=n+' selected';}
+  if(bar){
+    bar.style.display=n>0?'flex':'none';
+    document.getElementById('bulkCount').textContent=n+' selected';
+    const details=document.getElementById('selectionDetailsBtn');
+    if(details)details.style.display=n===1?'inline-flex':'none';
+  }
+  document.querySelectorAll('.row-cb').forEach(cb=>{cb.checked=selectedIds.has(parseInt(cb.dataset.id));});
+}
+function openSelectedDetails(){
+  if(selectedIds.size!==1){toast('Select one item for details','warn');return;}
+  const item=allItems.find(i=>i.id===[...selectedIds][0]);
+  if(item)showDetail(item);
+}
+function openReserveSelected(){
+  if(!selectedIds.size){toast('Select item(s) to reserve','warn');return;}
+  const items=allItems.filter(i=>selectedIds.has(i.id));
+  const qtyItems=items.filter(i=>i.qty!==null);
+  if(items.length>1&&qtyItems.length){
+    toast('Bulk quantity reservations are only supported when exactly one qty-tracked item is selected','warn');
+    return;
+  }
+  const today=new Date().toISOString().split('T')[0];
+  document.getElementById('bulk-res-by').value='';
+  document.getElementById('bulk-res-from').value=today;
+  document.getElementById('bulk-res-to').value=today;
+  document.getElementById('bulk-res-purpose').value='';
+  document.getElementById('reserve-summary').textContent=items.length===1?items[0].name:`${items.length} selected items`;
+  const oneQty=items.length===1&&items[0].qty!==null;
+  document.getElementById('bulk-res-qty-wrap').style.display=oneQty?'block':'none';
+  document.getElementById('bulk-res-qty').value='1';
+  document.getElementById('bulk-res-qty').max=oneQty?(items[0].available||items[0].qty||1):1;
+  document.getElementById('reserve-help').textContent=oneQty?
+    `${items[0].available} available / ${items[0].qty} total / ${items[0].reserved_qty||0} reserved`:
+    'Each selected serial item will receive one reservation.';
+  openModal('reserveModal');
+  setTimeout(()=>document.getElementById('bulk-res-by').focus(),100);
+}
+async function confirmReserveSelected(){
+  const ids=[...selectedIds];
+  const by=document.getElementById('bulk-res-by').value.trim();
+  const from=document.getElementById('bulk-res-from').value;
+  const to=document.getElementById('bulk-res-to').value;
+  const purpose=document.getElementById('bulk-res-purpose').value.trim();
+  if(!ids.length||!by||!from||!to){toast('Fill in reserved for and dates','warn');return;}
+  const btn=document.getElementById('reserveBtn');btn.disabled=true;btn.textContent='Reserving...';
+  let ok=0, failed=[];
+  for(const id of ids){
+    const item=allItems.find(i=>i.id===id);
+    const qty=item&&item.qty!==null?parseInt(document.getElementById('bulk-res-qty').value||'1',10):1;
+    const res=await api('/api/item/'+id+'/reservation',{reserved_by:by,reserved_from:from,reserved_to:to,purpose,qty_reserved:qty});
+    if(res.ok)ok++;else failed.push(res.msg||`Item ${id} failed`);
+  }
+  btn.disabled=false;btn.textContent='Reserve';
+  if(ok){toast(`Reserved ${ok} item${ok!==1?'s':''}`,'ok');closeModal('reserveModal');selectedIds.clear();updateSelectionUI();await loadItems();}
+  if(failed.length)toast(failed[0],'err');
 }
 async function massDelete(){
   const n=selectedIds.size;
