@@ -70,9 +70,13 @@ def login_page():
                 error="This account is temporarily locked due to too many failed attempts. Try again in 15 minutes."
             ), 429
 
-        # Email-only login
+        # Prefer email login, but fall back to username for legacy/test tenants
+        # that were created before email-only auth became the default.
         user = query("SELECT * FROM users WHERE LOWER(COALESCE(email,''))=?",
                      [username.lower()], one=True)
+        if not user:
+            user = query("SELECT * FROM users WHERE LOWER(username)=?",
+                         [username.lower()], one=True)
         if user and verify_pw(password, user["password"]):
             # Auto-migrate legacy HMAC-SHA256 hashes to bcrypt on first successful login
             if not user["password"].startswith("$2"):

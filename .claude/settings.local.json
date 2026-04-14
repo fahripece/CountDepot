@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(git reset:*)",
+      "Bash(python3:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Read(//etc/**)",
+      "Read(//opt/countdepot/**)",
+      "Bash(systemctl cat:*)",
+      "Bash(find /home -name \".env\")",
+      "Read(//var/**)",
+      "Bash(find /srv -name \".env\")",
+      "Bash(find /opt -name \".env\")",
+      "Bash(read id:*)",
+      "Read(//c/Users/FahriPece/OneDrive - DSS Management Inc/Desktop/Guideline/**)",
+      "Bash(dir \"C:\\\\Users\\\\FahriPece\\\\OneDrive - DSS Management Inc\\\\Desktop\\\\Guideline\")",
+      "Bash(pip install:*)",
+      "Bash(find C:/Users/FahriPece/CountDepot/app -name \"*.pyc\" -delete)",
+      "Bash(sed -n '35,39p' C:/Users/FahriPece/CountDepot/app/db.py)",
+      "Bash(sed -n '474,479p' C:/Users/FahriPece/CountDepot/app/blueprints/api.py)",
+      "Bash(sed -n '1152,1180p' C:/Users/FahriPece/CountDepot/app/blueprints/api.py)",
+      "Bash(sudo systemctl:*)",
+      "Bash(pip list:*)"
+    ]
+  }
+}

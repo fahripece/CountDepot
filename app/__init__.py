@@ -122,6 +122,7 @@ def create_app():
         parts = host.split(".")
         is_bare_domain = (
             host not in ("localhost", "127.0.0.1")
+            and not host.endswith(".localhost")
             and len(parts) < 3
         )
         if is_bare_domain and not request.path.startswith("/auth/google"):
@@ -139,8 +140,7 @@ def create_app():
             init_db()
             _initialized_tenants.add(g.tenant_slug)
             _migrated_tenants.add(g.tenant_slug)
-        elif g.tenant_slug not in _migrated_tenants:
-            # Run migrations once per tenant per process (not on every request)
+        else:
             run_migrations_only()
             _migrated_tenants.add(g.tenant_slug)
 

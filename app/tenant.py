@@ -21,6 +21,8 @@ def resolve_tenant():
     # Local development — no real subdomain
     if host in ("localhost", "127.0.0.1"):
         slug = Config.DEV_TENANT_SLUG
+    elif host.endswith(".localhost"):
+        slug = host.split(".")[0]
     else:
         # e.g. "clienta.storelax.com" → "clienta"
         parts = host.split(".")

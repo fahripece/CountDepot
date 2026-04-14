@@ -190,11 +190,18 @@ def _init_db_conn(db):
             password             TEXT NOT NULL,
             role                 TEXT NOT NULL DEFAULT 'worker',
             permissions          TEXT NOT NULL DEFAULT '',
+            active               INTEGER NOT NULL DEFAULT 1,
             email                TEXT,
             email_verified       INTEGER NOT NULL DEFAULT 1,
             session_token        TEXT,
+            two_fa_enabled       INTEGER NOT NULL DEFAULT 0,
+            totp_secret          TEXT,
+            totp_enabled         INTEGER NOT NULL DEFAULT 0,
             must_change_password INTEGER NOT NULL DEFAULT 0,
-            last_login           TEXT
+            last_login           TEXT,
+            low_stock_alerts     INTEGER NOT NULL DEFAULT 0,
+            department_id        INTEGER,
+            restrict_to_department INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS categories (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -296,6 +303,30 @@ def _init_db_conn(db):
             extra_fields          TEXT DEFAULT '{}',
             notes                 TEXT,
             parent_item_id        INTEGER REFERENCES items(id),
+            expected_return_date  TEXT,
+            next_maintenance_date TEXT,
+            location_id           INTEGER REFERENCES locations(id),
+            depreciation_rate     REAL,
+            tags                  TEXT NOT NULL DEFAULT '',
+            kit_id                INTEGER REFERENCES kits(id),
+            out_of_service        INTEGER NOT NULL DEFAULT 0,
+            out_of_service_reason TEXT,
+            recall_flag           INTEGER NOT NULL DEFAULT 0,
+            recall_notes          TEXT,
+            checkout_dept         TEXT,
+            retired               INTEGER NOT NULL DEFAULT 0,
+            retired_at            TEXT,
+            retirement_method     TEXT,
+            retirement_notes      TEXT,
+            final_book_value      REAL,
+            warranty_expiry       TEXT,
+            contract_expiry       TEXT,
+            warranty_notes        TEXT,
+            department_id         INTEGER REFERENCES departments(id),
+            shopify_status        TEXT DEFAULT 'not_listed',
+            shopify_product_id    TEXT,
+            shopify_variant_id    TEXT,
+            shopify_listed_price  REAL,
             active                INTEGER DEFAULT 1,
             created_at            TEXT NOT NULL
         );
@@ -321,7 +352,8 @@ def _init_db_conn(db):
             created_by TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            item_id    INTEGER REFERENCES items(id)
+            item_id    INTEGER REFERENCES items(id),
+            task_key   TEXT
         );
         CREATE TABLE IF NOT EXISTS contacts (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -363,6 +395,7 @@ def _init_db_conn(db):
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             name        TEXT UNIQUE NOT NULL,
             description TEXT,
+            email       TEXT,
             created_at  TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS departments (
@@ -431,6 +464,7 @@ def _init_db_conn(db):
             checked_out_by       TEXT,
             job_ref              TEXT,
             checkout_date        TEXT,
+            checkout_dept        TEXT,
             expected_return_date TEXT,
             checkin_date         TEXT,
             checkin_note         TEXT,
@@ -597,7 +631,13 @@ def _init_db_conn(db):
             approval_required INTEGER NOT NULL DEFAULT 0,
             approved_by   TEXT,
             approved_at   TEXT,
-            total_cost    REAL DEFAULT 0
+            total_cost    REAL DEFAULT 0,
+            rejected_by   TEXT,
+            rejected_at   TEXT,
+            rejection_reason TEXT,
+            qb_bill_id    TEXT,
+            xero_po_id    TEXT,
+            synced_at     TEXT
         );
         CREATE TABLE IF NOT EXISTS po_lines (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -671,6 +711,12 @@ def _init_db_conn(db):
         );
     """)
 
+    # ── Run migrations BEFORE indexes ─────────────────────────────────────────
+    # Some indexes below reference columns that only exist after migrations run
+    # (e.g. shopify_status). If we created indexes first, fresh tenant DBs would
+    # crash on init with "no such column: shopify_status".
+    _run_migrations(db)
+
     # ── Indexes ────────────────────────────────────────────────────────────────
     db.executescript("""
         CREATE INDEX IF NOT EXISTS idx_items_active      ON items(active);
@@ -682,8 +728,8 @@ def _init_db_conn(db):
         CREATE INDEX IF NOT EXISTS idx_items_sku         ON items(internal_sku);
         CREATE INDEX IF NOT EXISTS idx_items_company     ON items(company_id);
         CREATE INDEX IF NOT EXISTS idx_items_parent      ON items(parent_item_id);
-        CREATE INDEX IF NOT EXISTS idx_items_ebay         ON items(ebay_status);
-        CREATE INDEX IF NOT EXISTS idx_items_shopify      ON items(shopify_status);
+        CREATE INDEX IF NOT EXISTS idx_items_ebay        ON items(ebay_status);
+        CREATE INDEX IF NOT EXISTS idx_items_shopify     ON items(shopify_status);
         CREATE INDEX IF NOT EXISTS idx_audit_ts          ON audit_log(ts DESC);
         CREATE INDEX IF NOT EXISTS idx_audit_item        ON audit_log(item_id);
         CREATE INDEX IF NOT EXISTS idx_audit_user        ON audit_log(username);
@@ -693,9 +739,6 @@ def _init_db_conn(db):
         CREATE INDEX IF NOT EXISTS idx_mods_item         ON item_modifications(item_id);
         CREATE INDEX IF NOT EXISTS idx_products_cat      ON products(category_id);
     """)
-
-    # ── Run migrations ─────────────────────────────────────────────────────────
-    _run_migrations(db)
 
     # ── Seed default data if tables are empty ──────────────────────────────────
     if not db.execute("SELECT COUNT(*) FROM categories").fetchone()[0]:
