@@ -1,7 +1,15 @@
 import os
+import shutil
 import sqlite3
+import sys
+import uuid
+from pathlib import Path
 
 import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from config import Config
 from app import create_app
@@ -11,10 +19,11 @@ from app.platform import create_tenant, set_tenant_sector
 
 
 @pytest.fixture
-def app(tmp_path, monkeypatch):
-    data_dir = tmp_path / "data"
+def app(monkeypatch):
+    data_dir = ROOT / ".test_runs" / uuid.uuid4().hex
     tenants_dir = data_dir / "tenants"
     platform_db_path = data_dir / "platform.db"
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(Config, "DATA_DIR", str(data_dir), raising=False)
     monkeypatch.setattr(Config, "TENANTS_DIR", str(tenants_dir), raising=False)
@@ -34,6 +43,7 @@ def app(tmp_path, monkeypatch):
 
     _initialized_tenants.clear()
     _migrated_tenants.clear()
+    shutil.rmtree(data_dir, ignore_errors=True)
 
     flask_app = create_app()
     flask_app.config.update(TESTING=True)

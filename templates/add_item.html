@@ -95,7 +95,7 @@
             </div>
             <div class="field" id="fi-vendor-sku-wrap" style="display:none">
               <label class="label">Vendor SKU <span style="color:#b91c1c">*</span></label>
-              <input class="input mono" id="fi-sku" name="countdepot-vendor-sku" placeholder="e.g. SUPPLIER-PART-12345" oninput="this.style.borderColor=''" autocomplete="new-password" autocapitalize="off" spellcheck="false">
+              <input class="input mono" id="fi-sku" name="countdepot-vendor-sku" placeholder="Supplier part number" oninput="this.style.borderColor=''" autocomplete="new-password" autocapitalize="off" spellcheck="false">
             </div>
             <div class="field" id="fi-internal-sku-note" style="display:none">
               <label class="label">Internal SKU</label>
@@ -253,7 +253,18 @@
 const CATEGORY_FIELDS = {{ category_fields|tojson }};
 const STATE_TAX_RATES = {Alabama:4,Alaska:0,Arizona:5.6,Arkansas:6.5,California:7.25,Colorado:2.9,Connecticut:6.35,Delaware:0,Florida:6,Georgia:4,Hawaii:4,Idaho:6,Illinois:6.25,Indiana:7,Iowa:6,Kansas:6.5,Kentucky:6,Louisiana:4.45,Maine:5.5,Maryland:6,Massachusetts:6.25,Michigan:6,Minnesota:6.875,Mississippi:7,Missouri:4.225,Montana:0,Nebraska:5.5,Nevada:6.85,"New Hampshire":0,"New Jersey":6.625,"New Mexico":5.125,"New York":8.875,"North Carolina":4.75,"North Dakota":5,Ohio:5.75,Oklahoma:4.5,Oregon:0,Pennsylvania:6,"Rhode Island":7,"South Carolina":6,"South Dakota":4.5,Tennessee:7,Texas:6.25,Utah:6.1,Vermont:6,Virginia:5.3,Washington:6.5,"West Virginia":6,Wisconsin:5,Wyoming:4};
 
+function scrubBadVendorSkuExample(){
+  document.querySelectorAll('#fi-sku,[name*="vendor-sku"],[id*="sku"]').forEach(el=>{
+    const bad=v=>/^\d{6}-[a-z]{3,6}$/i.test(String(v||'').trim());
+    if(bad(el.placeholder)) el.placeholder='Supplier part number';
+    if(bad(el.value)) el.value='';
+  });
+}
+scrubBadVendorSkuExample();
+window.addEventListener('pageshow', scrubBadVendorSkuExample);
+
 function onProductChange(){
+  scrubBadVendorSkuExample();
   const sel=document.getElementById('fi-product');
   const opt=sel.options[sel.selectedIndex];
   if(!opt||!opt.value)return;

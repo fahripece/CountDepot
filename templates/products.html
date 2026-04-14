@@ -54,7 +54,7 @@
         </div>
         <div class="field">
           <label class="label">Vendor SKU <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">— supplier's product code, used for invoice import matching</span></label>
-          <input class="input mono" id="prod-vendor-sku" name="countdepot-product-vendor-sku" placeholder="e.g. SUPPLIER-PART-12345" autocomplete="new-password" autocapitalize="off" spellcheck="false">
+          <input class="input mono" id="prod-vendor-sku" name="countdepot-product-vendor-sku" placeholder="Supplier part number" autocomplete="new-password" autocapitalize="off" spellcheck="false">
         </div>
 
         <div class="section-hdr">Tracking Behavior</div>
@@ -145,6 +145,16 @@ let allProds=[], filteredProds=[];
 
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
+
+function scrubBadVendorSkuExample(){
+  const el=document.getElementById('prod-vendor-sku');
+  if(!el)return;
+  const bad=v=>/^\d{6}-[a-z]{3,6}$/i.test(String(v||'').trim());
+  if(bad(el.placeholder)) el.placeholder='Supplier part number';
+  if(bad(el.value)) el.value='';
+}
+scrubBadVendorSkuExample();
+window.addEventListener('pageshow', scrubBadVendorSkuExample);
 
 function filterProds(){
   const q=document.getElementById('prodSearch').value.trim().toLowerCase();

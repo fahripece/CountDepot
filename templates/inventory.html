@@ -257,7 +257,7 @@
           <div class="field">
             <label class="label">Internal SKU <span style="font-weight:400;font-size:10px;color:#94a3b8">— leave blank to auto-generate</span></label>
             <div style="display:flex;gap:6px;align-items:center">
-              <input class="input mono" id="fi-sku" style="flex:1" autocomplete="off">
+              <input class="input mono" id="fi-sku" name="countdepot-vendor-sku" placeholder="Supplier part number" style="flex:1" autocomplete="new-password" autocapitalize="off" spellcheck="false">
               <button type="button" class="btn btn-secondary btn-sm" onclick="generateSku()" title="Generate SKU now">Generate</button>
             </div>
           </div>
@@ -713,6 +713,16 @@ const ALL_PRODUCTS = {{ products | tojson }};
 const CATEGORY_FIELDS = {{ category_fields | tojson }};
 const companies = {{ companies | tojson }};
 const SITE_LOCKED = {{ site_locked | tojson if site_locked is defined and site_locked else 'null' }};
+
+function scrubBadVendorSkuExample(){
+  document.querySelectorAll('#fi-sku,[name*="vendor-sku"],[id*="sku"]').forEach(el=>{
+    const bad=v=>/^\d{6}-[a-z]{3,6}$/i.test(String(v||'').trim());
+    if(bad(el.placeholder)) el.placeholder='Supplier part number';
+    if(bad(el.value)) el.value='';
+  });
+}
+scrubBadVendorSkuExample();
+window.addEventListener('pageshow', scrubBadVendorSkuExample);
 
 let allItems=[], selectedIds=new Set(), scanOpen=false, scanMode='lookup';
 let pendingCheckoutId=null, pendingQtyId=null, qtyAction='add', debTimer=null, currentDetailId=null;
