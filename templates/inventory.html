@@ -47,7 +47,7 @@
     </div>
     {% if session.get('role')=='admin' %}
     <button class="btn btn-secondary btn-sm" id="massDeleteBtn" style="display:none;color:#b91c1c" onclick="massDelete()">🗑 Delete (<span id="selCount">0</span>)</button>
-    <button class="btn btn-secondary btn-sm" id="massPrintBtn" style="display:none" onclick="printSelectedLabels()">🏷 Print Labels (<span id="selCountPrint">0</span>)</button>
+    <button class="btn btn-secondary btn-sm" id="massPrintBtn" style="display:none" onclick="printSelectedLabels()">Print Labels (<span id="selCountPrint">0</span>)</button>
     {% endif %}
   </div>
 </div>
@@ -553,13 +553,13 @@
         <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="label-fmt" value="single" checked onchange="renderLabels()"> Single (3.5"×1.5")</label>
         <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="label-fmt" value="sheet" onchange="renderLabels()"> Sheet (Avery 5160, 30-up)</label>
         <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="label-fmt" value="thermal" onchange="renderLabels()"> Thermal Roll (2"×1")</label>
-        <div style="margin-left:auto"><button class="btn btn-secondary btn-sm" onclick="doPrint()">🖨 Print</button></div>
+        <div style="margin-left:auto"><button class="btn btn-secondary btn-sm" onclick="doPrint()">Print</button></div>
       </div>
       <div id="labelPreview" style="background:#f0efec;border-radius:8px;padding:16px;min-height:200px;overflow:auto"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('labelModal')">Close</button>
-      <button class="btn btn-primary" onclick="doPrint()">🖨 Print</button>
+      <button class="btn btn-primary" onclick="doPrint()">Print</button>
     </div>
   </div>
 </div>
@@ -622,7 +622,7 @@
   <span id="bulkCount" style="font-weight:600;min-width:80px"></span>
   <button class="btn btn-sm" style="background:#1e40af;color:#fff;border:none" onclick="openBulkCheckout()">📤 Checkout</button>
   <button class="btn btn-sm" style="background:#15803d;color:#fff;border:none" onclick="bulkCheckin()">📥 Check In</button>
-  <button class="btn btn-sm" style="background:#374151;color:#fff;border:none" onclick="printSelectedLabels()">🏷 Print Labels</button>
+  <button class="btn btn-sm" style="background:#374151;color:#fff;border:none" onclick="printSelectedLabels()">Print Labels</button>
   <button class="btn btn-sm" style="background:#991b1b;color:#fff;border:none" onclick="massDelete()">🗑 Delete</button>
   <button style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:0 4px;margin-left:4px" onclick="selectedIds.clear();updateSelectionUI();document.querySelectorAll('.row-cb').forEach(c=>c.checked=false);document.getElementById('selectAll').checked=false" title="Clear selection">✕</button>
 </div>
@@ -753,21 +753,33 @@ async function loadTagsFilter(){
 loadLocations(); loadTagsFilter();
 
 async function loadItemsPage(page){
-  currentPage=page;
-  const q=document.getElementById('searchInput').value;
-  const cat=document.getElementById('catFilter').value;
-  const status=document.getElementById('statusFilter').value;
-  const sort=document.getElementById('sortFilter').value;
-  const loc=SITE_LOCKED ? SITE_LOCKED.id : (document.getElementById('locFilter')||{value:''}).value;
-  const cond=document.getElementById('condFilter').value;
-  const tag=document.getElementById('tagFilter').value;
-  const params=new URLSearchParams({q,cat,status,sort,loc,cond,tag,page,per_page:PER_PAGE});
-  const data=await fetch('/api/items?'+params).then(r=>r.json());
-  const items=data.items||data;
-  totalItems=data.total!=null?data.total:items.length;
-  totalPages=data.pages||1;
-  allItems=items; renderTable(items); updateStats(data); renderPagination(); refreshAlertBadge();
-  if(currentDetailId){const u=allItems.find(i=>i.id===currentDetailId);if(u)showDetail(u);}
+  const tb=document.getElementById('itemTableBody');
+  try{
+    currentPage=page;
+    const q=document.getElementById('searchInput').value;
+    const cat=document.getElementById('catFilter').value;
+    const status=document.getElementById('statusFilter').value;
+    const sort=document.getElementById('sortFilter').value;
+    const loc=SITE_LOCKED ? SITE_LOCKED.id : (document.getElementById('locFilter')||{value:''}).value;
+    const cond=document.getElementById('condFilter').value;
+    const tag=document.getElementById('tagFilter').value;
+    const params=new URLSearchParams({q,cat,status,sort,loc,cond,tag,page,per_page:PER_PAGE});
+    const response=await fetch('/api/items?'+params,{headers:{'Accept':'application/json'}});
+    if(!response.ok) throw new Error('Inventory request failed: '+response.status);
+    const contentType=response.headers.get('content-type')||'';
+    if(!contentType.includes('application/json')) throw new Error('Inventory session expired or returned a non-JSON response');
+    const data=await response.json();
+    const items=Array.isArray(data)?data:(data.items||[]);
+    if(!Array.isArray(items)) throw new Error(data.msg||'Inventory response was not a list');
+    totalItems=data.total!=null?data.total:items.length;
+    totalPages=data.pages||1;
+    allItems=items; renderTable(items); updateStats(data); renderPagination(); refreshAlertBadge();
+    if(currentDetailId){const u=allItems.find(i=>i.id===currentDetailId);if(u)showDetail(u);}
+  }catch(e){
+    console.error(e);
+    if(tb) tb.innerHTML='<tr class="empty-row"><td colspan="10">Inventory could not load. Refresh the page or sign in again. '+(e.message||'')+'</td></tr>';
+    toast('Inventory could not load','err');
+  }
 }
 
 function updateStats(data){
@@ -861,7 +873,7 @@ function renderTable(items){
       <td>${cond}${tagsHtml}</td>
       <td>${status}${resBadge?`<br>${resBadge}`:''}</td>
       <td>${cost}<br>${saleProfit}</td>
-      <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();printLabel(${item.id})" title="Print label" style="padding:5px 7px;margin-right:4px">🏷</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button></td>
+      <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();printLabel(${item.id})" title="Print label" style="padding:5px 7px;margin-right:4px">Label</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button></td>
     </tr>`;
   }).join('');
 }
@@ -973,9 +985,9 @@ function showDetail(item){
   }
   acts+=`<button class="btn btn-secondary" onclick="closeDetail();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button>`;
   acts+=`<button class="btn btn-secondary" onclick="cloneItem(${item.id})" title="Clone this item (copy without serial/SKU)">⧉ Clone</button>`;
-  acts+=`<button class="btn btn-secondary" onclick="printLabel(${item.id})" style="font-size:11px">🏷 Label</button>`;
+  acts+=`<button class="btn btn-secondary" onclick="printLabel(${item.id})" style="font-size:11px">Print Label</button>`;
   if(item.is_incomplete){
-    acts+=`<button class="btn btn-secondary" style="background:#fef3c7;color:#92400e;border-color:#fde68a;font-size:11px" onclick="openConfirmScan(${item.id})" title="Scan the label to confirm this item">🔍 Scan to Confirm</button>`;
+    acts+=`<button class="btn btn-secondary" style="background:#fef3c7;color:#92400e;border-color:#fde68a;font-size:11px" onclick="openConfirmScan(${item.id})" title="Scan the label to confirm this item">Scan to Confirm</button>`;
   }
   if(!item.sold&&!item.retired){
     acts+=`<button class="btn btn-secondary" style="font-size:11px;color:#475569" onclick="openRetireModal(${item.id})" title="Retire this item">♻ Retire</button>`;

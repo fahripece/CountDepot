@@ -95,7 +95,7 @@
             </div>
             <div class="field" id="fi-vendor-sku-wrap" style="display:none">
               <label class="label">Vendor SKU <span style="color:#b91c1c">*</span></label>
-              <input class="input mono" id="fi-sku" placeholder="e.g. SUPPLIER-PART-12345" oninput="this.style.borderColor=''" autocomplete="off">
+              <input class="input mono" id="fi-sku" name="countdepot-vendor-sku" placeholder="e.g. SUPPLIER-PART-12345" oninput="this.style.borderColor=''" autocomplete="new-password" autocapitalize="off" spellcheck="false">
             </div>
             <div class="field" id="fi-internal-sku-note" style="display:none">
               <label class="label">Internal SKU</label>
@@ -287,7 +287,7 @@ function onProductChange(){
   if(opt.dataset.serial==='1') flags.push('Serial tracked');
   if(isQty) flags.push('Qty tracked');
   if(opt.dataset.scan==='1') flags.push('Scan required on checkout');
-  if(opt.dataset.label==='1') flags.push('Print & scan label on add');
+  if(opt.dataset.label==='1') flags.push('Print label after add');
   const info=document.getElementById('fi-product-info');
   info.textContent='Template: '+(flags.join(' · ')||'Standard item');
   info.style.display='';
@@ -450,18 +450,14 @@ async function saveItem(){
     if(res.ok && res.id){
       toast('Item added ✓','ok');
       const newId=res.id;
-      // Check if the selected product requires a SKU label
+      // Label printing is optional and only comes from the product-level setting.
       const prodSel=document.getElementById('fi-product');
       const prodOpt=prodSel?.options[prodSel?.selectedIndex];
       const hasPrintLabel=prodOpt&&prodOpt.value&&(prodOpt.dataset.label==='1'||prodOpt.dataset.label==='True');
-      const hasInternalSku=prodOpt&&prodOpt.value&&(prodOpt.dataset.reqInternal==='1'||prodOpt.dataset.reqInternal==='True');
-      const requiresLabel=hasPrintLabel||hasInternalSku;
-      if(!requiresLabel){
-        // No label required — go straight to inventory
-        setTimeout(()=>window.location.href='/',400);
+      if(!hasPrintLabel){
+        setTimeout(()=>window.location.href='/?item='+newId,400);
         return;
       }
-      // Label required — fetch item and show print/scan workflow
       let newItem=null;
       try{
         const scanRes=await fetch('/api/scan?code=ID-'+newId).then(r=>r.json());
@@ -514,7 +510,7 @@ function openPrintModal(item){
     try{JsBarcode(bcSvg,code,{format:'CODE128',width:2,height:40,displayValue:true,fontSize:12,margin:4,background:'#ffffff',lineColor:'#0f172a'});}catch(e){}
   }
   document.getElementById('wf-print-btn').disabled=false;
-  document.getElementById('wf-print-btn').textContent='🖨 Print Label';
+  document.getElementById('wf-print-btn').textContent='Print Label';
   // Hide the add item modal — item is saved, we don't need it anymore
   document.getElementById('addItemModal').classList.remove('open');
   _showWfModal('printModal');
@@ -540,9 +536,8 @@ function doPrintLabel(){
   </body></html>`;
   const w=window.open('','_blank','width=600,height=400');
   if(w){w.document.write(content);w.document.close();}
-  // Move to scan step immediately — don't wait on print dialog which blocks JS
   _hideWfModal('printModal');
-  openScanModal();
+  window.location.href='/?item='+item.id;
 }
 
 function openScanModal(){
@@ -628,8 +623,8 @@ function skipScanConfirm(){
     <div class="modal" style="width:480px">
       <div class="modal-header" style="background:#f0fdf4;border-bottom:1px solid #bbf7d0">
         <div>
-          <div class="modal-title" style="color:#15803d">✓ Item Saved — Print Label</div>
-          <div style="font-size:11.5px;color:#6b7280;margin-top:2px">Step 1 of 2 — Print the label for this item</div>
+          <div class="modal-title" style="color:#15803d">Item Saved - Print Label</div>
+          <div style="font-size:11.5px;color:#6b7280;margin-top:2px">Optional product-level label printing</div>
         </div>
       </div>
       <div class="modal-body" style="padding:20px 22px">
@@ -641,11 +636,12 @@ function skipScanConfirm(){
           <svg id="wf-barcode" style="max-width:100%"></svg>
         </div>
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:10px 13px;font-size:12.5px;color:#92400e;line-height:1.5">
-          <strong>⚠ Required:</strong> You must print this label and attach it to the physical item before proceeding. After printing you'll scan it to confirm.
+          Print this label if this product needs a physical label. The item is already saved and will appear in inventory.
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" id="wf-print-btn" onclick="doPrintLabel()" style="background:#15803d">🖨 Print Label</button>
+      <div class="modal-footer" style="justify-content:space-between">
+        <button class="btn btn-secondary" onclick="window.location.href='/?item='+(_workflowItem&&_workflowItem.id?_workflowItem.id:'')">Skip</button>
+        <button class="btn btn-primary" id="wf-print-btn" onclick="doPrintLabel()" style="background:#15803d">Print Label</button>
       </div>
     </div>
   </div>`;

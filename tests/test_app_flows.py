@@ -142,6 +142,74 @@ def test_admin_can_create_product_and_item_and_fetch_inventory(app, tenant):
     assert any(item["name"] == "Roadmap Test Item" for item in items)
 
 
+def test_internal_sku_product_item_is_visible_in_inventory(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/api/product/add",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "name": "Internal SKU Visibility Product",
+            "category_id": 1,
+            "manufacturer": "Acme",
+            "model": "AUTO-100",
+            "serial_tracked": 0,
+            "qty_tracked": 0,
+            "require_scan_checkout": 0,
+            "print_scan_label": 0,
+            "require_serial": 0,
+            "require_vendor_sku": 0,
+            "require_internal_sku": 1,
+            "low_stock_threshold": 0,
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        product_response = _as_response(app, app.preprocess_request() or api_product_add())
+        product_data = product_response.get_json()
+
+    assert product_response.status_code == 200
+    assert product_data["ok"] is True
+
+    with app.test_request_context(
+        "/api/item/add",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "name": "Internal SKU Visibility Item",
+            "product_id": product_data["id"],
+            "category_id": 1,
+            "condition": "New",
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        item_response = _as_response(app, app.preprocess_request() or api_item_add())
+        item_data = item_response.get_json()
+
+    assert item_response.status_code == 200
+    assert item_data["ok"] is True
+
+    with app.test_request_context(
+        f"/api/items?q=%23{item_data['id']}&hide_out=0",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        inventory_response = _as_response(app, app.preprocess_request() or api_items())
+        items = inventory_response.get_json()
+
+    assert inventory_response.status_code == 200
+    assert any(
+        item["id"] == item_data["id"] and item["internal_sku"]
+        for item in items
+    )
+
+
 def test_viewer_cannot_add_items(app, tenant):
     db = sqlite3.connect(tenant["db_path"])
     db.execute(

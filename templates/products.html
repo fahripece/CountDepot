@@ -54,7 +54,7 @@
         </div>
         <div class="field">
           <label class="label">Vendor SKU <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">— supplier's product code, used for invoice import matching</span></label>
-          <input class="input mono" id="prod-vendor-sku" placeholder="e.g. SUPPLIER-PART-12345" autocomplete="off">
+          <input class="input mono" id="prod-vendor-sku" name="countdepot-product-vendor-sku" placeholder="e.g. SUPPLIER-PART-12345" autocomplete="new-password" autocapitalize="off" spellcheck="false">
         </div>
 
         <div class="section-hdr">Tracking Behavior</div>
@@ -68,8 +68,8 @@
           <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
             <input type="checkbox" id="prod-scan" style="width:15px;height:15px"> Require scan on checkout
           </label>
-          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px" title="Print & scan a label after adding each item">
-            <input type="checkbox" id="prod-print-scan" style="width:15px;height:15px"> 🏷 Print &amp; scan label on add
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px" title="Offer label printing after adding each item">
+            <input type="checkbox" id="prod-print-scan" style="width:15px;height:15px"> Print label after adding items
           </label>
         </div>
 
@@ -172,10 +172,10 @@ function renderGrid(){
     if(p.serial_tracked) flags.push('Serial');
     if(p.qty_tracked) flags.push('Qty');
     if(p.require_scan_checkout) flags.push('Scan');
-    if(p.print_scan_label) flags.push('🏷 Print+Scan');
-    if(p.require_serial) flags.push('🔢 Req. SN');
-    if(p.require_vendor_sku) flags.push('🏪 Req. Vendor SKU');
-    if(p.require_internal_sku) flags.push('⚙ Auto SKU');
+    if(p.print_scan_label) flags.push('Print label');
+    if(p.require_serial) flags.push('Req. SN');
+    if(p.require_vendor_sku) flags.push('Req. Vendor SKU');
+    if(p.require_internal_sku) flags.push('Auto SKU');
     const flagsHtml=flags.map(f=>`<span class="tracking-flag">${f}</span>`).join(' ');
     const itemCount=p.item_count||0;
     return `<div class="prod-card">
