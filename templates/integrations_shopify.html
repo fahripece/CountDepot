@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Shopify Integration · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Shopify Integration</span>
+  <span class="topbar-sub">List inventory on your Shopify store · Auto-sync sold orders</span>
+</div>
+<div style="flex:1;overflow-y:auto;padding:20px 24px;max-width:760px">
+
+  {% if flash_error %}
+  <div style="background:#fee2e2;border:1px solid #fecaca;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#b91c1c">{{ flash_error }}</div>
+  {% endif %}
+  <div id="successBanner" style="display:none;background:#dcfce7;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#15803d"></div>
+
+  <!-- Status Card -->
+  <div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:24px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+      <div style="width:40px;height:40px;background:#96bf48;border-radius:10px;display:flex;align-items:center;justify-content:center">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M15.337 23.979l5.5-1.063L23.5 4.421l-3.5-.398c-.13-.854-.988-6.08-6.093-6.023C10.682-2.04 9.206.847 8.75 2.31L5.25 1.9 2.5 22.916l12.837 1.063zM13.906 2.08c2.697-.032 3.904 2.14 4.281 3.626l-8.563-1.008c.29-1.014.986-2.586 4.282-2.618z"/></svg>
+      </div>
+      <div>
+        <div style="font-size:15px;font-weight:600">Shopify</div>
+        <div id="shopify-status-text" style="font-size:12px;color:#94a3b8">
+          {% if creds.connected %}
+            <span style="color:#16a34a">Connected — {{ creds.shop }}</span>
+          {% else %}
+            Not connected
+          {% endif %}
+        </div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        {% if creds.connected %}
+        <button class="btn btn-secondary btn-sm" onclick="syncOrders()">Sync Orders</button>
+        <button class="btn btn-secondary btn-sm" onclick="disconnectShopify()">Disconnect</button>
+        {% endif %}
+        <button class="btn btn-secondary btn-sm" onclick="toggleConfig()">Configure</button>
+      </div>
+    </div>
+
+    <!-- Config Form -->
+    <div id="shopify-config" style="display:{% if not creds.connected %}block{% else %}none{% endif %}">
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:12px;color:#15803d;line-height:1.7">
+        <strong>Setup:</strong><br>
+        1. In your Shopify Admin go to <strong>Settings → Apps and sales channels → Develop apps</strong>.<br>
+        2. Create a new app. Under <em>Admin API access scopes</em> enable:
+           <code style="background:#dcfce7;padding:1px 4px;border-radius:3px">read_products write_products read_inventory write_inventory read_orders</code>.<br>
+        3. Click <strong>Install app</strong> and copy the <strong>Admin API access token</strong>.<br>
+        4. For real-time order sync, add a webhook in Shopify for the <strong>Order payment</strong> event
+           pointing to <code style="background:#dcfce7;padding:1px 4px;border-radius:3px">{{ request.host_url }}integrations/shopify/webhook</code>.
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Store URL</label>
+          <input id="sh-shop" class="input" placeholder="mystore.myshopify.com" value="{{ creds.shop or '' }}">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Admin API Access Token</label>
+          <input id="sh-token" class="input" type="password" placeholder="shpat_…">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Webhook Secret <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+          <input id="sh-webhook-secret" class="input" type="password" placeholder="Webhook signing secret">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Location <span style="font-weight:400;color:#94a3b8">(for inventory levels)</span></label>
+          <div style="display:flex;gap:6px">
+            <select id="sh-location" class="select" style="flex:1">
+              <option value="">— select after connecting —</option>
+              {% if creds.location_id %}<option value="{{ creds.location_id }}" selected>Current: {{ creds.location_id }}</option>{% endif %}
+            </select>
+            <button class="btn btn-secondary btn-sm" onclick="loadLocations()" title="Fetch locations from Shopify">↺</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="saveSettings()">Save & Connect</button>
+    </div>
+  </div>
+
+  {% if creds.connected %}
+  <!-- Order Sync Card -->
+  <div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:20px;margin-bottom:16px">
+    <div style="font-size:14px;font-weight:600;margin-bottom:4px">Order Sync</div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:14px">Pull paid Shopify orders and automatically mark matching inventory items as sold.</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <label style="font-size:12px;color:#64748b">Look back</label>
+      <select id="sync-days" class="select" style="width:120px">
+        <option value="7">7 days</option>
+        <option value="30" selected>30 days</option>
+        <option value="60">60 days</option>
+        <option value="90">90 days</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="syncOrders()">Sync Now</button>
+    </div>
+    <div id="sync-result" style="margin-top:12px;font-size:12px;display:none"></div>
+  </div>
+
+  <!-- Listed Items Card -->
+  <div style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:20px">
+    <div style="font-size:14px;font-weight:600;margin-bottom:4px">Listed Items</div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:14px">Items currently listed on your Shopify store.</div>
+    <div id="listed-items-body">
+      <div style="color:#94a3b8;font-size:12px;text-align:center;padding:20px">Loading…</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function toggleConfig(){
+  const el = document.getElementById('shopify-config');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function loadLocations(){
+  const res = await fetch('/api/integrations/shopify/locations').then(r=>r.json());
+  if(!res.ok){toast(res.msg||'Failed to fetch locations','err');return;}
+  const sel = document.getElementById('sh-location');
+  sel.innerHTML = '<option value="">— select location —</option>';
+  (res.locations||[]).forEach(l=>{
+    const opt = document.createElement('option');
+    opt.value = l.id;
+    opt.textContent = l.name + (l.active?'':' (inactive)');
+    sel.appendChild(opt);
+  });
+}
+
+async function saveSettings(){
+  const payload = {
+    shopify_shop:           document.getElementById('sh-shop').value.trim(),
+    shopify_access_token:   document.getElementById('sh-token').value.trim(),
+    shopify_webhook_secret: document.getElementById('sh-webhook-secret').value.trim(),
+    shopify_location_id:    document.getElementById('sh-location').value.trim(),
+  };
+  if(!payload.shopify_shop || !payload.shopify_access_token){
+    toast('Store URL and access token are required','warn'); return;
+  }
+  // Strip the access token field if blank (don't overwrite an existing token)
+  if(!payload.shopify_access_token) delete payload.shopify_access_token;
+  const res = await api('/api/integrations/shopify/settings', payload);
+  if(res.ok){
+    showSuccess('Settings saved. Reloading…');
+    setTimeout(()=>location.reload(), 1200);
+  } else {
+    toast(res.msg||'Save failed','err');
+  }
+}
+
+async function disconnectShopify(){
+  if(!confirm('Disconnect Shopify? This will not remove any listings from your store.')) return;
+  const res = await api('/api/integrations/shopify/disconnect', {});
+  if(res.ok){ location.reload(); }
+  else toast(res.msg||'Error','err');
+}
+
+async function syncOrders(){
+  const days = parseInt(document.getElementById('sync-days')?.value || '30');
+  const el   = document.getElementById('sync-result');
+  if(el){ el.style.display='block'; el.textContent='Syncing…'; el.style.color='#64748b'; }
+  const res = await api('/api/integrations/shopify/sync-orders', {since_days: days});
+  if(res.ok){
+    const msg = res.synced === 0
+      ? 'All up to date — no new sold items found.'
+      : `Synced ${res.synced} item${res.synced===1?'':'s'} as sold.`;
+    if(el){ el.textContent=msg; el.style.color='#15803d'; }
+    toast(msg, 'ok');
+    loadListedItems();
+  } else {
+    if(el){ el.textContent=res.msg||'Sync failed'; el.style.color='#b91c1c'; }
+    toast(res.msg||'Sync failed','err');
+  }
+}
+
+function showSuccess(msg){
+  const b = document.getElementById('successBanner');
+  b.textContent = msg;
+  b.style.display = 'block';
+  setTimeout(()=>b.style.display='none', 4000);
+}
+
+async function loadListedItems(){
+  const el = document.getElementById('listed-items-body');
+  if(!el) return;
+  const res = await fetch('/api/items?shopify_status=listed&per_page=200').then(r=>r.json()).catch(()=>null);
+  const items = (res&&res.items) ? res.items.filter(i=>i.shopify_status==='listed') : [];
+  if(items.length === 0){
+    el.innerHTML = '<div style="color:#94a3b8;font-size:12px;text-align:center;padding:20px">No items currently listed on Shopify.</div>';
+    return;
+  }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="border-bottom:1px solid #e5e3de">
+      <th style="text-align:left;padding:6px 8px;color:#64748b">Item</th>
+      <th style="text-align:left;padding:6px 8px;color:#64748b">Price</th>
+      <th style="text-align:left;padding:6px 8px;color:#64748b">Product ID</th>
+      <th style="padding:6px 8px"></th>
+    </tr></thead>
+    <tbody>${items.map(i=>`<tr style="border-bottom:1px solid #f3f2ef">
+      <td style="padding:6px 8px;font-weight:500">${i.name}</td>
+      <td style="padding:6px 8px">${i.shopify_listed_price!=null?'$'+parseFloat(i.shopify_listed_price).toFixed(2):'—'}</td>
+      <td style="padding:6px 8px;color:#94a3b8;font-family:monospace">${i.shopify_product_id||'—'}</td>
+      <td style="padding:6px 8px;text-align:right">
+        <button class="btn btn-secondary btn-sm" onclick="endListing(${i.id},'${i.shopify_product_id||''}')">End Listing</button>
+      </td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function endListing(itemId, productId){
+  if(!confirm('Remove this item from your Shopify store?')) return;
+  const res = await api('/api/item/shopify/end', {item_id: itemId, product_id: productId});
+  if(res.ok){ toast('Listing ended','ok'); loadListedItems(); }
+  else toast(res.msg||'Error','err');
+}
+
+{% if creds.connected %}loadListedItems();{% endif %}
+</script>
+{% endblock %}

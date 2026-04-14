@@ -506,6 +506,70 @@ def ebay_oauth_callback():
     return redirect(url_for("main.integrations_ebay") + "?connected=1")
 
 
+@bp.route("/integrations/shopify")
+@login_required
+@admin_required
+def integrations_shopify():
+    from app.shopify_integration import shopify_get_credentials
+    creds = shopify_get_credentials()
+    return render_template("integrations_shopify.html", creds=creds)
+
+
+@bp.route("/integrations/shopify/webhook", methods=["POST"])
+def shopify_webhook():
+    """
+    Shopify webhook handler — processes orders/paid events to auto-mark items sold.
+    No login required; protected by HMAC signature verification.
+    """
+    from app.shopify_integration import verify_shopify_webhook, _get_setting
+    from app.helpers import log_action
+    raw_body  = request.get_data()
+    hmac_hdr  = request.headers.get("X-Shopify-Hmac-Sha256", "")
+    topic     = request.headers.get("X-Shopify-Topic", "")
+
+    # Verify signature if a secret is configured
+    secret = _get_setting("shopify_webhook_secret", "")
+    if secret and not verify_shopify_webhook(raw_body, hmac_hdr):
+        return "Unauthorized", 401
+
+    if topic != "orders/paid":
+        return "ok", 200
+
+    try:
+        payload = request.json or {}
+    except Exception:
+        return "ok", 200
+
+    now = datetime.now().strftime("%Y-%m-%d")
+    buyer = (
+        (payload.get("billing_address") or {}).get("name")
+        or payload.get("email")
+        or "Shopify"
+    )
+    order_name = payload.get("name", "")
+
+    for line in payload.get("line_items", []):
+        variant_id = str(line.get("variant_id") or "")
+        if not variant_id:
+            continue
+        item = query(
+            "SELECT * FROM items WHERE shopify_variant_id=? AND active=1 AND sold=0",
+            [variant_id], one=True)
+        if not item:
+            continue
+        price = float(line.get("price") or item.get("sale_price") or 0)
+        execute(
+            "UPDATE items SET sold=1, sold_date=?, sold_price=?, sold_to=?, "
+            "shopify_status='sold', checked_out=0 WHERE id=?",
+            [now, price, f"{buyer} (Shopify {order_name})", item["id"]])
+        execute("DELETE FROM tasks WHERE item_id=?", [item["id"]])
+        log_action("ITEM_SOLD", item["id"], item["name"],
+                   f"Sold via Shopify order {order_name} to {buyer} for ${price:.2f}",
+                   {"sold": 0}, {"sold": 1})
+
+    return "ok", 200
+
+
 @bp.route("/integrations/accounting/xero/callback")
 @login_required
 @admin_required

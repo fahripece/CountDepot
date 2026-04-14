@@ -142,6 +142,12 @@ MIGRATIONS = [
     # users — restrict to own department items only
     ("users", "restrict_to_department",   "INTEGER NOT NULL DEFAULT 0"),
 
+    # items — Shopify listing
+    ("items", "shopify_status",        "TEXT DEFAULT 'not_listed'"),
+    ("items", "shopify_product_id",    "TEXT"),
+    ("items", "shopify_variant_id",    "TEXT"),
+    ("items", "shopify_listed_price",  "REAL"),
+
     # ── ADD NEW COLUMNS HERE when you update the app ──────────────────────────
 ]
 
@@ -676,7 +682,8 @@ def _init_db_conn(db):
         CREATE INDEX IF NOT EXISTS idx_items_sku         ON items(internal_sku);
         CREATE INDEX IF NOT EXISTS idx_items_company     ON items(company_id);
         CREATE INDEX IF NOT EXISTS idx_items_parent      ON items(parent_item_id);
-        CREATE INDEX IF NOT EXISTS idx_items_ebay        ON items(ebay_status);
+        CREATE INDEX IF NOT EXISTS idx_items_ebay         ON items(ebay_status);
+        CREATE INDEX IF NOT EXISTS idx_items_shopify      ON items(shopify_status);
         CREATE INDEX IF NOT EXISTS idx_audit_ts          ON audit_log(ts DESC);
         CREATE INDEX IF NOT EXISTS idx_audit_item        ON audit_log(item_id);
         CREATE INDEX IF NOT EXISTS idx_audit_user        ON audit_log(username);

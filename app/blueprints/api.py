@@ -2333,6 +2333,157 @@ def api_ebay_policies():
         return jsonify({"ok": False, "msg": str(e)})
 
 
+# ── Shopify integration ────────────────────────────────────────────────────────
+
+@bp.route("/api/integrations/shopify/settings", methods=["POST"])
+@login_required
+@admin_required
+def api_shopify_settings_save():
+    """Save Shopify credentials (shop URL, access token, webhook secret, location ID)."""
+    from app.shopify_integration import _set_setting
+    d = request.json or {}
+    for field in ["shopify_shop", "shopify_access_token",
+                  "shopify_webhook_secret", "shopify_location_id"]:
+        if field in d:
+            _set_setting(field, str(d[field]).strip())
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/shopify/disconnect", methods=["POST"])
+@login_required
+@admin_required
+def api_shopify_disconnect():
+    """Clear Shopify credentials."""
+    from app.shopify_integration import _set_setting
+    for key in ("shopify_shop", "shopify_access_token",
+                "shopify_webhook_secret", "shopify_location_id"):
+        _set_setting(key, "")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/shopify/locations")
+@login_required
+@admin_required
+def api_shopify_locations():
+    """Fetch Shopify locations."""
+    try:
+        from app.shopify_integration import shopify_get_locations
+        return jsonify({"ok": True, "locations": shopify_get_locations()})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
+
+
+@bp.route("/api/item/shopify/list", methods=["POST"])
+@login_required
+@perm_required("sell_items")
+def api_item_shopify_list():
+    """Push a CountDepot item to Shopify as a product."""
+    d   = request.json or {}
+    iid = d.get("item_id")
+    if not iid:
+        return jsonify({"ok": False, "msg": "item_id required"})
+    item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Not found"})
+    if item.get("shopify_status") == "listed":
+        return jsonify({"ok": False, "msg": "Item is already listed on Shopify"})
+    price = float(d.get("price") or item.get("sale_price") or 0)
+    if price <= 0:
+        return jsonify({"ok": False, "msg": "A listing price is required"})
+    qty = int(d.get("quantity", 1))
+    try:
+        from app.shopify_integration import shopify_list_item
+        result = shopify_list_item(
+            dict(item),
+            price,
+            title=d.get("title"),
+            description=d.get("description"),
+            quantity=qty,
+            vendor=d.get("vendor"),
+            product_type=d.get("product_type"),
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
+    now = datetime.now().strftime("%Y-%m-%d")
+    execute(
+        "UPDATE items SET shopify_status='listed', shopify_product_id=?, "
+        "shopify_variant_id=?, shopify_listed_price=? WHERE id=?",
+        [result["product_id"], result["variant_id"], price, iid])
+    log_action("SHOPIFY_LIST", iid, item["name"],
+               f"Listed on Shopify at ${price:.2f} | Product ID: {result['product_id']}",
+               {"shopify_status": "not_listed"}, {"shopify_status": "listed"})
+    return jsonify({"ok": True, "product_id": result["product_id"],
+                    "listing_url": result["listing_url"]})
+
+
+@bp.route("/api/item/shopify/end", methods=["POST"])
+@login_required
+@perm_required("sell_items")
+def api_item_shopify_end():
+    """Archive (unpublish) a Shopify product and clear the listing on the item."""
+    d   = request.json or {}
+    iid = d.get("item_id")
+    if not iid:
+        return jsonify({"ok": False, "msg": "item_id required"})
+    item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Not found"})
+    product_id = d.get("product_id") or item.get("shopify_product_id")
+    if product_id:
+        try:
+            from app.shopify_integration import shopify_end_listing
+            shopify_end_listing(product_id)
+        except Exception as e:
+            return jsonify({"ok": False, "msg": str(e)})
+    execute(
+        "UPDATE items SET shopify_status='not_listed', shopify_product_id=NULL, "
+        "shopify_variant_id=NULL WHERE id=?", [iid])
+    log_action("SHOPIFY_END", iid, item["name"],
+               f"Shopify listing ended | Product ID: {product_id}",
+               {"shopify_status": "listed"}, {"shopify_status": "not_listed"})
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/shopify/sync-orders", methods=["POST"])
+@login_required
+@admin_required
+def api_shopify_sync_orders():
+    """
+    Pull paid Shopify orders and mark matching CountDepot items as sold.
+    Returns a summary of what was synced.
+    """
+    d         = request.json or {}
+    since_days = int(d.get("since_days", 30))
+    try:
+        from app.shopify_integration import shopify_pull_orders
+        orders = shopify_pull_orders(since_days=since_days)
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
+
+    synced = []
+    now    = datetime.now().strftime("%Y-%m-%d")
+    for o in orders:
+        if not o["variant_id"]:
+            continue
+        item = query(
+            "SELECT * FROM items WHERE shopify_variant_id=? AND active=1 AND sold=0",
+            [o["variant_id"]], one=True)
+        if not item:
+            continue
+        execute(
+            "UPDATE items SET sold=1, sold_date=?, sold_price=?, sold_to=?, "
+            "shopify_status='sold', checked_out=0 WHERE id=?",
+            [now, o["price"], f"{o['buyer']} (Shopify {o['order_name']})", item["id"]])
+        execute("DELETE FROM tasks WHERE item_id=?", [item["id"]])
+        log_action("ITEM_SOLD", item["id"], item["name"],
+                   f"Sold via Shopify order {o['order_name']} to {o['buyer']} for ${o['price']:.2f}",
+                   {"sold": 0}, {"sold": 1})
+        synced.append({"item_id": item["id"], "name": item["name"],
+                       "order": o["order_name"], "price": o["price"]})
+
+    return jsonify({"ok": True, "synced": len(synced), "items": synced})
+
+
 # ── Products ──────────────────────────────────────────────────────────────────
 
 @bp.route("/api/products")
