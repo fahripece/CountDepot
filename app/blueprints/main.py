@@ -112,10 +112,10 @@ def api_demo_request():
     # Email notification to admin (best-effort)
     try:
         from config import Config as _Cfg
-        if _Cfg.SMTP_HOST:
+        if _Cfg.SMTP_HOST and _Cfg.PLATFORM_ADMIN_EMAIL:
             from app.mailer import send_email as _send
             _send(
-                _Cfg.SMTP_FROM or "noreply@countdepot.com",
+                _Cfg.PLATFORM_ADMIN_EMAIL,
                 "New demo request from CountDepot",
                 f"<p><b>Name:</b> {name}<br><b>Company:</b> {company}<br>"
                 f"<b>Email:</b> {email}<br><b>Team size:</b> {size}</p>",

@@ -432,3 +432,92 @@ def test_public_demo_request_skips_csrf_and_bare_domain_landing(app):
     db.close()
 
     assert tuple(row) == ("Fahri Pece", "DSSIT", "fpece@dssitny.com", "1-10 people")
+
+
+def test_demo_request_email_goes_to_platform_admin(app, monkeypatch):
+    sent = {}
+
+    def fake_send_email(to, subject, html, text):
+        sent.update({"to": to, "subject": subject, "html": html, "text": text})
+        return True
+
+    import importlib
+    from config import Config
+    mailer = importlib.import_module("app.mailer")
+
+    monkeypatch.setattr(Config, "SMTP_HOST", "smtp.example.com", raising=False)
+    monkeypatch.setattr(Config, "PLATFORM_ADMIN_EMAIL", "admin@countdepot.com", raising=False)
+    monkeypatch.setattr(Config, "SMTP_FROM", "noreply@countdepot.com", raising=False)
+    monkeypatch.setattr(mailer, "send_email", fake_send_email)
+
+    response = app.test_client().post(
+        "/api/demo-request",
+        base_url="http://countdepot.com",
+        json={
+            "name": "Demo Lead",
+            "company": "Example Co",
+            "email": "lead@example.com",
+            "size": "20+ people",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["ok"] is True
+    assert sent["to"] == "admin@countdepot.com"
+    assert sent["subject"] == "New demo request from CountDepot"
+
+
+def test_core_authenticated_pages_render(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    paths = [
+        "/",
+        "/add-item",
+        "/checkout",
+        "/categories",
+        "/checked-out",
+        "/sites",
+        "/low-stock",
+        "/audit",
+        "/admin",
+        "/contacts",
+        "/todo",
+        "/products",
+        "/report/financial",
+        "/report/inventory",
+        "/report/activity",
+        "/report/user-activity",
+        "/report/checkout-history",
+        "/report/import-history",
+        "/report/locations",
+        "/report/warranties",
+        "/report/depreciation",
+        "/report/login-activity",
+        "/kits",
+        "/integrations",
+        "/integrations/accounting",
+        "/integrations/ebay",
+        "/integrations/shopify",
+        "/procurement",
+        "/procurement/catalog",
+        "/procurement/analytics",
+        "/support",
+        "/importer",
+        "/reservations",
+        "/api-docs",
+        "/webhooks",
+        "/billing",
+    ]
+
+    for path in paths:
+        with app.test_request_context(
+            path,
+            base_url=f"http://{tenant['host']}",
+            method="GET",
+        ):
+            session.update(saved_session)
+            session["_csrf_token"] = "test-csrf-token"
+            response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+        assert response.status_code == 200, path

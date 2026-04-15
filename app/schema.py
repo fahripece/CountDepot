@@ -99,6 +99,7 @@ MIGRATIONS = [
 
     # locations — per-site alert email
     ("locations", "email", "TEXT"),
+    ("locations", "active", "INTEGER NOT NULL DEFAULT 1"),
 
     # products — vendor SKU for invoice import matching
     ("products", "vendor_sku", "TEXT"),
@@ -403,6 +404,7 @@ def _init_db_conn(db):
             name        TEXT UNIQUE NOT NULL,
             description TEXT,
             email       TEXT,
+            active      INTEGER NOT NULL DEFAULT 1,
             created_at  TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS departments (
