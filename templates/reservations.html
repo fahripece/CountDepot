@@ -1,94 +1,164 @@
 {% extends "base.html" %}
 {% block title %}Reservations · CountDepot{% endblock %}
 {% block content %}
-<div class="topbar">
-  <span class="topbar-title">Reservations</span>
-  <span class="topbar-sub">Book items in advance</span>
+<div class="topbar reservations-topbar">
+  <div>
+    <div class="topbar-title">Reservations</div>
+    <div class="topbar-sub">Active holds, upcoming needs, and quantity commitments.</div>
+  </div>
   <div class="topbar-right">
-    <button class="btn btn-primary btn-sm" onclick="openNewReservation()">+ New Reservation</button>
+    <button class="btn btn-secondary btn-sm" onclick="loadReservations()">Refresh</button>
+    <button class="btn btn-primary btn-sm" onclick="openNewReservation()">New Reservation</button>
   </div>
 </div>
 
-<div style="flex:1;overflow-y:auto;padding:20px 24px">
-
-<!-- Stat tiles -->
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">
-  <div class="stat"><div class="stat-l">Upcoming</div><div class="stat-v" id="stUpcoming">—</div></div>
-  <div class="stat"><div class="stat-l">Active today</div><div class="stat-v" id="stToday">—</div></div>
-  <div class="stat"><div class="stat-l">Items reserved</div><div class="stat-v" id="stItems">—</div></div>
-</div>
-
-<!-- Filter bar -->
-<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-  <input class="input" id="searchRes" placeholder="Search by item or person…" style="max-width:260px" oninput="filterReservations()">
-  <input type="date" class="input" id="filterFrom" style="max-width:160px" onchange="loadReservations()">
-  <input type="date" class="input" id="filterTo"   style="max-width:160px" onchange="loadReservations()">
-  <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
-</div>
-
-<!-- Table -->
-<div class="table-wrap">
-  <table style="width:100%;border-collapse:collapse">
-    <thead>
-      <tr>
-        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#94a3b8;font-weight:600;border-bottom:1px solid #f0ede8">Item</th>
-        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#94a3b8;font-weight:600;border-bottom:1px solid #f0ede8">Reserved By</th>
-        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#94a3b8;font-weight:600;border-bottom:1px solid #f0ede8">From</th>
-        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#94a3b8;font-weight:600;border-bottom:1px solid #f0ede8">To</th>
-        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#94a3b8;font-weight:600;border-bottom:1px solid #f0ede8">Status</th>
-        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#94a3b8;font-weight:600;border-bottom:1px solid #f0ede8">Notes</th>
-        <th style="padding:10px 14px;font-size:11px;border-bottom:1px solid #f0ede8"></th>
-      </tr>
-    </thead>
-    <tbody id="resTable"><tr><td colspan="7" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px">Loading…</td></tr></tbody>
-  </table>
-</div>
-
-</div>
-
-<!-- New Reservation Modal -->
-<div class="overlay" id="newResModal">
-  <div class="modal" style="width:480px">
-    <div class="modal-header">
-      <div class="modal-title">New Reservation</div>
-      <button class="modal-close" onclick="closeModal('newResModal')">✕</button>
+<main class="res-page">
+  <section class="res-hero">
+    <div>
+      <p class="eyebrow">Inventory planning</p>
+      <h1>Know what is already spoken for before it leaves the shelf.</h1>
+      <p>Reservations now affect available quantity, show remaining units, and stay visible until fulfilled or cancelled.</p>
     </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+    <button class="btn btn-primary" onclick="openNewReservation()">Reserve Inventory</button>
+  </section>
+
+  <section class="res-stats">
+    <div class="stat"><div class="stat-l">Upcoming</div><div class="stat-v" id="stUpcoming">-</div></div>
+    <div class="stat"><div class="stat-l">Active Today</div><div class="stat-v red" id="stToday">-</div></div>
+    <div class="stat"><div class="stat-l">Items Reserved</div><div class="stat-v" id="stItems">-</div></div>
+    <div class="stat"><div class="stat-l">Units Reserved</div><div class="stat-v" id="stUnits">-</div></div>
+  </section>
+
+  <section class="res-toolbar card">
+    <div class="search-wrap">
+      <span>Search</span>
+      <input class="input" id="searchRes" placeholder="Item, person, serial, or SKU" oninput="filterReservations()">
+    </div>
+    <div class="date-wrap">
+      <label class="label">From</label>
+      <input type="date" class="input" id="filterFrom" onchange="loadReservations()">
+    </div>
+    <div class="date-wrap">
+      <label class="label">To</label>
+      <input type="date" class="input" id="filterTo" onchange="loadReservations()">
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
+  </section>
+
+  <section class="card res-list-card">
+    <div class="res-list-head">
+      <div>
+        <h2>Active Reservations</h2>
+        <p id="resCountLabel">Loading reservations...</p>
+      </div>
+      <span class="tag" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca">Reserved items are protected</span>
+    </div>
+    <div id="resTable" class="res-list">
+      <div class="res-empty">Loading reservations...</div>
+    </div>
+  </section>
+</main>
+
+<div class="overlay" id="newResModal">
+  <div class="modal" style="width:560px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">New Reservation</div>
+        <div class="topbar-sub">Choose an item, date range, and reserved quantity.</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('newResModal')">x</button>
+    </div>
+    <div class="modal-body">
       <div class="field">
         <label class="label">Item *</label>
-        <select class="select" id="resItemId" onchange="loadAvailability()">
-          <option value="">Select an item…</option>
+        <select class="select" id="resItemId" onchange="onReservationItemChange()">
+          <option value="">Select an item...</option>
           {% for i in items %}
-          <option value="{{ i.id }}">{{ i.name }}{% if i.serial %} · {{ i.serial }}{% elif i.sku %} · {{ i.sku }}{% elif i.internal_sku %} · {{ i.internal_sku }}{% endif %}</option>
+          <option value="{{ i.id }}" data-qty="{{ i.qty if i.qty is not none else '' }}">
+            {{ i.name }}{% if i.serial %} · {{ i.serial }}{% elif i.sku %} · {{ i.sku }}{% elif i.internal_sku %} · {{ i.internal_sku }}{% endif %}
+          </option>
           {% endfor %}
         </select>
       </div>
-      <div id="availabilityNote" style="display:none;background:#fef9f0;border:1px solid #fde68a;border-radius:7px;padding:10px 12px;font-size:12px;color:#92400e"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div id="availabilityNote" class="availability-note" style="display:none"></div>
+      <div class="field-row">
         <div class="field">
           <label class="label">From *</label>
-          <input type="date" class="input" id="resStart">
+          <input type="date" class="input" id="resStart" onchange="loadAvailability()">
         </div>
         <div class="field">
           <label class="label">To *</label>
-          <input type="date" class="input" id="resEnd">
+          <input type="date" class="input" id="resEnd" onchange="loadAvailability()">
         </div>
       </div>
-      <div class="field">
-        <label class="label">Reserved By *</label>
-        <input class="input" id="resBy" placeholder="Name or department">
+      <div class="field" id="resQtyWrap">
+        <label class="label">Quantity Reserved *</label>
+        <input class="input" id="resQty" type="number" min="1" value="1">
       </div>
       <div class="field">
-        <label class="label">Notes</label>
-        <textarea class="input" id="resNotes" rows="2" placeholder="Purpose, project, etc."></textarea>
+        <label class="label">Reserved For *</label>
+        <input class="input" id="resBy" placeholder="Name, team, or customer">
+      </div>
+      <div class="field">
+        <label class="label">Purpose</label>
+        <textarea class="input" id="resNotes" rows="2" placeholder="Project, job, install window, or reason"></textarea>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('newResModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="submitReservation()">Reserve</button>
+      <button class="btn btn-primary" id="submitResBtn" onclick="submitReservation()">Reserve</button>
     </div>
   </div>
 </div>
+
+<style>
+.res-page{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:18px;background:
+  radial-gradient(circle at 8% 0%,rgba(100,66,214,.12),transparent 32%),
+  linear-gradient(180deg,#f8fafc 0%,var(--bg) 42%)}
+.reservations-topbar{align-items:flex-start}
+.res-hero{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:28px;border-radius:28px;background:
+  linear-gradient(135deg,#111827 0%,#2b1c75 56%,#6442D6 100%);color:#fff;box-shadow:var(--shadow-2);overflow:hidden;position:relative}
+.res-hero::after{content:"";position:absolute;right:-80px;top:-90px;width:260px;height:260px;border-radius:999px;background:rgba(200,179,253,.28)}
+.res-hero>div,.res-hero .btn{position:relative;z-index:1}
+.res-hero h1{font-family:var(--font-display);font-size:32px;line-height:1.1;max-width:760px;letter-spacing:-.8px;margin:4px 0 10px}
+.res-hero p{color:#dbeafe;max-width:680px}
+.eyebrow{font-size:12px!important;text-transform:uppercase;letter-spacing:1.4px;font-weight:800;color:#c8b3fd!important}
+.res-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.res-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) 160px 160px auto;gap:12px;align-items:end}
+.search-wrap span{display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:5px}
+.res-list-card{padding:0;overflow:hidden}
+.res-list-head{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--border);gap:12px}
+.res-list-head h2{font-family:var(--font-display);font-size:20px;line-height:1.1}
+.res-list-head p{font-size:12px;color:var(--muted);margin-top:4px}
+.res-list{display:flex;flex-direction:column}
+.res-row{display:grid;grid-template-columns:minmax(240px,1.45fr) 1fr 130px 130px 120px 96px;gap:14px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border)}
+.res-row:hover{background:var(--surface-2)}
+.res-row:last-child{border-bottom:none}
+.res-item-name{font-weight:800;color:var(--text)}
+.res-item-sub,.res-meta{font-size:12px;color:var(--muted);margin-top:2px}
+.res-person{font-weight:700}
+.res-date{font-family:var(--font-mono);font-size:12px;color:#334155}
+.res-status{display:inline-flex;align-items:center;justify-content:center;width:max-content;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:800}
+.res-status.active{background:#fee2e2;color:#b91c1c}
+.res-status.upcoming{background:#ede7ff;color:#4f2fbd}
+.res-status.completed{background:#f1f5f9;color:#64748b}
+.res-units{font-family:var(--font-mono);font-weight:800;color:#b91c1c}
+.res-empty{padding:48px 20px;text-align:center;color:var(--muted);font-size:13px}
+.availability-note{border-radius:14px;padding:11px 13px;font-size:12.5px;line-height:1.5;margin-bottom:14px;background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+.availability-note.ok{background:#f0fdf4;border-color:#bbf7d0;color:#15803d}
+@media(max-width:980px){
+  .res-stats{grid-template-columns:repeat(2,1fr)}
+  .res-toolbar{grid-template-columns:1fr 1fr}
+  .res-row{grid-template-columns:1fr;gap:6px}
+  .res-hero{align-items:flex-start;flex-direction:column}
+}
+@media(max-width:640px){
+  .res-page{padding:14px}
+  .res-hero{padding:22px}
+  .res-hero h1{font-size:24px}
+  .res-stats,.res-toolbar{grid-template-columns:1fr}
+}
+</style>
 
 <script>
 const today = new Date().toISOString().slice(0,10);
@@ -102,50 +172,72 @@ async function api(url,body){
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 
-function statusBadge(s){
-  const map={confirmed:'background:#dbeafe;color:#1d4ed8',active:'background:#dcfce7;color:#15803d',completed:'background:#f1f5f9;color:#64748b',cancelled:'background:#fee2e2;color:#b91c1c'};
-  return `<span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:4px;${map[s]||''}">${s}</span>`;
+function esc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function reservationStatus(r){
+  const remaining=parseInt(r.qty_remaining||r.qty_reserved||1,10);
+  if(r.status==='completed'||remaining<=0)return 'completed';
+  if(r.start_date<=today&&r.end_date>=today)return 'active';
+  return 'upcoming';
+}
+
+function statusBadge(r){
+  const s=reservationStatus(r);
+  const label={active:'Reserved',upcoming:'Upcoming',completed:'Fulfilled'}[s]||s;
+  return `<span class="res-status ${s}">${label}</span>`;
 }
 
 async function loadReservations(){
   const from=document.getElementById('filterFrom').value;
   const to=document.getElementById('filterTo').value;
   let url='/api/reservations?';
-  if(from)url+=`from=${from}&`;
-  if(to)url+=`to=${to}&`;
+  if(from)url+=`from=${encodeURIComponent(from)}&`;
+  if(to)url+=`to=${encodeURIComponent(to)}&`;
   const d=await fetch(url).then(r=>r.json());
   allRes=d.reservations||[];
   renderTable(allRes);
-  // Stats
-  const t=today;
-  document.getElementById('stUpcoming').textContent=allRes.filter(r=>r.start_date>t).length;
-  document.getElementById('stToday').textContent=allRes.filter(r=>r.start_date<=t&&r.end_date>=t).length;
+  document.getElementById('stUpcoming').textContent=allRes.filter(r=>reservationStatus(r)==='upcoming').length;
+  document.getElementById('stToday').textContent=allRes.filter(r=>reservationStatus(r)==='active').length;
   document.getElementById('stItems').textContent=new Set(allRes.map(r=>r.item_id)).size;
+  document.getElementById('stUnits').textContent=allRes.reduce((sum,r)=>sum+parseInt(r.qty_remaining||r.qty_reserved||1,10),0);
 }
 
 function renderTable(rows){
-  const tb=document.getElementById('resTable');
-  if(!rows.length){tb.innerHTML='<tr><td colspan="7" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px">No reservations found</td></tr>';return;}
-  tb.innerHTML=rows.map(r=>{
-    const dot=r.color?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${r.color};margin-right:5px"></span>`:'';
-    const id_line=r.serial?`<span style="font-size:10px;color:#94a3b8;margin-left:4px">SN: ${r.serial}</span>`:r.sku?`<span style="font-size:10px;color:#94a3b8;margin-left:4px">${r.sku}</span>`:'';
-    return `<tr style="border-bottom:1px solid #f0ede8">
-      <td style="padding:10px 14px;font-size:13px">${dot}<strong>${r.item_name}</strong>${id_line}</td>
-      <td style="padding:10px 14px;font-size:13px">${r.reserved_by}</td>
-      <td style="padding:10px 14px;font-size:13px;font-family:monospace">${r.start_date}</td>
-      <td style="padding:10px 14px;font-size:13px;font-family:monospace">${r.end_date}</td>
-      <td style="padding:10px 14px">${statusBadge(r.status)}</td>
-      <td style="padding:10px 14px;font-size:12px;color:#64748b;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.notes||''}</td>
-      <td style="padding:10px 14px;text-align:right">
-        ${r.status!=='cancelled'?`<button onclick="cancelReservation(${r.id})" style="font-size:11px;color:#b91c1c;background:none;border:none;cursor:pointer">Cancel</button>`:''}
-      </td>
-    </tr>`;
+  const wrap=document.getElementById('resTable');
+  document.getElementById('resCountLabel').textContent=`${rows.length} reservation${rows.length!==1?'s':''} in this range`;
+  if(!rows.length){
+    wrap.innerHTML='<div class="res-empty">No active reservations in this date range.</div>';
+    return;
+  }
+  wrap.innerHTML=rows.map(r=>{
+    const idLine=[r.serial&&`SN ${r.serial}`,r.sku,r.internal_sku].filter(Boolean).join(' · ');
+    const qty=parseInt(r.qty_remaining||r.qty_reserved||1,10);
+    return `<div class="res-row">
+      <div>
+        <div class="res-item-name">${esc(r.item_name)}</div>
+        <div class="res-item-sub">${esc(idLine||r.category||'No identifier')}</div>
+      </div>
+      <div>
+        <div class="res-person">${esc(r.reserved_by)}</div>
+        <div class="res-meta">${esc(r.notes||r.purpose||'No purpose added')}</div>
+      </div>
+      <div><div class="label">From</div><div class="res-date">${r.start_date}</div></div>
+      <div><div class="label">To</div><div class="res-date">${r.end_date}</div></div>
+      <div>${statusBadge(r)}<div class="res-units">${qty} unit${qty!==1?'s':''}</div></div>
+      <div style="text-align:right">
+        <button class="btn btn-secondary btn-sm" onclick="window.location='/?item=${r.item_id}'">Item</button>
+        ${reservationStatus(r)!=='completed'?`<button class="btn btn-danger btn-sm" style="margin-top:6px" onclick="cancelReservation(${r.id})">Cancel</button>`:''}
+      </div>
+    </div>`;
   }).join('');
 }
 
 function filterReservations(){
   const q=document.getElementById('searchRes').value.toLowerCase();
-  renderTable(q?allRes.filter(r=>(r.item_name||'').toLowerCase().includes(q)||(r.reserved_by||'').toLowerCase().includes(q)):allRes);
+  const rows=q?allRes.filter(r=>[r.item_name,r.reserved_by,r.serial,r.sku,r.internal_sku,r.notes,r.purpose].some(v=>String(v||'').toLowerCase().includes(q))):allRes;
+  renderTable(rows);
 }
 
 function clearFilters(){
@@ -159,10 +251,19 @@ function openNewReservation(){
   document.getElementById('resItemId').value='';
   document.getElementById('resStart').value=today;
   document.getElementById('resEnd').value=today;
+  document.getElementById('resQty').value='1';
   document.getElementById('resBy').value='';
   document.getElementById('resNotes').value='';
   document.getElementById('availabilityNote').style.display='none';
+  document.getElementById('resQtyWrap').style.display='none';
   openModal('newResModal');
+}
+
+function onReservationItemChange(){
+  const opt=document.getElementById('resItemId').selectedOptions[0];
+  const qty=opt?.dataset.qty;
+  document.getElementById('resQtyWrap').style.display=qty?'block':'none';
+  loadAvailability();
 }
 
 async function loadAvailability(){
@@ -170,12 +271,13 @@ async function loadAvailability(){
   const note=document.getElementById('availabilityNote');
   if(!id){note.style.display='none';return;}
   const d=await fetch(`/api/reservations/availability?item_id=${id}`).then(r=>r.json());
+  note.style.display='block';
+  note.className='availability-note';
   if(d.booked&&d.booked.length){
-    note.style.display='block';
-    note.innerHTML='<strong>Already reserved:</strong> '+d.booked.map(b=>`${b.start_date} → ${b.end_date} (${b.reserved_by})`).join(', ');
+    note.innerHTML='<strong>Existing reservations:</strong> '+d.booked.map(b=>`${b.start_date} to ${b.end_date} · ${esc(b.reserved_by)} · ${b.qty_remaining||1} unit(s)`).join('<br>');
   }else{
-    note.style.display='block';note.style.background='#f0fdf4';note.style.borderColor='#bbf7d0';note.style.color='#15803d';
-    note.textContent='Item is available — no existing reservations.';
+    note.classList.add('ok');
+    note.textContent='No active reservations currently block this item.';
   }
 }
 
@@ -185,8 +287,12 @@ async function submitReservation(){
   const end=document.getElementById('resEnd').value;
   const by=document.getElementById('resBy').value.trim();
   const notes=document.getElementById('resNotes').value.trim();
-  if(!item_id||!start||!end||!by){alert('Please fill in all required fields.');return;}
-  const r=await api('/api/reservations',{item_id:parseInt(item_id),start_date:start,end_date:end,reserved_by:by,notes});
+  const qty=parseInt(document.getElementById('resQty').value||'1',10);
+  if(!item_id||!start||!end||!by){alert('Please fill in item, dates, and reserved for.');return;}
+  const btn=document.getElementById('submitResBtn');
+  btn.disabled=true;btn.textContent='Reserving...';
+  const r=await api('/api/reservations',{item_id:parseInt(item_id),start_date:start,end_date:end,reserved_by:by,notes,qty_reserved:qty});
+  btn.disabled=false;btn.textContent='Reserve';
   if(r.ok){closeModal('newResModal');loadReservations();}
   else alert(r.msg||'Could not create reservation');
 }
@@ -198,7 +304,6 @@ async function cancelReservation(id){
   else alert(r.msg||'Could not cancel');
 }
 
-// Set default date range to next 30 days
 document.getElementById('filterFrom').value=today;
 const d30=new Date();d30.setDate(d30.getDate()+30);
 document.getElementById('filterTo').value=d30.toISOString().slice(0,10);
