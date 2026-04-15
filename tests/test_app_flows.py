@@ -1142,12 +1142,47 @@ def test_platform_dashboard_renders_owner_metrics(app):
         ["payco", "Pay Co", "pro", "", 1, 1, "2026-04-01 00:00:00", "pay@example.com", "active"],
     )
     db.execute(
+        "INSERT INTO tenants (slug,name,plan,sector,onboarded,active,created_at,owner_email,subscription_status,trial_ends_at,free_access,notes) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        [
+            "freeco",
+            "Free Co",
+            "pro",
+            "",
+            1,
+            1,
+            "2026-04-01 00:00:00",
+            "free@example.com",
+            "active",
+            None,
+            1,
+            "Lifetime access",
+        ],
+    )
+    db.execute(
         "INSERT INTO tenants (slug,name,plan,sector,onboarded,active,created_at,owner_email,subscription_status,trial_ends_at,cancellation_reason,cancelled_at) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         ["churnco", "Churn Co", "starter", "", 1, 1, "2026-04-01 00:00:00", "churn@example.com", "cancelled", None, "Too expensive", "2026-04-10 00:00:00"],
     )
     db.commit()
     db.close()
+
+    payco_dir = os.path.join(Config.TENANTS_DIR, "payco")
+    os.makedirs(payco_dir, exist_ok=True)
+    tenant_db = sqlite3.connect(os.path.join(payco_dir, "inventory.db"))
+    tenant_db.executescript("""
+        CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, last_login TEXT, session_token TEXT);
+        CREATE TABLE login_log (ts TEXT, result TEXT);
+        CREATE TABLE items (active INTEGER, sold INTEGER, sold_price REAL, sale_price REAL, cost_price REAL);
+        CREATE TABLE checkout_log (checkout_date TEXT);
+        CREATE TABLE audit_log (ts TEXT);
+    """)
+    tenant_db.execute("INSERT INTO users (username,last_login,session_token) VALUES (?,?,?)", ["owner", None, "live"])
+    tenant_db.execute("INSERT INTO login_log (ts,result) VALUES (?,?)", ["2026-04-12 09:30:00", "ok"])
+    tenant_db.execute("INSERT INTO items (active,sold,sold_price,cost_price) VALUES (1,1,100,60)")
+    tenant_db.execute("INSERT INTO audit_log (ts) VALUES (?)", ["2026-04-12 10:00:00"])
+    tenant_db.commit()
+    tenant_db.close()
 
     with app.test_request_context("/_platform/", base_url="http://localhost:5000"):
         session[SESSION_KEY] = True
@@ -1158,5 +1193,8 @@ def test_platform_dashboard_renders_owner_metrics(app):
     assert "CEO Command Center" in body
     assert "Estimated MRR" in body
     assert "$50" in body
+    assert "$600" in body
+    assert "Free/Partner" in body
+    assert "2026-04-12" in body
     assert "Cancellations and churn notes" in body
     assert "Too expensive" in body

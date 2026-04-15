@@ -26,7 +26,16 @@ def init_platform_db():
             sector      TEXT NOT NULL DEFAULT '',
             onboarded   INTEGER NOT NULL DEFAULT 0,
             active      INTEGER NOT NULL DEFAULT 1,
-            created_at  TEXT NOT NULL
+            created_at  TEXT NOT NULL,
+            owner_email TEXT,
+            subscription_status TEXT NOT NULL DEFAULT 'trial',
+            trial_ends_at TEXT,
+            notes TEXT,
+            stripe_customer_id TEXT,
+            stripe_subscription_id TEXT,
+            cancellation_reason TEXT,
+            cancelled_at TEXT,
+            free_access INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS rate_limits (
             ip       TEXT NOT NULL,
@@ -94,6 +103,8 @@ def init_platform_db():
         db.execute("ALTER TABLE tenants ADD COLUMN cancellation_reason TEXT")
     if "cancelled_at" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN cancelled_at TEXT")
+    if "free_access" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN free_access INTEGER NOT NULL DEFAULT 0")
     db.commit()
     db.close()
 

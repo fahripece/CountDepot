@@ -93,9 +93,31 @@ def _verify_mfa_code(code: str) -> bool:
 
 def _all_tenants():
     db   = get_platform_db()
+    cols = [r[1] for r in db.execute("PRAGMA table_info(tenants)").fetchall()]
     rows = db.execute("SELECT * FROM tenants ORDER BY created_at DESC").fetchall()
     db.close()
-    return [dict(r) for r in rows]
+    tenants = []
+    for r in rows:
+        d = dict(r)
+        if "free_access" not in cols:
+            d["free_access"] = 0
+        tenants.append(d)
+    return tenants
+
+
+def _tenant_db_cols(db, table):
+    try:
+        return {r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()}
+    except Exception:
+        return set()
+
+
+def _scalar(db, sql, args=None, default=0):
+    try:
+        row = db.execute(sql, args or []).fetchone()
+        return row[0] if row else default
+    except Exception:
+        return default
 
 
 def _tenant_stats(slug):
@@ -112,34 +134,41 @@ def _tenant_stats(slug):
     db = sqlite3.connect(db_path)
     db.row_factory = sqlite3.Row
     try:
-        items      = db.execute("SELECT COUNT(*) FROM items WHERE active=1").fetchone()[0]
-        users      = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        active_sessions = db.execute(
-            "SELECT COUNT(*) FROM users WHERE session_token IS NOT NULL AND session_token!=''"
-        ).fetchone()[0]
-        last_login = db.execute(
-            "SELECT MAX(last_login) FROM users WHERE last_login IS NOT NULL"
-        ).fetchone()[0]
-        sold = db.execute("""
-            SELECT COALESCE(SUM(COALESCE(sold_price,sale_price,0)),0) as revenue,
-                   COALESCE(SUM(COALESCE(sold_price,sale_price,0)-COALESCE(cost_price,0)),0) as profit
-            FROM items WHERE active=1 AND sold=1
-        """).fetchone()
-        checkout_30d = db.execute(
-            "SELECT COUNT(*) FROM checkout_log WHERE checkout_date >= date('now','-30 days')"
-        ).fetchone()[0]
-        audit_30d = db.execute(
-            "SELECT COUNT(*) FROM audit_log WHERE ts >= datetime('now','-30 days')"
-        ).fetchone()[0]
-        last_activity = db.execute("SELECT MAX(ts) FROM audit_log").fetchone()[0]
+        user_cols = _tenant_db_cols(db, "users")
+        items = _scalar(db, "SELECT COUNT(*) FROM items WHERE active=1", default=0)
+        users = _scalar(db, "SELECT COUNT(*) FROM users", default=0)
+        active_sessions = (
+            _scalar(db, "SELECT COUNT(*) FROM users WHERE session_token IS NOT NULL AND session_token!=''", default=0)
+            if "session_token" in user_cols else 0
+        )
+        login_sources = []
+        if "last_login" in user_cols:
+            login_sources.append(_scalar(db, "SELECT MAX(last_login) FROM users WHERE last_login IS NOT NULL", default=None))
+        login_sources.append(_scalar(db, "SELECT MAX(ts) FROM login_log WHERE result='ok'", default=None))
+        last_login = max([v for v in login_sources if v] or [None])
+        sold_revenue = _scalar(
+            db,
+            "SELECT COALESCE(SUM(COALESCE(sold_price,sale_price,0)),0) "
+            "FROM items WHERE active=1 AND sold=1",
+            default=0,
+        )
+        sold_profit = _scalar(
+            db,
+            "SELECT COALESCE(SUM(COALESCE(sold_price,sale_price,0)-COALESCE(cost_price,0)),0) "
+            "FROM items WHERE active=1 AND sold=1",
+            default=0,
+        )
+        checkout_30d = _scalar(db, "SELECT COUNT(*) FROM checkout_log WHERE checkout_date >= date('now','-30 days')", default=0)
+        audit_30d = _scalar(db, "SELECT COUNT(*) FROM audit_log WHERE ts >= datetime('now','-30 days')", default=0)
+        last_activity = _scalar(db, "SELECT MAX(ts) FROM audit_log", default=None)
     except Exception:
         items = users = 0
         active_sessions = checkout_30d = audit_30d = 0
         sold_revenue = sold_profit = 0
         last_login = last_activity = None
     else:
-        sold_revenue = round(float(sold["revenue"] or 0), 2)
-        sold_profit = round(float(sold["profit"] or 0), 2)
+        sold_revenue = round(float(sold_revenue or 0), 2)
+        sold_profit = round(float(sold_profit or 0), 2)
     finally:
         db.close()
     size_kb = round(os.path.getsize(db_path) / 1024, 1)
@@ -181,12 +210,27 @@ def _trial_days_left(value):
     return None
 
 
+def _is_free_access(tenant):
+    notes = (tenant.get("notes") or "").lower()
+    free_markers = (
+        "free access",
+        "free for life",
+        "free-for-life",
+        "lifetime access",
+        "partner deal",
+    )
+    return (
+        bool(tenant.get("free_access"))
+        or (tenant.get("plan") or "").lower() == "free"
+        or any(marker in notes for marker in free_markers)
+    )
+
+
 def _estimated_mrr(tenant):
     from app.stripe_billing import PLANS
     status = tenant.get("subscription_status") or "trial"
     plan = tenant.get("plan") or "starter"
-    notes = (tenant.get("notes") or "").lower()
-    if status != "active" or plan == "free" or "free access" in notes:
+    if status != "active" or _is_free_access(tenant):
         return 0
     return int(PLANS.get(plan, {}).get("monthly") or 0)
 
@@ -196,7 +240,7 @@ def _enrich_tenant(t):
     t["trial_days_left"] = _trial_days_left(t.get("trial_ends_at"))
     t["days_since_login"] = _days_since(t["stats"].get("last_login"))
     t["days_since_activity"] = _days_since(t["stats"].get("last_activity"))
-    t["is_free_access"] = t.get("plan") == "free" or "free access" in (t.get("notes") or "").lower()
+    t["is_free_access"] = _is_free_access(t)
 
     score = 100
     risks = []
@@ -566,6 +610,7 @@ def tenant_billing(slug):
     trial_ends = request.form.get("trial_ends_at", "").strip() or None
     notes      = request.form.get("notes", "").strip() or None
     cancel_reason = request.form.get("cancellation_reason", "").strip() or None
+    free_access = 1 if request.form.get("free_access") == "1" else 0
     db = get_platform_db()
     # If trial_ends_at was left blank, preserve the existing value rather than
     # overwriting it with NULL (an HTML date input can't render a full datetime
@@ -577,9 +622,9 @@ def tenant_billing(slug):
     cancelled_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") if status == "cancelled" else None
     db.execute(
         "UPDATE tenants SET subscription_status=?, trial_ends_at=?, notes=?, "
-        "cancellation_reason=?, cancelled_at=? WHERE slug=?",
+        "cancellation_reason=?, cancelled_at=?, free_access=? WHERE slug=?",
         [status, trial_ends, notes, cancel_reason if status == "cancelled" else None,
-         cancelled_at, slug])
+         cancelled_at, free_access, slug])
     db.commit(); db.close()
     return redirect(url_for("platform.dashboard"))
 
@@ -639,7 +684,7 @@ def tenant_grant_free(slug):
            f"Free access granted {datetime.utcnow().strftime('%Y-%m-%d')} by platform admin"
     db = get_platform_db()
     db.execute(
-        "UPDATE tenants SET subscription_status='active', trial_ends_at=NULL, plan=?, notes=? WHERE slug=?",
+        "UPDATE tenants SET subscription_status='active', trial_ends_at=NULL, plan=?, notes=?, free_access=1 WHERE slug=?",
         [plan, note, slug])
     db.commit(); db.close()
     return redirect(url_for("platform.dashboard"))

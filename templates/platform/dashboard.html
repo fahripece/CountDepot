@@ -297,6 +297,9 @@ tr:hover td{background:#1a2947}
               <span class="badge sub-{{ t.subscription_status or 'trial' }}">
                 {{ t.subscription_status or 'trial' }}
               </span>
+              {% if t.is_free_access %}
+              <span class="badge sub-active" style="margin-left:4px">Free/Partner</span>
+              {% endif %}
             </td>
             <td>
               {% if t.trial_ends_at %}
@@ -330,7 +333,7 @@ tr:hover td{background:#1a2947}
             <td>
               <div class="actions">
                 <button class="btn btn-muted btn-xs"
-                  onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'trial' }}','{{ (t.trial_ends_at or '')[:10] }}',{{ t.notes|tojson if t.notes else 'null' }},{{ t.cancellation_reason|tojson if t.cancellation_reason else 'null' }})">
+                  onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'trial' }}','{{ (t.trial_ends_at or '')[:10] }}',{{ t.notes|tojson if t.notes else 'null' }},{{ t.cancellation_reason|tojson if t.cancellation_reason else 'null' }},{{ 1 if t.is_free_access else 0 }})">
                   Billing
                 </button>
                 <button class="btn btn-green btn-xs"
@@ -625,6 +628,13 @@ tr:hover td{background:#1a2947}
           <label>Internal notes</label>
           <textarea name="notes" id="billing-notes"></textarea>
         </div>
+        <label class="field" style="display:flex;align-items:flex-start;gap:10px">
+          <input type="checkbox" name="free_access" value="1" id="billing-free-access" style="margin-top:3px">
+          <span>
+            <strong>Free / lifetime access</strong>
+            <span class="hint" style="display:block">Exclude this tenant from MRR/ARR and mark it as a partner/free account.</span>
+          </span>
+        </label>
         <div class="field">
           <label>Cancellation reason</label>
           <select name="cancellation_reason" id="billing-cancel-reason">
@@ -858,13 +868,14 @@ function openEdit(slug, name, plan) {
 
 // ── Billing ───────────────────────────────────────────────────────────────────
 let _billingTrialBase = '';
-function openBilling(slug, name, status, trialEnds, notes, cancelReason) {
+function openBilling(slug, name, status, trialEnds, notes, cancelReason, freeAccess) {
   document.getElementById('billing-title').textContent = 'Billing — ' + name;
   document.getElementById('billing-form').action = '/_platform/tenant/' + slug + '/billing';
   document.getElementById('billing-status').value = status || 'trial';
   document.getElementById('billing-trial-ends').value = trialEnds || '';
   document.getElementById('billing-notes').value = notes || '';
   document.getElementById('billing-cancel-reason').value = cancelReason || '';
+  document.getElementById('billing-free-access').checked = !!freeAccess;
   _billingTrialBase = trialEnds || '';
   openModal('billingModal');
 }
