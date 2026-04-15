@@ -12,6 +12,8 @@ from app.blueprints.api import (
     api_items,
     api_product_add,
     api_qty_adjust,
+    api_user_add,
+    api_user_invite,
 )
 
 
@@ -214,6 +216,92 @@ def test_internal_sku_product_item_is_visible_in_inventory(app, tenant):
         item["id"] == item_data["id"] and item["internal_sku"]
         for item in items
     )
+
+
+def test_admin_add_user_reports_invite_email_failure(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/api/user/add",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "username": "new.user@example.com",
+            "role": "worker",
+            "permissions": ["view_inventory"],
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_user_add())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["emailed"] is False
+    assert "reset-password" in data["invite_url"]
+    assert "new.user@example.com" not in data["invite_url"]
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    user = db.execute(
+        "SELECT id, email_verified, must_change_password FROM users WHERE email=?",
+        ["new.user@example.com"],
+    ).fetchone()
+    token = db.execute(
+        "SELECT token, used FROM password_reset_tokens WHERE user_id=?",
+        [user["id"]],
+    ).fetchone()
+    db.close()
+
+    assert user["email_verified"] == 0
+    assert user["must_change_password"] == 1
+    assert token["used"] == 0
+
+
+def test_admin_can_resend_user_invite(app, tenant, monkeypatch):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    user_id = db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,0,1)",
+        ["resend@example.com", hash_pw("placeholder"), "worker", "view_inventory", "resend@example.com"],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    sent = {}
+
+    def fake_send_invite(to, slug, token, inviter="Your admin"):
+        sent.update({"to": to, "slug": slug, "token": token, "inviter": inviter})
+        return True
+
+    import importlib
+    mailer = importlib.import_module("app.mailer")
+    monkeypatch.setattr(mailer, "send_invite_email", fake_send_invite)
+
+    with app.test_request_context(
+        "/api/user/invite",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"id": user_id},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_user_invite())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["emailed"] is True
+    assert sent["to"] == "resend@example.com"
+    assert sent["slug"] == tenant["slug"]
+    assert sent["token"]
 
 
 def test_incomplete_cost_requirement_can_be_disabled(app, tenant):

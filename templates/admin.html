@@ -47,6 +47,7 @@
         <span style="font-size:11px;color:#94a3b8;margin-right:4px" id="permtoggle-{{ u.id }}">▸ Permissions</span>
         {% endif %}
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditEmail({{ u.id }},'{{ u.username }}','{{ u.email or '' }}')">Email</button>
+        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();resendInvite({{ u.id }},'{{ u.username }}')">Resend Invite</button>
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openResetPw({{ u.id }},'{{ u.username }}')">Reset PW</button>
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openSiteAccess({{ u.id }},'{{ u.username }}')">Sites</button>
         {% if u.id != current_user_id %}
@@ -668,7 +669,22 @@ async function saveUser(){
     document.querySelectorAll('#new-user-perm-grid .perm-cb:checked').forEach(cb=>perms.push(cb.value));
   }
   const res=await api('/api/user/add',{username,role,permissions:perms});
+  if(res.ok && res.emailed===false && res.invite_url){
+    window.prompt('Invite email did not send. Copy this setup link and send it to the user:',res.invite_url);
+  }
   if(res.ok){toast(res.msg||'Invite sent ✓','ok');closeModal('userModal');location.reload();}
+  else toast(res.msg||'Error','err');
+}
+
+async function resendInvite(id,name){
+  if(!confirm(`Send a new setup invite to "${name}"? The previous setup link will stop working.`))return;
+  const res=await api('/api/user/invite',{id});
+  if(res.ok && res.emailed===false && res.invite_url){
+    toast(res.msg||'Invite email did not send','warn');
+    window.prompt('Invite email did not send. Copy this setup link and send it to the user:',res.invite_url);
+    return;
+  }
+  if(res.ok) toast(res.msg||'Invite sent','ok');
   else toast(res.msg||'Error','err');
 }
 

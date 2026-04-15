@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import sqlite3
 import threading
 import time
 from datetime import datetime, date as _date
@@ -19,6 +20,29 @@ from app.helpers import (login_required, perm_required, admin_required,
                          ADMIN_DEFAULT_PERMS, WORKER_DEFAULT_PERMS)
 
 bp = Blueprint("api", __name__)
+
+
+def _tenant_invite_url(slug, token):
+    from config import Config
+    return f"https://{slug}.{Config.APP_DOMAIN}/reset-password/{token}"
+
+
+def _send_user_invite(user_id, email, slug, inviter):
+    import secrets as _sec
+    from datetime import datetime as _dt, timedelta as _td
+    from app.mailer import send_invite_email
+
+    execute("UPDATE password_reset_tokens SET used=1 WHERE user_id=? AND used=0",
+            [user_id])
+    token = _sec.token_urlsafe(32)
+    expires_at = (_dt.utcnow() + _td(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
+    execute("INSERT INTO password_reset_tokens (user_id,token,expires_at) VALUES (?,?,?)",
+            [user_id, token, expires_at])
+    emailed = bool(send_invite_email(email, slug, token, inviter=inviter))
+    invite_url = _tenant_invite_url(slug, token)
+    log_action("USER_INVITE_SENT" if emailed else "USER_INVITE_EMAIL_FAILED",
+               detail=f"{'Sent invite to' if emailed else 'Invite email failed for'} {email}")
+    return {"emailed": emailed, "invite_url": invite_url}
 
 
 # ── Internal SKU generation ───────────────────────────────────────────────────
@@ -3071,8 +3095,6 @@ def api_user_add():
         perm_str = (",".join(set(custom) & set(PERM_KEYS)) if custom is not None
                     else ",".join(WORKER_DEFAULT_PERMS))
     import secrets as _sec
-    from datetime import datetime as _dt, timedelta as _td
-    from config import Config as _Cfg
     # Create user with unusable random password — invite link sets the real one
     placeholder_pw = hash_pw(_sec.token_hex(32))
     try:
@@ -3080,18 +3102,47 @@ def api_user_add():
             "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password)"
             " VALUES (?,?,?,?,?,0,1)",
             [email, placeholder_pw, role, perm_str, email])
-        log_action("USER_ADD", detail=f"Invited user: {email} | role: {role}")
-        # Create invite token (reuses password_reset_tokens table)
-        tok = _sec.token_urlsafe(32)
-        exp = (_dt.utcnow() + _td(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
-        execute("INSERT INTO password_reset_tokens (user_id,token,expires_at) VALUES (?,?,?)",
-                [uid, tok, exp])
-        from app.mailer import send_invite_email
-        send_invite_email(email, g.tenant_slug, tok, inviter=session.get("username", "Your admin"))
-        return jsonify({"ok": True, "id": uid,
-                        "msg": f"Invite sent to {email}. They'll receive a link to set their password."})
-    except Exception:
+    except sqlite3.IntegrityError:
         return jsonify({"ok": False, "msg": "Email already in use"})
+    log_action("USER_ADD", detail=f"Invited user: {email} | role: {role}")
+
+    invite = _send_user_invite(
+        uid, email, g.tenant_slug, session.get("username", "Your admin")
+    )
+    if invite["emailed"]:
+        return jsonify({"ok": True, "id": uid, "emailed": True,
+                        "msg": f"Invite sent to {email}. They'll receive a link to set their password."})
+    return jsonify({"ok": True, "id": uid, "emailed": False,
+                    "invite_url": invite["invite_url"],
+                    "msg": "User was created, but the invite email did not send. Check SMTP settings or copy the setup link."})
+
+
+@bp.route("/api/user/invite", methods=["POST"])
+@login_required
+@admin_required
+@api_rate_limit(max_attempts=20, window=60)
+def api_user_invite():
+    from flask import g
+
+    d = request.json or {}
+    user_id = d.get("id")
+    user = query("SELECT id, username, email, email_verified FROM users WHERE id=?",
+                 [user_id], one=True)
+    if not user:
+        return jsonify({"ok": False, "msg": "User not found"}), 404
+    email = (user["email"] or user["username"] or "").strip().lower()
+    if not email or "@" not in email:
+        return jsonify({"ok": False, "msg": "This user needs a valid email before an invite can be sent."}), 400
+
+    invite = _send_user_invite(
+        user["id"], email, g.tenant_slug, session.get("username", "Your admin")
+    )
+    if invite["emailed"]:
+        return jsonify({"ok": True, "emailed": True,
+                        "msg": f"Invite resent to {email}."})
+    return jsonify({"ok": True, "emailed": False,
+                    "invite_url": invite["invite_url"],
+                    "msg": "Invite email did not send. Check SMTP settings or copy the setup link."})
 
 
 @bp.route("/api/user/permissions", methods=["POST"])
