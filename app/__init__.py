@@ -93,6 +93,7 @@ def create_app():
 
         # CSRF validation — skip for API key requests and cross-login (uses JSON body token)
         csrf_exempt = (request.path == "/_health" or request.path == "/_stripe/webhook"
+                       or request.path == "/api/demo-request"
                        or request.path == "/_cross-login"
                        or request.path == "/_cross-forgot-password"
                        or bool(auth_header.startswith("Bearer sk_live_")))
@@ -109,6 +110,7 @@ def create_app():
         if (request.path.startswith("/_platform")
                 or request.path == "/_health"
                 or request.path == "/_stripe/webhook"
+                or request.path == "/api/demo-request"
                 or request.path.startswith("/signup")
                 or request.path.startswith("/verify-signup")
                 or request.path == "/resend-signup-verify"

@@ -403,3 +403,32 @@ def test_viewer_cannot_add_items(app, tenant):
     assert add_response.status_code == 403
     assert add_data["ok"] is False
     assert "Permission denied" in add_data["msg"]
+
+
+def test_public_demo_request_skips_csrf_and_bare_domain_landing(app):
+    client = app.test_client()
+
+    response = client.post(
+        "/api/demo-request",
+        base_url="http://countdepot.com",
+        json={
+            "name": "Fahri Pece",
+            "company": "DSSIT",
+            "email": "fpece@dssitny.com",
+            "size": "1-10 people",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["ok"] is True
+
+    from app.platform import get_platform_db
+
+    db = get_platform_db()
+    row = db.execute(
+        "SELECT name, company, email, team_size FROM demo_requests WHERE email=?",
+        ["fpece@dssitny.com"],
+    ).fetchone()
+    db.close()
+
+    assert tuple(row) == ("Fahri Pece", "DSSIT", "fpece@dssitny.com", "1-10 people")
