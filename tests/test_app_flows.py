@@ -649,3 +649,39 @@ def test_core_authenticated_pages_render(app, tenant):
             response = _as_response(app, app.preprocess_request() or app.dispatch_request())
 
         assert response.status_code == 200, path
+
+
+def test_platform_dashboard_renders_owner_metrics(app):
+    from app.platform import get_platform_db
+    from app.blueprints.platform import SESSION_KEY
+
+    db = get_platform_db()
+    db.execute(
+        "INSERT INTO tenants (slug,name,plan,sector,onboarded,active,created_at,owner_email,subscription_status,trial_ends_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,datetime('now','+3 days'))",
+        ["trialco", "Trial Co", "starter", "", 1, 1, "2026-04-01 00:00:00", "trial@example.com", "trial"],
+    )
+    db.execute(
+        "INSERT INTO tenants (slug,name,plan,sector,onboarded,active,created_at,owner_email,subscription_status,trial_ends_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,NULL)",
+        ["payco", "Pay Co", "pro", "", 1, 1, "2026-04-01 00:00:00", "pay@example.com", "active"],
+    )
+    db.execute(
+        "INSERT INTO tenants (slug,name,plan,sector,onboarded,active,created_at,owner_email,subscription_status,trial_ends_at,cancellation_reason,cancelled_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        ["churnco", "Churn Co", "starter", "", 1, 1, "2026-04-01 00:00:00", "churn@example.com", "cancelled", None, "Too expensive", "2026-04-10 00:00:00"],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context("/_platform/", base_url="http://localhost:5000"):
+        session[SESSION_KEY] = True
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "CEO Command Center" in body
+    assert "Estimated MRR" in body
+    assert "$50" in body
+    assert "Cancellations and churn notes" in body
+    assert "Too expensive" in body

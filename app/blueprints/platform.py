@@ -104,22 +104,144 @@ def _tenant_stats(slug):
     import sqlite3
     db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
     if not os.path.exists(db_path):
-        return {"items": 0, "users": 0, "db_size_kb": 0, "last_login": None}
+        return {
+            "items": 0, "users": 0, "db_size_kb": 0, "last_login": None,
+            "active_sessions": 0, "sold_revenue": 0, "sold_profit": 0,
+            "checkout_30d": 0, "audit_30d": 0, "last_activity": None,
+        }
     db = sqlite3.connect(db_path)
     db.row_factory = sqlite3.Row
     try:
         items      = db.execute("SELECT COUNT(*) FROM items WHERE active=1").fetchone()[0]
         users      = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        active_sessions = db.execute(
+            "SELECT COUNT(*) FROM users WHERE session_token IS NOT NULL AND session_token!=''"
+        ).fetchone()[0]
         last_login = db.execute(
             "SELECT MAX(last_login) FROM users WHERE last_login IS NOT NULL"
         ).fetchone()[0]
+        sold = db.execute("""
+            SELECT COALESCE(SUM(COALESCE(sold_price,sale_price,0)),0) as revenue,
+                   COALESCE(SUM(COALESCE(sold_price,sale_price,0)-COALESCE(cost_price,0)),0) as profit
+            FROM items WHERE active=1 AND sold=1
+        """).fetchone()
+        checkout_30d = db.execute(
+            "SELECT COUNT(*) FROM checkout_log WHERE checkout_date >= date('now','-30 days')"
+        ).fetchone()[0]
+        audit_30d = db.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE ts >= datetime('now','-30 days')"
+        ).fetchone()[0]
+        last_activity = db.execute("SELECT MAX(ts) FROM audit_log").fetchone()[0]
     except Exception:
         items = users = 0
-        last_login = None
+        active_sessions = checkout_30d = audit_30d = 0
+        sold_revenue = sold_profit = 0
+        last_login = last_activity = None
+    else:
+        sold_revenue = round(float(sold["revenue"] or 0), 2)
+        sold_profit = round(float(sold["profit"] or 0), 2)
     finally:
         db.close()
     size_kb = round(os.path.getsize(db_path) / 1024, 1)
-    return {"items": items, "users": users, "db_size_kb": size_kb, "last_login": last_login}
+    return {
+        "items": items,
+        "users": users,
+        "db_size_kb": size_kb,
+        "last_login": last_login,
+        "active_sessions": active_sessions,
+        "sold_revenue": sold_revenue,
+        "sold_profit": sold_profit,
+        "checkout_30d": checkout_30d,
+        "audit_30d": audit_30d,
+        "last_activity": last_activity,
+    }
+
+
+def _days_since(value):
+    if not value:
+        return None
+    raw = str(value)[:19]
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%y"):
+        try:
+            dt = datetime.strptime(raw[:len(fmt)], fmt)
+            return max(0, (datetime.utcnow() - dt).days)
+        except ValueError:
+            continue
+    return None
+
+
+def _trial_days_left(value):
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return (datetime.strptime(str(value)[:len(fmt)], fmt) - datetime.utcnow()).days
+        except ValueError:
+            continue
+    return None
+
+
+def _estimated_mrr(tenant):
+    from app.stripe_billing import PLANS
+    status = tenant.get("subscription_status") or "trial"
+    plan = tenant.get("plan") or "starter"
+    notes = (tenant.get("notes") or "").lower()
+    if status != "active" or plan == "free" or "free access" in notes:
+        return 0
+    return int(PLANS.get(plan, {}).get("monthly") or 0)
+
+
+def _enrich_tenant(t):
+    t["estimated_mrr"] = _estimated_mrr(t)
+    t["trial_days_left"] = _trial_days_left(t.get("trial_ends_at"))
+    t["days_since_login"] = _days_since(t["stats"].get("last_login"))
+    t["days_since_activity"] = _days_since(t["stats"].get("last_activity"))
+    t["is_free_access"] = t.get("plan") == "free" or "free access" in (t.get("notes") or "").lower()
+
+    score = 100
+    risks = []
+    status = t.get("subscription_status") or "trial"
+    if not t.get("active"):
+        score -= 45
+        risks.append("Suspended")
+    if status in ("overdue", "expired"):
+        score -= 35
+        risks.append("Payment/access issue")
+    if status == "cancelled":
+        score -= 55
+        risks.append("Cancelled")
+    if status == "trial" and t["trial_days_left"] is not None and t["trial_days_left"] <= 7:
+        score -= 25
+        risks.append("Trial ending")
+    if t["stats"].get("items", 0) == 0:
+        score -= 20
+        risks.append("No inventory")
+    if t["days_since_login"] is None:
+        score -= 20
+        risks.append("Never logged in")
+    elif t["days_since_login"] >= 30:
+        score -= 25
+        risks.append("Inactive 30d+")
+    elif t["days_since_login"] >= 14:
+        score -= 12
+        risks.append("Inactive 14d+")
+    if t["stats"].get("audit_30d", 0) == 0 and t["stats"].get("items", 0) > 0:
+        score -= 10
+        risks.append("No recent activity")
+
+    t["health_score"] = max(0, min(100, score))
+    t["risk_flags"] = risks
+    if status == "cancelled":
+        t["lifecycle"] = "Churned"
+    elif status == "trial":
+        t["lifecycle"] = "Trial"
+    elif t["estimated_mrr"] > 0:
+        t["lifecycle"] = "Paying"
+    elif t["is_free_access"]:
+        t["lifecycle"] = "Free/Partner"
+    else:
+        t["lifecycle"] = status.title()
+    return t
 
 
 def _valid_slug(slug):
@@ -258,6 +380,7 @@ def dashboard():
     tenants = _all_tenants()
     for t in tenants:
         t["stats"] = _tenant_stats(t["slug"])
+        _enrich_tenant(t)
     today = date.today().isoformat()
     total_items   = sum(t["stats"]["items"] for t in tenants)
     total_users   = sum(t["stats"]["users"] for t in tenants)
@@ -265,6 +388,32 @@ def dashboard():
     count_active  = sum(1 for t in tenants if t["active"] and t.get("subscription_status") == "active")
     count_trial   = sum(1 for t in tenants if t["active"] and t.get("subscription_status") == "trial")
     count_overdue = sum(1 for t in tenants if t.get("subscription_status") == "overdue")
+    count_cancelled = sum(1 for t in tenants if t.get("subscription_status") == "cancelled")
+    estimated_mrr = sum(t["estimated_mrr"] for t in tenants)
+    estimated_arr = estimated_mrr * 12
+    active_customers = [t for t in tenants if t.get("subscription_status") == "active" and t["estimated_mrr"] > 0]
+    arpa = round(estimated_mrr / len(active_customers), 2) if active_customers else 0
+    trial_ending = [t for t in tenants if t.get("subscription_status") == "trial"
+                    and t.get("trial_days_left") is not None and t["trial_days_left"] <= 7]
+    at_risk = [t for t in tenants if t["health_score"] < 65 and t.get("subscription_status") != "cancelled"]
+    inactive = [t for t in tenants if t.get("days_since_login") is None or t.get("days_since_login", 0) >= 30]
+    cancellations = [t for t in tenants if t.get("subscription_status") == "cancelled"]
+    expansion_candidates = sorted(
+        [t for t in tenants if t.get("subscription_status") == "active"
+         and t.get("plan") == "starter" and (t["stats"]["users"] >= 4 or t["stats"]["items"] >= 400)],
+        key=lambda row: (row["stats"]["users"], row["stats"]["items"]),
+        reverse=True,
+    )
+    action_items = []
+    for t in trial_ending[:8]:
+        action_items.append({"priority": "high", "label": "Trial ending",
+                             "tenant": t, "detail": f"{t['trial_days_left']} day(s) left"})
+    for t in [x for x in tenants if x.get("subscription_status") == "overdue"][:8]:
+        action_items.append({"priority": "high", "label": "Payment overdue",
+                             "tenant": t, "detail": "Collect payment or pause access"})
+    for t in [x for x in at_risk if x.get("subscription_status") not in ("overdue", "expired")][:8]:
+        action_items.append({"priority": "med", "label": "Usage risk",
+                             "tenant": t, "detail": ", ".join(t["risk_flags"][:2]) or "Low health score"})
     return render_template("platform/dashboard.html",
                            tenants=tenants,
                            total_items=total_items,
@@ -273,6 +422,16 @@ def dashboard():
                            count_active=count_active,
                            count_trial=count_trial,
                            count_overdue=count_overdue,
+                           count_cancelled=count_cancelled,
+                           estimated_mrr=estimated_mrr,
+                           estimated_arr=estimated_arr,
+                           arpa=arpa,
+                           trial_ending=trial_ending,
+                           at_risk=at_risk,
+                           inactive=inactive,
+                           cancellations=cancellations,
+                           expansion_candidates=expansion_candidates,
+                           action_items=action_items[:12],
                            today=today)
 
 
@@ -406,6 +565,7 @@ def tenant_billing(slug):
     status     = request.form.get("subscription_status", "trial").strip()
     trial_ends = request.form.get("trial_ends_at", "").strip() or None
     notes      = request.form.get("notes", "").strip() or None
+    cancel_reason = request.form.get("cancellation_reason", "").strip() or None
     db = get_platform_db()
     # If trial_ends_at was left blank, preserve the existing value rather than
     # overwriting it with NULL (an HTML date input can't render a full datetime
@@ -414,9 +574,12 @@ def tenant_billing(slug):
         existing = db.execute("SELECT trial_ends_at FROM tenants WHERE slug=?", [slug]).fetchone()
         if existing and existing["trial_ends_at"]:
             trial_ends = existing["trial_ends_at"]
+    cancelled_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") if status == "cancelled" else None
     db.execute(
-        "UPDATE tenants SET subscription_status=?, trial_ends_at=?, notes=? WHERE slug=?",
-        [status, trial_ends, notes, slug])
+        "UPDATE tenants SET subscription_status=?, trial_ends_at=?, notes=?, "
+        "cancellation_reason=?, cancelled_at=? WHERE slug=?",
+        [status, trial_ends, notes, cancel_reason if status == "cancelled" else None,
+         cancelled_at, slug])
     db.commit(); db.close()
     return redirect(url_for("platform.dashboard"))
 
@@ -447,6 +610,7 @@ def api_tenants():
     tenants = _all_tenants()
     for t in tenants:
         t["stats"] = _tenant_stats(t["slug"])
+        _enrich_tenant(t)
     return jsonify(tenants)
 
 

@@ -90,6 +90,10 @@ def init_platform_db():
         db.execute("ALTER TABLE tenants ADD COLUMN stripe_subscription_id TEXT")
     if "owner_email" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN owner_email TEXT")
+    if "cancellation_reason" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN cancellation_reason TEXT")
+    if "cancelled_at" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN cancelled_at TEXT")
     db.commit()
     db.close()
 

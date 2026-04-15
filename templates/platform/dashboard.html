@@ -58,6 +58,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 .card-val.red{color:#f87171}
 .card-val.green{color:#4ade80}
 .card-lbl{font-size:12px;color:#94a3b8;font-weight:500}
+.exec-grid{display:grid;grid-template-columns:1.35fr .95fr;gap:16px;margin-bottom:24px}
+.panel{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px 20px}
+.panel-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:12px}
+.metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.mini-metric{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:13px}
+.mini-val{font-size:22px;font-weight:800;letter-spacing:-.4px}
+.mini-lbl{font-size:11px;color:#64748b;margin-top:3px}
+.action-list{display:flex;flex-direction:column;gap:8px;max-height:232px;overflow:auto}
+.action-item{display:flex;align-items:flex-start;gap:10px;background:#0f172a;border:1px solid #334155;border-radius:9px;padding:10px 12px}
+.action-dot{width:8px;height:8px;border-radius:99px;margin-top:5px;background:#fbbf24;flex:none}
+.action-dot.high{background:#f87171}.action-dot.med{background:#fbbf24}
+.health{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+.health-bar{width:54px;height:6px;background:#334155;border-radius:99px;overflow:hidden}
+.health-fill{height:100%;border-radius:99px;background:#4ade80}
+.health-fill.warn{background:#fbbf24}.health-fill.bad{background:#f87171}
+.risk-list{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.risk{font-size:10px;color:#fcd34d;background:#422006;border:1px solid #78350f;border-radius:5px;padding:2px 6px}
+@media(max-width:900px){.exec-grid{grid-template-columns:1fr}.metric-row{grid-template-columns:repeat(2,1fr)}}
 
 /* Table */
 .tbl-wrap{background:#1e293b;border:1px solid #334155;border-radius:10px;overflow:hidden;overflow-x:auto}
@@ -191,11 +209,53 @@ tr:hover td{background:#1a2947}
       <div class="card-val" style="font-size:18px">{{ total_kb }} KB</div>
       <div class="card-lbl">Total DB size</div>
     </div>
+    <div class="card">
+      <div class="card-val green">${{ estimated_mrr }}</div>
+      <div class="card-lbl">Estimated MRR</div>
+    </div>
+    <div class="card">
+      <div class="card-val" style="font-size:20px">${{ estimated_arr }}</div>
+      <div class="card-lbl">Estimated ARR</div>
+    </div>
+    <div class="card">
+      <div class="card-val {% if count_cancelled > 0 %}red{% endif %}">{{ count_cancelled }}</div>
+      <div class="card-lbl">Cancelled</div>
+    </div>
+  </div>
+
+  <!-- CEO Command Center -->
+  <div class="exec-grid">
+    <div class="panel">
+      <div class="panel-title">CEO Command Center</div>
+      <div class="metric-row">
+        <div class="mini-metric"><div class="mini-val">${{ arpa }}</div><div class="mini-lbl">ARPA / month</div></div>
+        <div class="mini-metric"><div class="mini-val">{{ trial_ending|length }}</div><div class="mini-lbl">Trials ending 7d</div></div>
+        <div class="mini-metric"><div class="mini-val">{{ at_risk|length }}</div><div class="mini-lbl">At-risk tenants</div></div>
+        <div class="mini-metric"><div class="mini-val">{{ expansion_candidates|length }}</div><div class="mini-lbl">Expansion candidates</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Needs Attention</div>
+      <div class="action-list">
+        {% for a in action_items %}
+        <div class="action-item">
+          <span class="action-dot {{ a.priority }}"></span>
+          <div style="min-width:0">
+            <div style="font-size:12px;font-weight:700;color:#f8fafc">{{ a.label }} · {{ a.tenant.name }}</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px">{{ a.detail }}</div>
+          </div>
+        </div>
+        {% else %}
+        <div style="font-size:13px;color:#64748b;padding:16px 0">No urgent owner actions right now.</div>
+        {% endfor %}
+      </div>
+    </div>
   </div>
 
   <!-- Tabs -->
   <div class="tabs">
     <div class="tab active" onclick="switchTab('tenants',this)">Tenants</div>
+    <div class="tab" onclick="switchTab('growth',this)">Growth</div>
     <div class="tab" onclick="switchTab('users',this)">Users</div>
     <div class="tab" onclick="switchTab('security',this)">Security</div>
   </div>
@@ -214,6 +274,7 @@ tr:hover td{background:#1a2947}
           <th>Plan</th>
           <th>Subscription</th>
           <th>Trial ends</th>
+          <th>Health</th>
           <th>Stats</th>
           <th>Last login</th>
           <th>Actions</th>
@@ -247,9 +308,21 @@ tr:hover td{background:#1a2947}
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
             <td>
+              <span class="health">
+                <span class="health-bar"><span class="health-fill {% if t.health_score < 50 %}bad{% elif t.health_score < 75 %}warn{% endif %}" style="width:{{ t.health_score }}%"></span></span>
+                {{ t.health_score }}
+              </span>
+              {% if t.risk_flags %}
+              <div class="risk-list">
+                {% for r in t.risk_flags[:2] %}<span class="risk">{{ r }}</span>{% endfor %}
+              </div>
+              {% endif %}
+            </td>
+            <td>
               <span class="stat">
                 <strong>{{ t.stats.items }}</strong> items ·
                 <strong>{{ t.stats.users }}</strong> users ·
+                <strong>{{ t.stats.audit_30d }}</strong> 30d events ·
                 <strong>{{ t.stats.db_size_kb }}</strong> KB
               </span>
             </td>
@@ -257,7 +330,7 @@ tr:hover td{background:#1a2947}
             <td>
               <div class="actions">
                 <button class="btn btn-muted btn-xs"
-                  onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'trial' }}','{{ (t.trial_ends_at or '')[:10] }}',{{ t.notes|tojson if t.notes else 'null' }})">
+                  onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'trial' }}','{{ (t.trial_ends_at or '')[:10] }}',{{ t.notes|tojson if t.notes else 'null' }},{{ t.cancellation_reason|tojson if t.cancellation_reason else 'null' }})">
                   Billing
                 </button>
                 <button class="btn btn-green btn-xs"
@@ -301,7 +374,7 @@ tr:hover td{background:#1a2947}
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="8" style="text-align:center;padding:40px;color:#475569">
+          <tr><td colspan="9" style="text-align:center;padding:40px;color:#475569">
             No tenants yet. Click "+ New Tenant" to create the first one.
           </td></tr>
           {% endfor %}
@@ -312,6 +385,54 @@ tr:hover td{background:#1a2947}
 
 
   <!-- ══ USERS TAB ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-growth">
+    <div class="cards">
+      <div class="card"><div class="card-val green">${{ estimated_mrr }}</div><div class="card-lbl">MRR from paying tenants</div></div>
+      <div class="card"><div class="card-val">{{ trial_ending|length }}</div><div class="card-lbl">Trials ending soon</div></div>
+      <div class="card"><div class="card-val amber">{{ inactive|length }}</div><div class="card-lbl">Inactive / never logged in</div></div>
+      <div class="card"><div class="card-val red">{{ cancellations|length }}</div><div class="card-lbl">Cancelled customers</div></div>
+    </div>
+    <div class="sec-hdr"><h2>Owner action queue</h2></div>
+    <div class="tbl-wrap" style="margin-bottom:24px">
+      <table>
+        <thead><tr><th>Priority</th><th>Tenant</th><th>Status</th><th>MRR</th><th>Health</th><th>Reason / next move</th></tr></thead>
+        <tbody>
+          {% for a in action_items %}
+          <tr>
+            <td><span class="badge {% if a.priority == 'high' %}sub-overdue{% else %}sub-trial{% endif %}">{{ a.priority }}</span></td>
+            <td><strong>{{ a.tenant.name }}</strong><div class="slug">{{ a.tenant.slug }}</div></td>
+            <td>{{ a.label }}</td>
+            <td>${{ a.tenant.estimated_mrr }}</td>
+            <td>{{ a.tenant.health_score }}</td>
+            <td style="color:#94a3b8">{{ a.detail }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="text-align:center;padding:32px;color:#475569">No urgent growth actions.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="sec-hdr"><h2>Cancellations and churn notes</h2></div>
+    <div class="tbl-wrap" style="margin-bottom:28px">
+      <table>
+        <thead><tr><th>Cancelled tenant</th><th>Plan</th><th>Cancelled at</th><th>Reason</th><th>Notes</th></tr></thead>
+        <tbody>
+          {% for t in cancellations %}
+          <tr>
+            <td><strong>{{ t.name }}</strong><div class="slug">{{ t.slug }}</div></td>
+            <td>{{ t.plan }}</td>
+            <td>{{ t.cancelled_at[:10] if t.cancelled_at else '—' }}</td>
+            <td style="color:#fca5a5">{{ t.cancellation_reason or 'No reason captured' }}</td>
+            <td style="color:#94a3b8;max-width:360px">{{ t.notes or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;padding:32px;color:#475569">No cancellations recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div><!-- /tab-growth -->
+
   <div class="tab-panel" id="tab-users">
     <div class="sec-hdr">
       <h2>Global User Search</h2>
@@ -503,6 +624,20 @@ tr:hover td{background:#1a2947}
         <div class="field">
           <label>Internal notes</label>
           <textarea name="notes" id="billing-notes"></textarea>
+        </div>
+        <div class="field">
+          <label>Cancellation reason</label>
+          <select name="cancellation_reason" id="billing-cancel-reason">
+            <option value="">Not cancelled / unknown</option>
+            <option value="Too expensive">Too expensive</option>
+            <option value="Missing feature">Missing feature</option>
+            <option value="Low usage">Low usage</option>
+            <option value="Switched tools">Switched tools</option>
+            <option value="Business closed">Business closed</option>
+            <option value="Support issue">Support issue</option>
+            <option value="Other">Other</option>
+          </select>
+          <div class="hint">Used in the Growth tab to spot churn patterns.</div>
         </div>
       </div>
       <div class="modal-foot">
@@ -723,12 +858,13 @@ function openEdit(slug, name, plan) {
 
 // ── Billing ───────────────────────────────────────────────────────────────────
 let _billingTrialBase = '';
-function openBilling(slug, name, status, trialEnds, notes) {
+function openBilling(slug, name, status, trialEnds, notes, cancelReason) {
   document.getElementById('billing-title').textContent = 'Billing — ' + name;
   document.getElementById('billing-form').action = '/_platform/tenant/' + slug + '/billing';
   document.getElementById('billing-status').value = status || 'trial';
   document.getElementById('billing-trial-ends').value = trialEnds || '';
   document.getElementById('billing-notes').value = notes || '';
+  document.getElementById('billing-cancel-reason').value = cancelReason || '';
   _billingTrialBase = trialEnds || '';
   openModal('billingModal');
 }
