@@ -15,6 +15,7 @@ from app.blueprints.api import (
     api_product_add,
     api_items_bulk_serial_add,
     api_item_bulk_clone,
+    api_bulk_edit,
     api_qty_adjust,
     api_user_add,
     api_user_invite,
@@ -632,6 +633,58 @@ def test_bulk_clone_creates_same_item_with_new_serials(app, tenant):
     assert [r["serial"] for r in rows] == ["CLONE-001", "CLONE-002"]
     assert all(r["name"] == "Bulk Clone Product" for r in rows)
     assert all(r["shelf"] == "CLONE-A" for r in rows)
+
+
+def test_bulk_edit_can_update_cost_and_sale_prices(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Bulk Price Category", "#ffffff"],
+    ).lastrowid
+    ids = []
+    for name in ["Price Item A", "Price Item B"]:
+        ids.append(db.execute(
+            "INSERT INTO items (name,category_id,shelf,cost_price,sale_price,active,created_at) "
+            "VALUES (?,?,?,?,?,1,'2026-01-01 00:00:00')",
+            [name, category_id, "PRICE-A", None, None],
+        ).lastrowid)
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/items/bulk-edit",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"ids": ids, "cost_price": "12.50", "sale_price": "20.00"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_bulk_edit())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["updated"] == 2
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    rows = db.execute(
+        f"SELECT id, cost_price, sale_price FROM items WHERE id IN ({','.join('?' for _ in ids)}) ORDER BY id",
+        ids,
+    ).fetchall()
+    tasks = db.execute(
+        f"SELECT item_id, status FROM tasks WHERE item_id IN ({','.join('?' for _ in ids)}) ORDER BY item_id",
+        ids,
+    ).fetchall()
+    db.close()
+
+    assert all(row["cost_price"] == 12.5 for row in rows)
+    assert all(row["sale_price"] == 20.0 for row in rows)
+    assert all(task["status"] == "done" for task in tasks)
 
 
 def test_incomplete_cost_requirement_can_be_disabled(app, tenant):

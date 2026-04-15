@@ -253,6 +253,10 @@
         </div>
 
         <div class="section-hdr">Serial &amp; SKU</div>
+        <div id="fi-bulk-mode-banner" style="display:none;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#166534">
+          <strong>Bulk serial mode is on.</strong>
+          <span id="fi-bulk-mode-count">Enter or scan one serial per line.</span>
+        </div>
         <div class="field-row">
           <div class="field"><label class="label" id="fi-serial-label">Serial Number</label><input class="input mono" id="fi-serial"></div>
           <div class="field">
@@ -263,10 +267,22 @@
             </div>
           </div>
         </div>
-        <div class="field" id="fi-bulk-serial-wrap">
-          <label class="label">Bulk serial add <span style="font-weight:400;font-size:10px;color:#94a3b8">optional - one serial per line</span></label>
-          <textarea class="input mono" id="fi-bulk-serials" style="min-height:74px;resize:vertical" placeholder="SN001&#10;SN002&#10;SN003"></textarea>
-          <div style="font-size:11px;color:#64748b;margin-top:5px">When multiple serials are entered, CountDepot creates one item per serial using the same product, site, shelf, owner, cost, and fields.</div>
+        <div id="fi-bulk-serial-wrap" style="margin-bottom:14px">
+          <button type="button" class="btn btn-secondary btn-sm" id="fi-bulk-toggle" onclick="toggleBulkSerialMode(true)">+ Add multiple serials</button>
+          <div id="fi-bulk-serial-panel" style="display:none;margin-top:10px;border:1px solid #d1fae5;background:#f0fdf4;border-radius:10px;padding:12px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px">
+              <div>
+                <div style="font-size:13px;font-weight:700;color:#14532d">Add many of the same item</div>
+                <div style="font-size:11.5px;color:#166534;margin-top:2px">Same product, site, shelf, owner, cost, and fields. Different serial numbers.</div>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBulkSerialMode(false)">Use single serial</button>
+            </div>
+            <textarea class="input mono" id="fi-bulk-serials" style="min-height:104px;resize:vertical;background:#fff" placeholder="Scan or paste serials here, one per line&#10;SN001&#10;SN002&#10;SN003" oninput="updateBulkSerialCount()"></textarea>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px;font-size:11px;color:#166534">
+              <span id="fi-bulk-serial-count">0 serials ready</span>
+              <span>Leave the single Serial Number field blank in bulk mode.</span>
+            </div>
+          </div>
         </div>
         <div class="field-row">
           <div class="field"><label class="label">Condition *</label>
@@ -580,6 +596,52 @@
   </div>
 </div>
 
+<!-- BULK CLONE SERIALS MODAL -->
+<div class="overlay" id="bulkCloneModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Clone With Serials</div>
+        <div id="bulkCloneName" style="font-size:12px;color:#64748b;margin-top:2px"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('bulkCloneModal')">x</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="bulkCloneItemId">
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:11px 13px;margin-bottom:14px;font-size:12.5px;color:#166534;line-height:1.5">
+        Create copies of this same item with different serial numbers. Leave the box empty and choose <strong>Create One Clone</strong> for the normal clone flow.
+      </div>
+      <div class="field">
+        <label class="label">Serial Numbers</label>
+        <textarea class="input mono" id="bulkCloneSerials" style="min-height:140px;resize:vertical" placeholder="Scan or paste one serial per line&#10;SN001&#10;SN002&#10;SN003" oninput="updateBulkCloneCount()"></textarea>
+        <div id="bulkCloneCount" style="font-size:11px;color:#64748b;margin-top:6px">0 serials ready</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('bulkCloneModal')">Cancel</button>
+      <button class="btn btn-secondary" onclick="confirmOneClone()">Create One Clone</button>
+      <button class="btn btn-primary" onclick="confirmBulkClone()">Create Bulk Clones</button>
+    </div>
+  </div>
+</div>
+
+<!-- BULK LABEL CHOICE MODAL -->
+<div class="overlay" id="bulkLabelChoiceModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Labels Ready</div><button class="modal-close" onclick="closeModal('bulkLabelChoiceModal')">x</button></div>
+    <div class="modal-body">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px;font-size:13px;color:#1e40af;line-height:1.5">
+        <strong id="bulkLabelChoiceTitle">New items created.</strong>
+        <div id="bulkLabelChoiceBody" style="margin-top:4px">Do you want to print labels for them now?</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('bulkLabelChoiceModal')">Not Now</button>
+      <button class="btn btn-primary" onclick="printPendingBulkLabels()">Print Labels</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ IMPORT MODAL ══ -->
 <div class="overlay" id="importModal">
   <div class="modal" style="width:600px">
@@ -709,6 +771,10 @@
         </select>
       </div>
       <div class="field"><label class="label">Shelf Location</label><input class="input" id="be-shelf" placeholder="Leave blank to keep existing"></div>
+      <div class="field-row">
+        <div class="field"><label class="label">Bought For ($)</label><input class="input" id="be-cost" type="number" min="0" step="0.01" placeholder="Leave blank"></div>
+        <div class="field"><label class="label">Sale Price ($)</label><input class="input" id="be-sale" type="number" min="0" step="0.01" placeholder="Leave blank"></div>
+      </div>
       <div class="field">
         <label class="label">Tags <span style="font-weight:400;font-size:10px;color:#94a3b8">comma-separated — replaces existing tags</span></label>
         <input class="input" id="be-tags" placeholder="Leave blank to keep existing">
@@ -1232,10 +1298,46 @@ async function quickAddDistributor(){
   if(res.ok){const sel=document.getElementById('fi-purchased-from');const opt=document.createElement('option');opt.value=res.name;opt.textContent=res.name;sel.appendChild(opt);sel.value=res.name;toast('Distributor added','ok');}else toast(res.msg||'Error','err');
 }
 
+function parseSerialLines(raw){
+  const seen=new Set();
+  const serials=[];
+  (raw||'').split(/[\n,]+/).forEach(v=>{
+    const s=v.trim();
+    if(!s)return;
+    const key=s.toLowerCase();
+    if(seen.has(key))return;
+    seen.add(key);
+    serials.push(s);
+  });
+  return serials;
+}
+function updateBulkSerialCount(){
+  const serials=parseSerialLines(document.getElementById('fi-bulk-serials')?.value||'');
+  const txt=serials.length===1?'1 serial ready':`${serials.length} serials ready`;
+  const count=document.getElementById('fi-bulk-serial-count');if(count)count.textContent=txt;
+  const bannerCount=document.getElementById('fi-bulk-mode-count');if(bannerCount)bannerCount.textContent=serials.length?txt:'Enter or scan one serial per line.';
+}
+function toggleBulkSerialMode(on){
+  const panel=document.getElementById('fi-bulk-serial-panel');
+  const btn=document.getElementById('fi-bulk-toggle');
+  const banner=document.getElementById('fi-bulk-mode-banner');
+  const single=document.getElementById('fi-serial');
+  if(panel)panel.style.display=on?'':'none';
+  if(btn)btn.style.display=on?'none':'';
+  if(banner)banner.style.display=on?'':'none';
+  if(single){
+    single.disabled=!!on;
+    if(on)single.value='';
+  }
+  updateBulkSerialCount();
+  if(on)setTimeout(()=>document.getElementById('fi-bulk-serials')?.focus(),50);
+}
+
 function _clearItemForm(){
   ['fi-name','fi-manufacturer','fi-model','fi-serial','fi-sku','fi-shelf','fi-qty','fi-notes','fi-cost','fi-sale','fi-po'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const bulkSerials=document.getElementById('fi-bulk-serials');if(bulkSerials)bulkSerials.value='';
   const bulkWrap=document.getElementById('fi-bulk-serial-wrap');if(bulkWrap)bulkWrap.style.display='';
+  toggleBulkSerialMode(false);
   document.getElementById('fi-purchased-from').value='';
   document.getElementById('fi-date').value='';
   document.getElementById('fi-cat').value='';
@@ -1344,8 +1446,7 @@ async function saveItem(){
   }
   const extra_fields={};
   catFieldDefs.forEach(f=>{const el=document.getElementById('fi-dyn-'+f.field_key);if(!el)return;extra_fields[f.field_key]=el.type==='checkbox'?el.checked?1:0:el.value.trim()||null;});
-  const bulkSerialsRaw=(document.getElementById('fi-bulk-serials')?.value||'').trim();
-  const bulkSerials=bulkSerialsRaw?bulkSerialsRaw.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean):[];
+  const bulkSerials=parseSerialLines(document.getElementById('fi-bulk-serials')?.value||'');
   pendingSaveData={
     name,
     product_id:document.getElementById('fi-product').value||null,
@@ -1384,6 +1485,9 @@ async function saveItem(){
     pendingSaveData.serials=bulkSerials;
     pendingSaveData.serial=bulkSerials[0];
   }
+  if(!document.getElementById('editItemId').value && bulkSerials.length===1){
+    pendingSaveData.serial=bulkSerials[0];
+  }
   const id=document.getElementById('editItemId').value;
   if(id)pendingSaveData.id=parseInt(id);
   const owner=pendingSaveData.owner_company;
@@ -1414,12 +1518,7 @@ async function confirmedSaveItem(){
       toast(isBulkSerial?`${res.count||d.serials.length} items added`:(d.id?'Item updated ✓':'Item added ✓'),'ok');
       closeModal('itemModal');
       await loadItems();
-      if(isBulkSerial&&res.created?.length&&confirm(`Print labels for ${res.created.length} new items?`)){
-        const ids=new Set(res.created.map(i=>i.id));
-        labelItems=allItems.filter(i=>ids.has(i.id));
-        _updateLabelBatchInfo();
-        _loadJsBarcode(()=>{renderLabels();openModal('labelModal');});
-      }
+      if(isBulkSerial&&res.created?.length)openBulkLabelChoice(res.created,`${res.created.length} items were created from bulk serial add.`);
     }
     else{document.getElementById('errMsg').innerHTML=res.msg||'Error saving item';openModal('errModal');}
   }finally{
@@ -1787,6 +1886,7 @@ async function confirmEbay(){const btn=document.getElementById('ebayBtn');btn.di
 
 // ── Labels ──
 let labelItems=[];
+let pendingBulkLabelIds=[];
 function _updateLabelBatchInfo(){
   const el=document.getElementById('label-batch-info');
   if(!el)return;
@@ -1803,6 +1903,20 @@ function _loadJsBarcode(cb){
 }
 function printLabel(id){const item=allItems.find(i=>i.id===id);if(!item)return;labelItems=[item];_updateLabelBatchInfo();_loadJsBarcode(()=>{renderLabels();openModal('labelModal');});}
 function printSelectedLabels(){labelItems=allItems.filter(i=>selectedIds.has(i.id));if(!labelItems.length){toast('Select items first','warn');return}_updateLabelBatchInfo();_loadJsBarcode(()=>{renderLabels();openModal('labelModal');});}
+function openBulkLabelChoice(created,detail){
+  pendingBulkLabelIds=(created||[]).map(i=>i.id);
+  document.getElementById('bulkLabelChoiceTitle').textContent=`${pendingBulkLabelIds.length} new item${pendingBulkLabelIds.length===1?'':'s'} created.`;
+  document.getElementById('bulkLabelChoiceBody').textContent=detail||'Do you want to print labels for them now?';
+  openModal('bulkLabelChoiceModal');
+}
+function printPendingBulkLabels(){
+  const ids=new Set(pendingBulkLabelIds);
+  labelItems=allItems.filter(i=>ids.has(i.id));
+  closeModal('bulkLabelChoiceModal');
+  if(!labelItems.length){toast('New items loaded, but labels were not found yet. Try selecting them and printing labels.','warn');return;}
+  _updateLabelBatchInfo();
+  _loadJsBarcode(()=>{renderLabels();openModal('labelModal');});
+}
 function renderLabels(){
   const fmt=document.querySelector('input[name="label-fmt"]:checked')?.value||'single';
   const preview=document.getElementById('labelPreview');
@@ -1939,22 +2053,26 @@ function openBulkEdit(){
   if(!selectedIds.size){toast('Select items first','warn');return;}
   document.getElementById('be-condition').value='';
   document.getElementById('be-shelf').value='';
+  document.getElementById('be-cost').value='';
+  document.getElementById('be-sale').value='';
   document.getElementById('be-tags').value='';
   document.getElementById('be-loc').value='';
   // Populate location dropdown from locFilter options
   const srcSel=document.getElementById('locFilter');
   const dstSel=document.getElementById('be-loc');
   dstSel.innerHTML='<option value="">— Keep existing —</option>';
-  Array.from(srcSel.options).slice(1).forEach(o=>{const opt=document.createElement('option');opt.value=o.value;opt.textContent=o.textContent;dstSel.appendChild(opt);});
+  if(srcSel)Array.from(srcSel.options).slice(1).forEach(o=>{const opt=document.createElement('option');opt.value=o.value;opt.textContent=o.textContent;dstSel.appendChild(opt);});
   openModal('bulkEditModal');
 }
 async function confirmBulkEdit(){
   const d={ids:[...selectedIds]};
   const cond=document.getElementById('be-condition').value;
   const shelf=document.getElementById('be-shelf').value.trim();
+  const cost=document.getElementById('be-cost').value;
+  const sale=document.getElementById('be-sale').value;
   const tags=document.getElementById('be-tags').value.trim();
   const loc=document.getElementById('be-loc').value;
-  if(cond)d.condition=cond;if(shelf)d.shelf=shelf;if(tags!=='')d.tags=tags;if(loc)d.location_id=loc;
+  if(cond)d.condition=cond;if(shelf)d.shelf=shelf;if(cost!=='')d.cost_price=cost;if(sale!=='')d.sale_price=sale;if(tags!=='')d.tags=tags;if(loc)d.location_id=loc;
   if(Object.keys(d).length<=1){toast('Enter at least one field to update','warn');return;}
   const res=await api('/api/items/bulk-edit',d);
   if(res.ok){toast(`Updated ${res.updated} item(s)`,'ok');selectedIds.clear();updateSelectionUI();closeModal('bulkEditModal');loadItems();loadTagsFilter();}
@@ -1962,27 +2080,42 @@ async function confirmBulkEdit(){
 }
 // Clone
 async function cloneItem(id){
-  const serialText=prompt('Clone this item.\n\nFor one normal clone, leave this blank.\nFor bulk serial clone, paste one serial number per line.');
-  if(serialText===null)return;
-  const serials=serialText.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
+  const item=allItems.find(i=>i.id===id);
+  document.getElementById('bulkCloneItemId').value=id;
+  document.getElementById('bulkCloneName').textContent=item?`${item.name}${item.serial?' - '+item.serial:''}`:`Item #${id}`;
+  document.getElementById('bulkCloneSerials').value='';
+  updateBulkCloneCount();
+  openModal('bulkCloneModal');
+  setTimeout(()=>document.getElementById('bulkCloneSerials')?.focus(),50);
+}
+function updateBulkCloneCount(){
+  const n=parseSerialLines(document.getElementById('bulkCloneSerials')?.value||'').length;
+  document.getElementById('bulkCloneCount').textContent=n===1?'1 serial ready':`${n} serials ready`;
+}
+async function confirmOneClone(){
+  const id=parseInt(document.getElementById('bulkCloneItemId').value);
+  const res=await api('/api/item/'+id+'/clone',{});
+  if(res.ok){
+    closeModal('bulkCloneModal');
+    closeDetail();
+    await loadItems();
+    toast('Cloned - opening new item...','ok');
+    const newItem=allItems.find(i=>i.id===res.id);if(newItem)editItem(newItem);
+  }else toast(res.msg||'Error','err');
+}
+async function confirmBulkClone(){
+  const id=parseInt(document.getElementById('bulkCloneItemId').value);
+  const serials=parseSerialLines(document.getElementById('bulkCloneSerials').value);
+  if(serials.length<2){toast('Enter at least two serials for bulk clone, or use Create One Clone.','warn');return;}
   const res=serials.length>1
     ? await api('/api/item/'+id+'/bulk-clone',{serials})
     : await api('/api/item/'+id+'/clone',{});
   if(res.ok){
+    closeModal('bulkCloneModal');
     closeDetail();
     await loadItems();
-    if(serials.length>1){
-      toast(`${res.count||serials.length} clones created`,'ok');
-      if(res.created?.length&&confirm(`Print labels for ${res.created.length} new items?`)){
-        const ids=new Set(res.created.map(i=>i.id));
-        labelItems=allItems.filter(i=>ids.has(i.id));
-        _updateLabelBatchInfo();
-        _loadJsBarcode(()=>{renderLabels();openModal('labelModal');});
-      }
-    }else{
-      toast('Cloned - opening new item...','ok');
-      const newItem=allItems.find(i=>i.id===res.id);if(newItem)editItem(newItem);
-    }
+    toast(`${res.count||serials.length} clones created`,'ok');
+    if(res.created?.length)openBulkLabelChoice(res.created,`${res.created.length} cloned items were created.`);
   }
   else toast(res.msg||'Error','err');
 }

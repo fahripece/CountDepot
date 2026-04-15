@@ -2292,6 +2292,22 @@ def api_bulk_edit():
         updates.append("shelf=?"); args.append(d["shelf"])
     if d.get("location_id") not in (None, ""):
         updates.append("location_id=?"); args.append(int(d["location_id"]) if d["location_id"] else None)
+    if d.get("cost_price") not in (None, ""):
+        try:
+            cost_price = float(d["cost_price"])
+        except Exception:
+            return jsonify({"ok": False, "msg": "Bought-for price must be a number"}), 400
+        if cost_price < 0:
+            return jsonify({"ok": False, "msg": "Bought-for price cannot be negative"}), 400
+        updates.append("cost_price=?"); args.append(cost_price)
+    if d.get("sale_price") not in (None, ""):
+        try:
+            sale_price = float(d["sale_price"])
+        except Exception:
+            return jsonify({"ok": False, "msg": "Sale price must be a number"}), 400
+        if sale_price < 0:
+            return jsonify({"ok": False, "msg": "Sale price cannot be negative"}), 400
+        updates.append("sale_price=?"); args.append(sale_price)
     if d.get("tags") is not None:
         cleaned = ",".join(t.strip() for t in str(d["tags"]).split(",") if t.strip())
         updates.append("tags=?"); args.append(cleaned)
@@ -2300,8 +2316,10 @@ def api_bulk_edit():
     execute(f"UPDATE items SET {', '.join(updates)} WHERE id IN ({placeholders}) AND active=1",
             args + ids)
     for iid in ids:
-        item = query("SELECT name FROM items WHERE id=?", [iid], one=True)
-        if item: log_action("ITEM_EDIT", iid, item["name"], f"Bulk edit: {', '.join(updates)}")
+        item = query("SELECT * FROM items WHERE id=?", [iid], one=True)
+        if item:
+            log_action("ITEM_EDIT", iid, item["name"], f"Bulk edit: {', '.join(updates)}")
+            sync_item_task(iid, item["name"], _item_missing_fields(dict(item)))
     return jsonify({"ok": True, "updated": len(ids)})
 
 
