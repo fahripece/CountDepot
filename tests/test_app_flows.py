@@ -467,6 +467,86 @@ def test_demo_request_email_goes_to_platform_admin(app, monkeypatch):
     assert sent["subject"] == "New demo request from CountDepot"
 
 
+def test_demo_request_rejects_missing_company(app):
+    response = app.test_client().post(
+        "/api/demo-request",
+        base_url="http://countdepot.com",
+        json={
+            "name": "Demo Lead",
+            "email": "lead@example.com",
+            "size": "20+ people",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["ok"] is False
+
+
+def test_demo_request_escapes_admin_email_html(app, monkeypatch):
+    sent = {}
+
+    def fake_send_email(to, subject, html, text):
+        sent.update({"to": to, "subject": subject, "html": html, "text": text})
+        return True
+
+    import importlib
+    from config import Config
+    mailer = importlib.import_module("app.mailer")
+
+    monkeypatch.setattr(Config, "SMTP_HOST", "smtp.example.com", raising=False)
+    monkeypatch.setattr(Config, "PLATFORM_ADMIN_EMAIL", "admin@countdepot.com", raising=False)
+    monkeypatch.setattr(mailer, "send_email", fake_send_email)
+
+    response = app.test_client().post(
+        "/api/demo-request",
+        base_url="http://countdepot.com",
+        json={
+            "name": "<script>alert(1)</script>",
+            "company": "DSSIT & Partners",
+            "email": "lead@example.com",
+            "size": "20+ people",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "&lt;script&gt;" in sent["html"]
+    assert "<script>" not in sent["html"]
+    assert "DSSIT &amp; Partners" in sent["html"]
+
+
+def test_demo_request_is_rate_limited(app):
+    client = app.test_client()
+
+    for idx in range(5):
+        response = client.post(
+            "/api/demo-request",
+            base_url="http://countdepot.com",
+            environ_base={"REMOTE_ADDR": "203.0.113.5"},
+            json={
+                "name": f"Demo Lead {idx}",
+                "company": "Example Co",
+                "email": f"lead{idx}@example.com",
+                "size": "20+ people",
+            },
+        )
+        assert response.status_code == 200
+
+    limited = client.post(
+        "/api/demo-request",
+        base_url="http://countdepot.com",
+        environ_base={"REMOTE_ADDR": "203.0.113.5"},
+        json={
+            "name": "Demo Lead 6",
+            "company": "Example Co",
+            "email": "lead6@example.com",
+            "size": "20+ people",
+        },
+    )
+
+    assert limited.status_code == 429
+    assert limited.get_json()["ok"] is False
+
+
 def test_core_authenticated_pages_render(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302

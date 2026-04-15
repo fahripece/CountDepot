@@ -1,11 +1,13 @@
+import html
 import json
+import re
 from flask import Blueprint, render_template, request, session, redirect, url_for, jsonify
 
 from datetime import datetime
 
 from app.db import query, execute
 from app.helpers import (login_required, perm_required, admin_required,
-                         log_action, ALL_PERMISSIONS, PERM_KEYS)
+                         check_rate_limit, log_action, ALL_PERMISSIONS, PERM_KEYS)
 
 bp = Blueprint("main", __name__)
 
@@ -82,13 +84,18 @@ def webhooks_page():
 def api_demo_request():
     """Public endpoint — store a demo request and optionally email the team."""
     from flask import request as req
+    ip = req.headers.get("X-Forwarded-For", req.remote_addr or "unknown").split(",")[0].strip()
+    allowed, retry_in = check_rate_limit(ip, "demo-request", max_attempts=5, window=900)
+    if not allowed:
+        return jsonify({"ok": False, "msg": f"Too many demo requests. Try again in {retry_in // 60 + 1} minutes."}), 429
+
     d       = req.get_json(silent=True) or {}
-    name    = (d.get("name") or "").strip()
-    company = (d.get("company") or "").strip()
-    email   = (d.get("email") or "").strip().lower()
-    size    = (d.get("size") or "").strip()
-    if not name or not email or "@" not in email:
-        return jsonify({"ok": False, "msg": "Name and valid email are required"}), 400
+    name    = (d.get("name") or "").strip()[:120]
+    company = (d.get("company") or "").strip()[:160]
+    email   = (d.get("email") or "").strip().lower()[:254]
+    size    = (d.get("size") or "").strip()[:40]
+    if not name or not company or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        return jsonify({"ok": False, "msg": "Name, company, and valid email are required"}), 400
     # Store in platform DB
     try:
         from app.platform import get_platform_db as _pdb
@@ -117,8 +124,8 @@ def api_demo_request():
             _send(
                 _Cfg.PLATFORM_ADMIN_EMAIL,
                 "New demo request from CountDepot",
-                f"<p><b>Name:</b> {name}<br><b>Company:</b> {company}<br>"
-                f"<b>Email:</b> {email}<br><b>Team size:</b> {size}</p>",
+                f"<p><b>Name:</b> {html.escape(name)}<br><b>Company:</b> {html.escape(company)}<br>"
+                f"<b>Email:</b> {html.escape(email)}<br><b>Team size:</b> {html.escape(size)}</p>",
                 f"New demo request: {name} ({company}) — {email}")
     except Exception:
         pass
