@@ -261,11 +261,11 @@ section{padding:100px 24px}
 .feature-icon{
   margin-bottom:20px;
   width:48px;height:48px;
-  background:rgba(37,99,235,0.1);
-  border:1px solid rgba(37,99,235,0.2);
+  background:rgba(100,66,214,0.14);
+  border:1px solid rgba(200,179,253,0.26);
   border-radius:10px;
   display:flex;align-items:center;justify-content:center;
-  color:#60a5fa;
+  color:var(--accent);
   flex-shrink:0;
 }
 .feature h3{
@@ -286,7 +286,7 @@ section{padding:100px 24px}
 .step-num{
   font-family:'Inter',sans-serif;
   font-size:64px;font-weight:800;
-  color:rgba(37,99,235,0.12);
+  color:rgba(200,179,253,0.16);
   line-height:1;
   margin-bottom:16px;
 }
@@ -366,7 +366,7 @@ section{padding:100px 24px}
 .plan-cta-outline{
   border:1px solid var(--border);color:var(--text);
 }
-.plan-cta-outline:hover{border-color:var(--blue);background:rgba(37,99,235,0.08)}
+.plan-cta-outline:hover{border-color:var(--blue);background:rgba(100,66,214,0.12)}
 .plan-cta-solid{
   background:var(--blue);color:#fff;
 }
@@ -407,7 +407,7 @@ section{padding:100px 24px}
 .trial-glow{
   position:absolute;
   width:600px;height:600px;border-radius:50%;
-  background:radial-gradient(circle,rgba(37,99,235,0.12) 0%,transparent 70%);
+  background:radial-gradient(circle,rgba(100,66,214,0.18) 0%,transparent 70%);
   top:50%;left:50%;transform:translate(-50%,-50%);
   pointer-events:none;
 }
@@ -466,7 +466,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   background:#141d35;border:1px solid #1e2d50;
   border-radius:5px;padding:3px 10px;cursor:default;
 }
-.preview-btn-blue{background:rgba(37,99,235,0.15);color:#60a5fa;border-color:rgba(37,99,235,0.3)}
+.preview-btn-blue{background:rgba(100,66,214,0.18);color:var(--accent);border-color:rgba(200,179,253,0.3)}
 .preview-body{display:grid;grid-template-columns:56px minmax(0,1fr)}
 .preview-sidebar{
   width:auto;background:#0f1628;
@@ -480,7 +480,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   display:flex;align-items:center;justify-content:center;
   color:#475569;cursor:default;
 }
-.psb-item.active{background:rgba(37,99,235,0.15);color:#60a5fa}
+.psb-item.active{background:rgba(100,66,214,0.18);color:var(--accent)}
 .preview-main{flex:1;padding:14px 16px;min-width:0;overflow:hidden}
 .preview-filters{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
 .pfilter{
@@ -488,7 +488,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   background:#0f1628;border:1px solid #1e2d50;
   border-radius:5px;padding:4px 10px;cursor:default;
 }
-.pfilter.active{color:#38bdf8;border-color:rgba(37,99,235,0.4);background:rgba(37,99,235,0.1)}
+.pfilter.active{color:var(--accent);border-color:rgba(200,179,253,0.4);background:rgba(100,66,214,0.14)}
 .preview-table{width:100%;border-collapse:collapse;font-size:11.5px}
 .preview-table th{
   text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;
@@ -500,7 +500,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 .pt-name{font-weight:500;color:#f1f5f9;font-size:12px;white-space:nowrap}
 .pt-sub{font-size:10px;color:#475569;margin-top:1px}
 .pt-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10.5px;font-weight:500;white-space:nowrap}
-.pt-tag-blue{background:rgba(37,99,235,0.15);color:#93c5fd}
+.pt-tag-blue{background:rgba(100,66,214,0.18);color:#d8ccff}
 .pt-tag-indigo{background:rgba(99,102,241,0.15);color:#a5b4fc}
 .pt-tag-green{background:rgba(34,197,94,0.1);color:#4ade80}
 .pt-tag-amber{background:rgba(251,191,36,0.1);color:#fbbf24}
@@ -508,11 +508,29 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 .pt-mono{font-family:monospace;font-size:10.5px;color:#64748b}
 .pt-shelf{font-family:monospace;font-size:10.5px;color:#94a3b8;background:#0f1628;padding:2px 6px;border-radius:3px;border:1px solid #1e2d50}
 .pt-cost{font-family:monospace;font-size:11px;color:#94a3b8}
+.reviews-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:20px;
+  margin:40px auto 0;
+  max-width:1040px;
+}
+.review-card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:24px;
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
 
 @media(max-width:1080px){
   .features-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .steps{grid-template-columns:repeat(2,minmax(0,1fr))}
   .pricing-grid{grid-template-columns:1fr;max-width:520px;margin-left:auto;margin-right:auto}
+  .reviews-grid{grid-template-columns:1fr;max-width:520px}
 }
 
 @media(max-width:768px){
@@ -605,22 +623,22 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
     <label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Email address</label>
     <input id="signin-email" type="email" placeholder="you@company.com" autocomplete="email"
       style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:13px 16px;color:#f1f5f9;font-size:15px;font-family:'Inter',sans-serif;outline:none;margin-bottom:14px"
-      onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#1e2d50'"
+      onfocus="this.style.borderColor='#6442D6'" onblur="this.style.borderColor='#1e2d50'"
       onkeydown="if(event.key==='Enter')doSignin()">
     <label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Password</label>
     <input id="signin-password" type="password" placeholder="Enter password" autocomplete="current-password"
       style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:13px 16px;color:#f1f5f9;font-size:15px;font-family:'Inter',sans-serif;outline:none;margin-bottom:20px"
-      onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#1e2d50'"
+      onfocus="this.style.borderColor='#6442D6'" onblur="this.style.borderColor='#1e2d50'"
       onkeydown="if(event.key==='Enter')doSignin()">
-    <button id="signin-btn" onclick="doSignin()" style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;transition:background .2s"
-      onmouseover="this.style.background='#3b82f6'" onmouseout="this.style.background='#2563eb'">
+    <button id="signin-btn" onclick="doSignin()" style="width:100%;background:#6442D6;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:background .2s"
+      onmouseover="this.style.background='#7c5df0'" onmouseout="this.style.background='#6442D6'">
       Sign in →
     </button>
     <div style="margin-top:14px;text-align:center">
       <button onclick="showForgot()" style="background:none;border:none;color:#64748b;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif;text-decoration:underline;padding:0">Forgot password?</button>
     </div>
     <div style="margin-top:10px;text-align:center;font-size:13px;color:#64748b">
-      Don't have an account? <a href="/signup" style="color:#38bdf8;text-decoration:none">Start free trial</a>
+      Don't have an account? <a href="/signup" style="color:#C8B3FD;text-decoration:none">Start free trial</a>
     </div>
 
     <!-- Forgot password inline form -->
@@ -631,7 +649,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
       <div id="forgot-error" style="display:none;background:#1e0a0a;border:1px solid #7f1d1d;border-radius:8px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:12px"></div>
       <input id="forgot-email" type="email" placeholder="you@company.com"
         style="width:100%;background:#141d35;border:1px solid #1e2d50;border-radius:10px;padding:12px 16px;color:#f1f5f9;font-size:14px;font-family:'Inter',sans-serif;outline:none;margin-bottom:12px"
-        onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#1e2d50'"
+        onfocus="this.style.borderColor='#6442D6'" onblur="this.style.borderColor='#1e2d50'"
         onkeydown="if(event.key==='Enter')doForgot()">
       <button id="forgot-btn" onclick="doForgot()" style="width:100%;background:#1e2d50;color:#f1f5f9;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif">
         Send reset link →
@@ -953,8 +971,8 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
     <div class="section-label">Trusted by teams</div>
     <h2 class="section-title" style="font-size:clamp(28px,4vw,44px)">Built for the teams who keep things running.</h2>
     <p class="section-sub">From IT departments to construction crews — CountDepot adapts to how you work.</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;margin-top:40px">
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px">
+    <div class="reviews-grid">
+      <div class="review-card">
         <div style="display:flex;gap:4px;margin-bottom:16px">
           <span style="color:#f59e0b;font-size:14px">★★★★★</span>
         </div>
@@ -964,17 +982,17 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
           <div><div style="font-size:13px;font-weight:600">IT Manager</div><div style="font-size:11px;color:var(--muted)">Healthcare Organization, 200 employees</div></div>
         </div>
       </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px">
+      <div class="review-card">
         <div style="display:flex;gap:4px;margin-bottom:16px">
           <span style="color:#f59e0b;font-size:14px">★★★★★</span>
         </div>
         <p style="font-size:14px;line-height:1.7;color:var(--muted2);margin-bottom:16px">"The purchase order workflow alone saved us hours every week. POs, 3-way matching, and vendor catalog all in one place."</p>
         <div style="display:flex;align-items:center;gap:10px">
-          <div style="width:36px;height:36px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">RK</div>
+          <div style="width:36px;height:36px;border-radius:50%;background:#7c5df0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">RK</div>
           <div><div style="font-size:13px;font-weight:600">Operations Director</div><div style="font-size:11px;color:var(--muted)">Construction Company, 80 employees</div></div>
         </div>
       </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px">
+      <div class="review-card">
         <div style="display:flex;gap:4px;margin-bottom:16px">
           <span style="color:#f59e0b;font-size:14px">★★★★★</span>
         </div>
@@ -1011,7 +1029,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
       <!-- Video embed placeholder — replace src with actual video URL -->
       <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:16px;border:1px solid var(--border);background:var(--card)">
         <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
-          <div style="width:72px;height:72px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 0 40px rgba(37,99,235,0.4)" onclick="openDemoRequest()">
+          <div style="width:72px;height:72px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 0 40px rgba(100,66,214,0.45)" onclick="openDemoRequest()">
             <svg viewBox="0 0 24 24" fill="white" width="28" height="28"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           </div>
           <p style="font-size:14px;color:var(--muted2)">Demo video coming soon — <button onclick="openDemoRequest()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:14px;text-decoration:underline">request a live walkthrough</button></p>
