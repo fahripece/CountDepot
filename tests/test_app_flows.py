@@ -1164,6 +1164,11 @@ def test_platform_dashboard_renders_owner_metrics(app):
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         ["churnco", "Churn Co", "starter", "", 1, 1, "2026-04-01 00:00:00", "churn@example.com", "cancelled", None, "Too expensive", "2026-04-10 00:00:00"],
     )
+    db.execute(
+        "INSERT INTO tenants (slug,name,plan,sector,onboarded,active,created_at,owner_email,subscription_status,trial_ends_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ["deadtrial", "Dead Trial", "starter", "", 1, 1, "2024-01-01 00:00:00", "dead@example.com", "trial", "2024-02-01 00:00:00"],
+    )
     db.commit()
     db.close()
 
@@ -1178,7 +1183,7 @@ def test_platform_dashboard_renders_owner_metrics(app):
         CREATE TABLE audit_log (ts TEXT);
     """)
     tenant_db.execute("INSERT INTO users (username,last_login,session_token) VALUES (?,?,?)", ["owner", None, "live"])
-    tenant_db.execute("INSERT INTO login_log (ts,result) VALUES (?,?)", ["2026-04-12 09:30:00", "ok"])
+    tenant_db.execute("INSERT INTO login_log (ts,result) VALUES (?,?)", ["2026-04-12 09:30:00", "ok_google"])
     tenant_db.execute("INSERT INTO items (active,sold,sold_price,cost_price) VALUES (1,1,100,60)")
     tenant_db.execute("INSERT INTO audit_log (ts) VALUES (?)", ["2026-04-12 10:00:00"])
     tenant_db.commit()
@@ -1196,5 +1201,7 @@ def test_platform_dashboard_renders_owner_metrics(app):
     assert "$600" in body
     assert "Free/Partner" in body
     assert "2026-04-12" in body
+    assert "Expired trial ready for deletion" in body
+    assert "Ready for deletion" in body
     assert "Cancellations and churn notes" in body
     assert "Too expensive" in body

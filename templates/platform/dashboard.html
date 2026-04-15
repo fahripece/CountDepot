@@ -309,6 +309,15 @@ tr:hover td{background:#1a2947}
                   <span style="font-size:12px;color:#94a3b8">{{ t.trial_ends_at }}</span>
                 {% endif %}
               {% else %}<span class="muted">—</span>{% endif %}
+              {% if t.subscription_status == 'expired' and t.scheduled_delete_at %}
+              <div class="{% if t.is_deletion_due %}risk{% else %}muted{% endif %}" style="margin-top:4px">
+                {% if t.is_deletion_due %}
+                  Ready for deletion
+                {% else %}
+                  Delete after {{ t.scheduled_delete_at[:10] }}
+                {% endif %}
+              </div>
+              {% endif %}
             </td>
             <td>
               <span class="health">

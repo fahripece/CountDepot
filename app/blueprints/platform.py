@@ -101,6 +101,10 @@ def _all_tenants():
         d = dict(r)
         if "free_access" not in cols:
             d["free_access"] = 0
+        if "trial_expired_at" not in cols:
+            d["trial_expired_at"] = None
+        if "scheduled_delete_at" not in cols:
+            d["scheduled_delete_at"] = None
         tenants.append(d)
     return tenants
 
@@ -144,7 +148,7 @@ def _tenant_stats(slug):
         login_sources = []
         if "last_login" in user_cols:
             login_sources.append(_scalar(db, "SELECT MAX(last_login) FROM users WHERE last_login IS NOT NULL", default=None))
-        login_sources.append(_scalar(db, "SELECT MAX(ts) FROM login_log WHERE result='ok'", default=None))
+        login_sources.append(_scalar(db, "SELECT MAX(ts) FROM login_log WHERE result LIKE 'ok%'", default=None))
         last_login = max([v for v in login_sources if v] or [None])
         sold_revenue = _scalar(
             db,
@@ -190,24 +194,82 @@ def _days_since(value):
     if not value:
         return None
     raw = str(value)[:19]
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%y"):
+    for fmt, size in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d", 10), ("%m/%d/%y", 8)):
         try:
-            dt = datetime.strptime(raw[:len(fmt)], fmt)
+            dt = datetime.strptime(raw[:size], fmt)
             return max(0, (datetime.utcnow() - dt).days)
         except ValueError:
             continue
     return None
 
 
-def _trial_days_left(value):
+def _parse_dt(value):
     if not value:
         return None
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+    raw = str(value)[:19]
+    for fmt, size in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d", 10)):
         try:
-            return (datetime.strptime(str(value)[:len(fmt)], fmt) - datetime.utcnow()).days
+            return datetime.strptime(raw[:size], fmt)
         except ValueError:
             continue
     return None
+
+
+def _fmt_dt(value):
+    return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _sync_trial_expirations():
+    """Keep platform trial status current even when dead tenants never log in."""
+    db = get_platform_db()
+    now = datetime.utcnow()
+    cols = {r[1] for r in db.execute("PRAGMA table_info(tenants)").fetchall()}
+    if "trial_expired_at" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN trial_expired_at TEXT")
+    if "scheduled_delete_at" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN scheduled_delete_at TEXT")
+    rows = db.execute(
+        "SELECT slug, subscription_status, trial_ends_at, created_at, "
+        "trial_expired_at, scheduled_delete_at, free_access FROM tenants"
+    ).fetchall()
+    for row in rows:
+        status = row["subscription_status"] or "trial"
+        if status not in ("trial", "expired") or row["free_access"]:
+            continue
+        trial_end = _parse_dt(row["trial_ends_at"])
+        if not trial_end:
+            created_at = _parse_dt(row["created_at"])
+            trial_end = created_at + timedelta(days=30) if created_at else None
+        if not trial_end or trial_end >= now:
+            continue
+        expired_at = row["trial_expired_at"] or _fmt_dt(trial_end)
+        delete_at = row["scheduled_delete_at"] or _fmt_dt(trial_end + timedelta(days=30))
+        db.execute(
+            "UPDATE tenants SET subscription_status='expired', trial_expired_at=?, "
+            "scheduled_delete_at=? WHERE slug=?",
+            [expired_at, delete_at, row["slug"]],
+        )
+    db.commit()
+    db.close()
+
+
+def _trial_days_left(value):
+    if not value:
+        return None
+    raw = str(value)[:19]
+    for fmt, size in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d", 10)):
+        try:
+            return (datetime.strptime(raw[:size], fmt) - datetime.utcnow()).days
+        except ValueError:
+            continue
+    return None
+
+
+def _days_until(value):
+    dt = _parse_dt(value)
+    if not dt:
+        return None
+    return (dt - datetime.utcnow()).days
 
 
 def _is_free_access(tenant):
@@ -241,16 +303,29 @@ def _enrich_tenant(t):
     t["days_since_login"] = _days_since(t["stats"].get("last_login"))
     t["days_since_activity"] = _days_since(t["stats"].get("last_activity"))
     t["is_free_access"] = _is_free_access(t)
+    t["days_until_delete"] = _days_until(t.get("scheduled_delete_at"))
+    t["is_deletion_due"] = (
+        (t.get("subscription_status") == "expired")
+        and t["days_until_delete"] is not None
+        and t["days_until_delete"] < 0
+    )
 
     score = 100
     risks = []
     status = t.get("subscription_status") or "trial"
+    if t["is_deletion_due"]:
+        score -= 65
+        risks.append("Ready for deletion")
     if not t.get("active"):
         score -= 45
         risks.append("Suspended")
     if status in ("overdue", "expired"):
         score -= 35
-        risks.append("Payment/access issue")
+        if t.get("scheduled_delete_at") and t["days_until_delete"] is not None:
+            if t["days_until_delete"] >= 0:
+                risks.append(f"Deletes in {t['days_until_delete']}d")
+        else:
+            risks.append("Payment/access issue")
     if status == "cancelled":
         score -= 55
         risks.append("Cancelled")
@@ -421,6 +496,7 @@ def stripe_check():
 @platform_login_required
 def dashboard():
     from datetime import date
+    _sync_trial_expirations()
     tenants = _all_tenants()
     for t in tenants:
         t["stats"] = _tenant_stats(t["slug"])
@@ -442,6 +518,7 @@ def dashboard():
     at_risk = [t for t in tenants if t["health_score"] < 65 and t.get("subscription_status") != "cancelled"]
     inactive = [t for t in tenants if t.get("days_since_login") is None or t.get("days_since_login", 0) >= 30]
     cancellations = [t for t in tenants if t.get("subscription_status") == "cancelled"]
+    deletion_due = [t for t in tenants if t.get("is_deletion_due")]
     expansion_candidates = sorted(
         [t for t in tenants if t.get("subscription_status") == "active"
          and t.get("plan") == "starter" and (t["stats"]["users"] >= 4 or t["stats"]["items"] >= 400)],
@@ -455,6 +532,9 @@ def dashboard():
     for t in [x for x in tenants if x.get("subscription_status") == "overdue"][:8]:
         action_items.append({"priority": "high", "label": "Payment overdue",
                              "tenant": t, "detail": "Collect payment or pause access"})
+    for t in deletion_due[:8]:
+        action_items.append({"priority": "high", "label": "Expired trial ready for deletion",
+                             "tenant": t, "detail": "Trial grace period ended; confirm delete or extend/reactivate"})
     for t in [x for x in at_risk if x.get("subscription_status") not in ("overdue", "expired")][:8]:
         action_items.append({"priority": "med", "label": "Usage risk",
                              "tenant": t, "detail": ", ".join(t["risk_flags"][:2]) or "Low health score"})
@@ -474,6 +554,7 @@ def dashboard():
                            at_risk=at_risk,
                            inactive=inactive,
                            cancellations=cancellations,
+                           deletion_due=deletion_due,
                            expansion_candidates=expansion_candidates,
                            action_items=action_items[:12],
                            today=today)

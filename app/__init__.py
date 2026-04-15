@@ -252,8 +252,16 @@ def create_app():
             # Trial expired — update DB
             from app.platform import get_platform_db as _get_pdb
             _pdb = _get_pdb()
-            _pdb.execute("UPDATE tenants SET subscription_status='expired' WHERE slug=?",
-                         [g.tenant_slug])
+            try:
+                trial_expired_at = _dt.strptime(trial_ends[:19], "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                trial_expired_at = _dt.strptime(trial_ends[:10], "%Y-%m-%d")
+            delete_at = (trial_expired_at + _td(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+            _pdb.execute(
+                "UPDATE tenants SET subscription_status='expired', trial_expired_at=?, "
+                "scheduled_delete_at=? WHERE slug=?",
+                [trial_expired_at.strftime("%Y-%m-%d %H:%M:%S"), delete_at, g.tenant_slug],
+            )
             _pdb.commit()
             _pdb.close()
             sub_status = "expired"

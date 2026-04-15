@@ -30,6 +30,8 @@ def init_platform_db():
             owner_email TEXT,
             subscription_status TEXT NOT NULL DEFAULT 'trial',
             trial_ends_at TEXT,
+            trial_expired_at TEXT,
+            scheduled_delete_at TEXT,
             notes TEXT,
             stripe_customer_id TEXT,
             stripe_subscription_id TEXT,
@@ -91,6 +93,10 @@ def init_platform_db():
         db.execute("ALTER TABLE tenants ADD COLUMN subscription_status TEXT NOT NULL DEFAULT 'trial'")
     if "trial_ends_at" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN trial_ends_at TEXT")
+    if "trial_expired_at" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN trial_expired_at TEXT")
+    if "scheduled_delete_at" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN scheduled_delete_at TEXT")
     if "notes" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN notes TEXT")
     if "stripe_customer_id" not in cols:
