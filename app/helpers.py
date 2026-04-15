@@ -424,6 +424,38 @@ def incomplete_cost_required():
     return not row or str(row["value"]) != "0"
 
 
+def _extra_fields_dict(raw):
+    if isinstance(raw, dict):
+        return raw
+    try:
+        return json.loads(raw or "{}")
+    except Exception:
+        return {}
+
+
+def _value_missing(value, field_type="text"):
+    if field_type == "checkbox":
+        return value not in (True, 1, "1", "true", "True", "yes", "on")
+    return value is None or str(value).strip() == ""
+
+
+def required_category_field_missing(s):
+    cat_id = s.get("category_id")
+    if not cat_id:
+        return []
+    rows = query(
+        "SELECT field_label, field_key, field_type FROM category_fields "
+        "WHERE category_id=? AND required=1 ORDER BY sort_order, id",
+        [cat_id])
+    extra = _extra_fields_dict(s.get("extra_fields"))
+    missing = []
+    for row in rows:
+        value = extra.get(row["field_key"])
+        if _value_missing(value, row["field_type"] or "text"):
+            missing.append(row["field_label"])
+    return missing
+
+
 def _item_missing_fields(s, cost_required=None):
     if cost_required is None:
         cost_required = incomplete_cost_required()
@@ -434,6 +466,7 @@ def _item_missing_fields(s, cost_required=None):
     if prod:
         if prod["require_serial"]     and not s.get("serial"): missing.append("serial #")
         if prod["require_vendor_sku"] and not s.get("sku"):    missing.append("vendor SKU")
+    missing.extend(required_category_field_missing(s))
     if cost_required and s.get("cost_price") is None: missing.append("cost")
     if not s.get("shelf"):          missing.append("shelf")
     return missing

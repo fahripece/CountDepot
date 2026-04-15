@@ -13,6 +13,7 @@ from app.helpers import (login_required, perm_required, admin_required,
                          log_action, get_low_stock_alerts, hash_pw, verify_pw,
                          validate_password, api_rate_limit,
                          incomplete_cost_required, _item_missing_fields,
+                         required_category_field_missing,
                          sync_item_task, sync_maintenance_tasks,
                          _parse_date_range, _date_filter_sql,
                          location_filter_sql, notify_low_stock_if_needed,
@@ -43,6 +44,23 @@ def _send_user_invite(user_id, email, slug, inviter):
     log_action("USER_INVITE_SENT" if emailed else "USER_INVITE_EMAIL_FAILED",
                detail=f"{'Sent invite to' if emailed else 'Invite email failed for'} {email}")
     return {"emailed": emailed, "invite_url": invite_url}
+
+
+def _resync_completion_tasks(where_sql, args=None):
+    rows = query(
+        "SELECT id, name, product_id, category_id, serial, sku, shelf, cost_price, extra_fields "
+        f"FROM items WHERE active=1 AND COALESCE(retired,0)=0 AND {where_sql}",
+        args or [])
+    cost_required = incomplete_cost_required()
+    count = 0
+    incomplete = 0
+    for row in rows:
+        missing = _item_missing_fields(dict(row), cost_required)
+        sync_item_task(row["id"], row["name"], missing)
+        count += 1
+        if missing:
+            incomplete += 1
+    return {"checked": count, "incomplete": incomplete}
 
 
 # ── Internal SKU generation ───────────────────────────────────────────────────
@@ -336,7 +354,8 @@ def api_report_inventory():
     date_from, date_to = _parse_date_range(request)
     df_sql, df_args    = _date_filter_sql("i.created_at", date_from, date_to)
     cost_required      = incomplete_cost_required()
-    items = query(f"""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
+    items = query(f"""SELECT i.id, i.name, i.product_id, i.category_id,
+                      i.serial, i.sku, i.internal_sku, i.extra_fields,
                       i.condition, i.shelf, i.cost_price, i.sale_price,
                       i.qty, i.qty_out, i.checked_out, i.checkout_by,
                       i.created_at, i.sold, i.purchase_date,
@@ -862,6 +881,21 @@ def api_items():
             "(p.require_serial=1 AND (i.serial IS NULL OR i.serial=''))",
             "(p.require_vendor_sku=1 AND (i.sku IS NULL OR i.sku=''))",
             "(i.shelf IS NULL OR i.shelf='')",
+            """EXISTS (
+                SELECT 1 FROM category_fields cf
+                WHERE cf.category_id=i.category_id AND cf.required=1
+                  AND (
+                    (COALESCE(cf.field_type,'text')='checkbox'
+                     AND COALESCE(json_extract(COALESCE(i.extra_fields,'{}'), '$.' || cf.field_key), 0)
+                         NOT IN (1, '1', 'true', 'True', 'yes', 'on'))
+                    OR
+                    (COALESCE(cf.field_type,'text')!='checkbox'
+                     AND (
+                       json_extract(COALESCE(i.extra_fields,'{}'), '$.' || cf.field_key) IS NULL
+                       OR TRIM(CAST(json_extract(COALESCE(i.extra_fields,'{}'), '$.' || cf.field_key) AS TEXT))=''
+                     ))
+                  )
+            )""",
         ]
         if cost_required:
             incomplete_conditions.append("i.cost_price IS NULL")
@@ -914,11 +948,7 @@ def api_items():
         d["overdue"]     = bool(d.get("checked_out") and d.get("expected_return_date") and d["expected_return_date"] < today_s)
         d["maintenance_overdue"] = bool(d.get("next_maintenance_date") and d["next_maintenance_date"] < today_s)
         d["tax_amount"]  = (round(d["cost_price"] * (d["tax_rate"] or 0) / 100, 2) if d["cost_price"] and d["tax_paid"] == 1 else 0)
-        missing = []
-        if d.get("product_req_serial")     and not d.get("serial"): missing.append("serial #")
-        if d.get("product_req_vendor_sku") and not d.get("sku"):    missing.append("vendor SKU")
-        if cost_required and d.get("cost_price") is None: missing.append("cost")
-        if not d.get("shelf"):          missing.append("shelf")
+        missing = _item_missing_fields(d, cost_required)
         d["is_incomplete"]       = len(missing) > 0
         d["missing_fields"]      = missing
         d["reservation_count"]   = d.get("reservation_count") or 0
@@ -1942,6 +1972,11 @@ def api_item_add():
                 return jsonify({"ok": False, "msg": "Serial number is required for this product", "field": "serial"})
             if prod["require_vendor_sku"] and not (d.get("sku")    or "").strip():
                 return jsonify({"ok": False, "msg": "Vendor SKU is required for this product",   "field": "sku"})
+    missing_custom = required_category_field_missing(d)
+    if missing_custom:
+        return jsonify({"ok": False,
+                        "msg": f"Required field missing: {', '.join(missing_custom)}",
+                        "fields": missing_custom})
     serial = (d.get("serial") or "").strip()
     if serial:
         # Serial uniqueness is scoped to the same product — the same SN can exist on different products
@@ -1983,6 +2018,20 @@ def api_item_edit():
     cat_id = d.get("category_id")
     if cat_id and not query("SELECT id FROM categories WHERE id=?", [cat_id], one=True):
         return jsonify({"ok": False, "msg": "Invalid category"})
+    edit_prod_id = d.get("product_id") or item["product_id"]
+    if edit_prod_id:
+        prod = query("SELECT require_serial, require_vendor_sku FROM products WHERE id=?",
+                     [edit_prod_id], one=True)
+        if prod:
+            if prod["require_serial"] and not (d.get("serial") or "").strip():
+                return jsonify({"ok": False, "msg": "Serial number is required for this product", "field": "serial"})
+            if prod["require_vendor_sku"] and not (d.get("sku") or "").strip():
+                return jsonify({"ok": False, "msg": "Vendor SKU is required for this product", "field": "sku"})
+    missing_custom = required_category_field_missing(d)
+    if missing_custom:
+        return jsonify({"ok": False,
+                        "msg": f"Required field missing: {', '.join(missing_custom)}",
+                        "fields": missing_custom})
     serial = (d.get("serial") or "").strip()
     if serial:
         # Only check uniqueness if the serial is actually changing
@@ -2757,8 +2806,9 @@ def api_product_edit():
          int(d.get("low_stock_threshold", 0)) if d.get("low_stock_threshold") not in (None, "") else 0,
          d.get("vendor_sku") or None,
          d["id"]])
+    resync = _resync_completion_tasks("product_id=?", [d["id"]])
     log_action("PRODUCT_EDIT", detail=f"Edited product: {d['name']}")
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "resynced": resync})
 
 
 @bp.route("/api/product/delete", methods=["POST"])
@@ -2790,6 +2840,9 @@ def api_product_to_item():
          prod["id"], prod["category_id"],
          prod["default_cost"], prod["default_sale"], "New", qty, now])
     _ensure_internal_sku(item_id, prod["category_id"])
+    saved = query("SELECT * FROM items WHERE id=?", [item_id], one=True)
+    if saved:
+        sync_item_task(item_id, prod["name"], _item_missing_fields(dict(saved)))
     log_action("ITEM_ADD", item_id, prod["name"], f"Created from product ID {d['id']}")
     return jsonify({"ok": True, "item_id": item_id})
 
@@ -2872,7 +2925,8 @@ def api_category_fields_save():
                 "field_type,placeholder,required,sort_order,dropdown_options) VALUES (?,?,?,?,?,?,?,?)",
                 [cat_id, label, key, f.get("field_type", "text"),
                  f.get("placeholder", ""), int(f.get("required", 0)), i, opts_str])
-    return jsonify({"ok": True})
+    resync = _resync_completion_tasks("category_id=?", [cat_id])
+    return jsonify({"ok": True, "resynced": resync})
 
 
 # ── Companies & Distributors ──────────────────────────────────────────────────

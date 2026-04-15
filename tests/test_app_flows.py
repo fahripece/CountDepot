@@ -8,8 +8,10 @@ from app.helpers import hash_pw
 from app.blueprints.auth import login_page
 from app.blueprints.api import (
     api_add_reservation,
+    api_category_fields_save,
     api_item_add,
     api_items,
+    api_product_edit,
     api_product_add,
     api_qty_adjust,
     api_user_add,
@@ -86,6 +88,13 @@ def test_onboarding_gate_redirects_unfinished_tenant(app):
 def test_admin_can_create_product_and_item_and_fetch_inventory(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Roadmap Test Category", "#ffffff"],
+    ).lastrowid
+    db.commit()
+    db.close()
 
     with app.test_request_context(
         "/api/product/add",
@@ -93,7 +102,7 @@ def test_admin_can_create_product_and_item_and_fetch_inventory(app, tenant):
         method="POST",
         json={
             "name": "Roadmap Test Product",
-            "category_id": 1,
+            "category_id": category_id,
             "manufacturer": "Acme",
             "model": "MODEL-100",
             "vendor_sku": "SUPPLIER-PART-12345",
@@ -121,9 +130,9 @@ def test_admin_can_create_product_and_item_and_fetch_inventory(app, tenant):
         base_url=f"http://{tenant['host']}",
         method="POST",
         json={
-            "name": "Roadmap Test Item",
-            "product_id": product_data["id"],
-            "category_id": 1,
+                "name": "Roadmap Test Item",
+                "product_id": product_data["id"],
+                "category_id": category_id,
             "sku": "SUPPLIER-PART-12345-UNIT",
             "condition": "New",
         },
@@ -153,6 +162,13 @@ def test_admin_can_create_product_and_item_and_fetch_inventory(app, tenant):
 def test_internal_sku_product_item_is_visible_in_inventory(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Internal SKU Test Category", "#ffffff"],
+    ).lastrowid
+    db.commit()
+    db.close()
 
     with app.test_request_context(
         "/api/product/add",
@@ -160,7 +176,7 @@ def test_internal_sku_product_item_is_visible_in_inventory(app, tenant):
         method="POST",
         json={
             "name": "Internal SKU Visibility Product",
-            "category_id": 1,
+            "category_id": category_id,
             "manufacturer": "Acme",
             "model": "AUTO-100",
             "serial_tracked": 0,
@@ -187,9 +203,9 @@ def test_internal_sku_product_item_is_visible_in_inventory(app, tenant):
         base_url=f"http://{tenant['host']}",
         method="POST",
         json={
-            "name": "Internal SKU Visibility Item",
-            "product_id": product_data["id"],
-            "category_id": 1,
+                "name": "Internal SKU Visibility Item",
+                "product_id": product_data["id"],
+                "category_id": category_id,
             "condition": "New",
         },
         headers={"X-CSRF-Token": "test-csrf-token"},
@@ -304,18 +320,181 @@ def test_admin_can_resend_user_invite(app, tenant, monkeypatch):
     assert sent["token"]
 
 
-def test_incomplete_cost_requirement_can_be_disabled(app, tenant):
+def test_required_category_field_change_marks_existing_items_incomplete(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Compliance Gear", "#ffffff"],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (name,category_id,shelf,cost_price,extra_fields,active,created_at) "
+        "VALUES (?,?,?,?,?,1,'2026-01-01 00:00:00')",
+        ["Harness", category_id, "A1", 25.0, "{}"],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/category/fields/save",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "category_id": category_id,
+            "fields": [{
+                "field_label": "Inspection Date",
+                "field_key": "inspection_date",
+                "field_type": "date",
+                "required": 1,
+            }],
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_category_fields_save())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["resynced"]["checked"] == 1
+    assert data["resynced"]["incomplete"] == 1
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    task = db.execute("SELECT title, notes, status FROM tasks WHERE item_id=?", [item_id]).fetchone()
+    db.close()
+
+    assert task["status"] == "todo"
+    assert "Inspection Date" in task["notes"]
+
+    with app.test_request_context(
+        "/api/items?status=incomplete&hide_out=0",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        inventory_response = _as_response(app, app.preprocess_request() or api_items())
+        items = inventory_response.get_json()
+
+    target = next(item for item in items if item["id"] == item_id)
+    assert target["is_incomplete"] is True
+    assert "Inspection Date" in target["missing_fields"]
+
+
+def test_product_requirement_change_marks_existing_items_incomplete(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302
 
     db = sqlite3.connect(tenant["db_path"])
     product_id = db.execute(
+        "INSERT INTO products (name,require_internal_sku,require_serial,require_vendor_sku,active,created_at) "
+        "VALUES (?,1,0,0,1,'2026-01-01 00:00:00')",
+        ["Tracked Widget"],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (name,product_id,shelf,cost_price,active,created_at) "
+        "VALUES (?,?,?,?,1,'2026-01-01 00:00:00')",
+        ["Widget Unit", product_id, "B1", 10.0],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/product/edit",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "id": product_id,
+            "name": "Tracked Widget",
+            "require_serial": 1,
+            "require_vendor_sku": 0,
+            "require_internal_sku": 1,
+            "serial_tracked": 0,
+            "qty_tracked": 0,
+            "require_scan_checkout": 0,
+            "print_scan_label": 0,
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_product_edit())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["resynced"]["checked"] == 1
+    assert data["resynced"]["incomplete"] == 1
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    task = db.execute("SELECT notes, status FROM tasks WHERE item_id=?", [item_id]).fetchone()
+    db.close()
+
+    assert task["status"] == "todo"
+    assert "serial #" in task["notes"]
+
+
+def test_required_category_field_is_enforced_server_side_on_add(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Server Validation", "#ffffff"],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO category_fields "
+        "(category_id,field_label,field_key,field_type,required,sort_order) "
+        "VALUES (?,?,?,?,1,0)",
+        [category_id, "Asset Tag", "asset_tag", "text"],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/item/add",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "name": "Missing Asset Tag",
+            "category_id": category_id,
+            "shelf": "C1",
+            "cost_price": 15.0,
+            "extra_fields": {},
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_item_add())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is False
+    assert "Asset Tag" in data["msg"]
+
+
+def test_incomplete_cost_requirement_can_be_disabled(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Cost Optional Category", "#ffffff"],
+    ).lastrowid
+    product_id = db.execute(
         "INSERT INTO products (name,category_id,active,created_at) VALUES (?,?,1,datetime('now'))",
-        ["Cost Optional Product", 1],
+        ["Cost Optional Product", category_id],
     ).lastrowid
     item_id = db.execute(
         "INSERT INTO items (name,category_id,product_id,shelf,cost_price,active,created_at) VALUES (?,?,?,?,NULL,1,datetime('now'))",
-        ["Cost Optional Item", 1, product_id, "A1"],
+        ["Cost Optional Item", category_id, product_id, "A1"],
     ).lastrowid
     db.commit()
     db.close()
