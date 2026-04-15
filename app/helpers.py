@@ -419,7 +419,14 @@ def notify_low_stock_if_needed(product_id):
 
 # ── Item completeness ─────────────────────────────────────────────────────────
 
-def _item_missing_fields(s):
+def incomplete_cost_required():
+    row = query("SELECT value FROM settings WHERE key='incomplete_requires_cost'", one=True)
+    return not row or str(row["value"]) != "0"
+
+
+def _item_missing_fields(s, cost_required=None):
+    if cost_required is None:
+        cost_required = incomplete_cost_required()
     missing = []
     prod = query(
         "SELECT require_serial, require_vendor_sku FROM products WHERE id=?",
@@ -427,7 +434,7 @@ def _item_missing_fields(s):
     if prod:
         if prod["require_serial"]     and not s.get("serial"): missing.append("serial #")
         if prod["require_vendor_sku"] and not s.get("sku"):    missing.append("vendor SKU")
-    if s.get("cost_price") is None: missing.append("cost")
+    if cost_required and s.get("cost_price") is None: missing.append("cost")
     if not s.get("shelf"):          missing.append("shelf")
     return missing
 

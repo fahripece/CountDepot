@@ -216,6 +216,54 @@ def test_internal_sku_product_item_is_visible_in_inventory(app, tenant):
     )
 
 
+def test_incomplete_cost_requirement_can_be_disabled(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,active,created_at) VALUES (?,?,1,datetime('now'))",
+        ["Cost Optional Product", 1],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (name,category_id,product_id,shelf,cost_price,active,created_at) VALUES (?,?,?,?,NULL,1,datetime('now'))",
+        ["Cost Optional Item", 1, product_id, "A1"],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/items?status=incomplete&hide_out=0",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        default_response = _as_response(app, app.preprocess_request() or api_items())
+        default_data = default_response.get_json()
+        default_items = default_data["items"] if isinstance(default_data, dict) else default_data
+
+    assert any(item["id"] == item_id and "cost" in item["missing_fields"] for item in default_items)
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "INSERT INTO settings (key,value) VALUES ('incomplete_requires_cost','0')"
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/items?status=incomplete&hide_out=0",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        optional_response = _as_response(app, app.preprocess_request() or api_items())
+        optional_data = optional_response.get_json()
+        optional_items = optional_data["items"] if isinstance(optional_data, dict) else optional_data
+
+    assert not any(item["id"] == item_id for item in optional_items)
+
+
 def test_quantity_reservation_reduces_available_and_blocks_over_reserve(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302

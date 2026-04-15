@@ -11,7 +11,8 @@ from app.db import query, execute
 from app.helpers import (login_required, perm_required, admin_required,
                          log_action, get_low_stock_alerts, hash_pw, verify_pw,
                          validate_password, api_rate_limit,
-                         _item_missing_fields, sync_item_task, sync_maintenance_tasks,
+                         incomplete_cost_required, _item_missing_fields,
+                         sync_item_task, sync_maintenance_tasks,
                          _parse_date_range, _date_filter_sql,
                          location_filter_sql, notify_low_stock_if_needed,
                          ALL_PERMISSIONS, PERM_KEYS,
@@ -310,6 +311,7 @@ def api_report_financial():
 def api_report_inventory():
     date_from, date_to = _parse_date_range(request)
     df_sql, df_args    = _date_filter_sql("i.created_at", date_from, date_to)
+    cost_required      = incomplete_cost_required()
     items = query(f"""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
                       i.condition, i.shelf, i.cost_price, i.sale_price,
                       i.qty, i.qty_out, i.checked_out, i.checkout_by,
@@ -332,7 +334,7 @@ def api_report_inventory():
         d = dict(r)
         d["available"]    = ((d["qty"] or 0) - (d["qty_out"] or 0) if d["qty"] is not None else None)
         d["is_low"]       = False
-        missing           = _item_missing_fields(d)
+        missing           = _item_missing_fields(d, cost_required)
         d["is_incomplete"]  = len(missing) > 0
         d["missing_fields"] = missing
         result.append(d)
@@ -761,6 +763,7 @@ def api_items():
     dept_id  = request.args.get("dept", "")
     tag      = request.args.get("tag", "").strip()
     cond_f   = request.args.get("cond", "").strip()
+    cost_required = incomplete_cost_required()
     show_retired = (status == "retired")
     base_where = """FROM items i
              LEFT JOIN categories c   ON c.id=i.category_id
@@ -831,11 +834,14 @@ def api_items():
             WHERE p.active=1 AND p.low_stock_threshold>0
             GROUP BY p.id HAVING COUNT(ii.id)<=p.low_stock_threshold)"""
     elif status == "incomplete":
-        sql += """ AND (
-            (p.require_serial=1 AND (i.serial IS NULL OR i.serial='')) OR
-            (p.require_vendor_sku=1 AND (i.sku IS NULL OR i.sku='')) OR
-            i.cost_price IS NULL OR
-            (i.shelf IS NULL OR i.shelf=''))"""
+        incomplete_conditions = [
+            "(p.require_serial=1 AND (i.serial IS NULL OR i.serial=''))",
+            "(p.require_vendor_sku=1 AND (i.sku IS NULL OR i.sku=''))",
+            "(i.shelf IS NULL OR i.shelf='')",
+        ]
+        if cost_required:
+            incomplete_conditions.append("i.cost_price IS NULL")
+        sql += " AND (" + " OR ".join(incomplete_conditions) + ")"
     elif status == "overdue":
         today_str = datetime.now().strftime("%Y-%m-%d")
         sql += " AND i.checked_out=1 AND i.expected_return_date IS NOT NULL AND i.expected_return_date < ?"
@@ -887,7 +893,7 @@ def api_items():
         missing = []
         if d.get("product_req_serial")     and not d.get("serial"): missing.append("serial #")
         if d.get("product_req_vendor_sku") and not d.get("sku"):    missing.append("vendor SKU")
-        if d.get("cost_price") is None: missing.append("cost")
+        if cost_required and d.get("cost_price") is None: missing.append("cost")
         if not d.get("shelf"):          missing.append("shelf")
         d["is_incomplete"]       = len(missing) > 0
         d["missing_fields"]      = missing
@@ -3314,6 +3320,7 @@ ALLOWED_SETTINGS = {
     "low_stock_alerts_enabled", "low_stock_alert_email",
     "overdue_reminder_days_1", "overdue_reminder_days_2",
     "overdue_reminder_enabled",
+    "incomplete_requires_cost",
     "slack_webhook_url", "slack_enabled",
     "teams_webhook_url", "teams_enabled",
     "slack_events", "teams_events",
