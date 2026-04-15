@@ -63,6 +63,93 @@ def _resync_completion_tasks(where_sql, args=None):
     return {"checked": count, "incomplete": incomplete}
 
 
+def _clean_serials(raw):
+    if isinstance(raw, str):
+        raw = raw.replace(",", "\n").splitlines()
+    serials = []
+    seen = set()
+    duplicates = []
+    for value in raw or []:
+        serial = str(value or "").strip()
+        if not serial:
+            continue
+        key = serial.lower()
+        if key in seen:
+            duplicates.append(serial)
+            continue
+        seen.add(key)
+        serials.append(serial)
+    return serials, duplicates
+
+
+def _check_item_limit_count(count):
+    from flask import g
+    from app.stripe_billing import PLANS
+    plan_key = g.tenant.get("plan", "starter") if hasattr(g, "tenant") and g.tenant else "starter"
+    max_items = PLANS.get(plan_key, PLANS["starter"]).get("max_items")
+    if max_items is None:
+        return True, None
+    current = query("SELECT COUNT(*) FROM items WHERE active=1", one=True)[0]
+    if current + count > max_items:
+        plan_name = PLANS.get(plan_key, {}).get("name", plan_key)
+        remaining = max(0, max_items - current)
+        return False, (f"Only {remaining} item slot(s) remain on the {plan_name} plan. "
+                       f"Reduce the batch or upgrade your plan.")
+    return True, None
+
+
+def _existing_serial_conflicts(product_id, serials):
+    conflicts = []
+    for serial in serials:
+        if product_id:
+            dup = query("SELECT id,name FROM items WHERE serial=? AND product_id=? AND active=1",
+                        [serial, product_id], one=True)
+        else:
+            dup = query("SELECT id,name FROM items WHERE serial=? AND product_id IS NULL AND active=1",
+                        [serial], one=True)
+        if dup:
+            conflicts.append({"serial": serial, "id": dup["id"], "name": dup["name"]})
+    return conflicts
+
+
+def _create_bulk_serial_items(base, serials, source_detail="Bulk serial add"):
+    allowed, limit_msg = _check_item_limit_count(len(serials))
+    if not allowed:
+        return {"ok": False, "msg": limit_msg}
+    product_id = base.get("product_id")
+    if product_id and not query("SELECT id FROM products WHERE id=?", [product_id], one=True):
+        return {"ok": False, "msg": "Invalid product"}
+    category_id = base.get("category_id")
+    if category_id and not query("SELECT id FROM categories WHERE id=?", [category_id], one=True):
+        return {"ok": False, "msg": "Invalid category"}
+
+    conflicts = _existing_serial_conflicts(product_id, serials)
+    if conflicts:
+        joined = ", ".join(f"{c['serial']} on #{c['id']}" for c in conflicts[:8])
+        extra = f" and {len(conflicts)-8} more" if len(conflicts) > 8 else ""
+        return {"ok": False, "msg": f"Duplicate serials found: {joined}{extra}", "conflicts": conflicts}
+
+    created = []
+    for serial in serials:
+        d = dict(base)
+        d["serial"] = serial
+        d["sku"] = None
+        d["qty"] = None
+        missing_custom = required_category_field_missing(d)
+        if missing_custom:
+            return {"ok": False,
+                    "msg": f"Required field missing: {', '.join(missing_custom)}",
+                    "fields": missing_custom}
+        item_id = _save_item(d)
+        saved = query("SELECT * FROM items WHERE id=?", [item_id], one=True)
+        if saved:
+            sync_item_task(item_id, d.get("name", ""), _item_missing_fields(dict(saved)))
+            sync_maintenance_tasks(item_id)
+        log_action("ITEM_ADD", item_id, d.get("name"), f"{source_detail}; serial {serial}")
+        created.append({"id": item_id, "name": d.get("name"), "serial": serial})
+    return {"ok": True, "created": created, "count": len(created)}
+
+
 # ── Internal SKU generation ───────────────────────────────────────────────────
 
 _sku_lock = threading.Lock()
@@ -2006,6 +2093,31 @@ def api_item_add():
         return jsonify({"ok": False, "msg": f"Save failed: {str(e)}"})
 
 
+@bp.route("/api/items/bulk-serial-add", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_items_bulk_serial_add():
+    d = request.json or {}
+    serials, duplicates = _clean_serials(d.get("serials") or d.get("bulk_serials") or "")
+    if duplicates:
+        return jsonify({"ok": False, "msg": f"Duplicate serials in batch: {', '.join(duplicates[:8])}",
+                        "duplicates": duplicates})
+    if len(serials) < 2:
+        return jsonify({"ok": False, "msg": "Enter at least two serial numbers for bulk serial add."})
+    if len(serials) > 500:
+        return jsonify({"ok": False, "msg": "Bulk serial add is limited to 500 serials at a time."}), 400
+    if not (d.get("name") or "").strip():
+        return jsonify({"ok": False, "msg": "Name required"})
+    if not d.get("category_id"):
+        return jsonify({"ok": False, "msg": "Category required"})
+    base = dict(d)
+    base.pop("serials", None)
+    base.pop("bulk_serials", None)
+    base.pop("id", None)
+    result = _create_bulk_serial_items(base, serials)
+    return jsonify(result)
+
+
 @bp.route("/api/item/edit", methods=["POST"])
 @login_required
 @perm_required("write_items")
@@ -2218,6 +2330,37 @@ def api_item_clone(iid):
     _ensure_internal_sku(new_id, d.get("category_id"))
     log_action("ITEM_ADD", new_id, item["name"], f"Cloned from #{iid}")
     return jsonify({"ok": True, "id": new_id})
+
+
+@bp.route("/api/item/<int:iid>/bulk-clone", methods=["POST"])
+@login_required
+@perm_required("write_items")
+def api_item_bulk_clone(iid):
+    item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
+    if not item:
+        return jsonify({"ok": False, "msg": "Item not found"}), 404
+    serials, duplicates = _clean_serials((request.json or {}).get("serials") or "")
+    if duplicates:
+        return jsonify({"ok": False, "msg": f"Duplicate serials in batch: {', '.join(duplicates[:8])}",
+                        "duplicates": duplicates})
+    if len(serials) < 2:
+        return jsonify({"ok": False, "msg": "Enter at least two serial numbers for bulk clone."})
+    d = dict(item)
+    d.pop("id", None)
+    d.pop("serial", None)
+    d.pop("sku", None)
+    d.pop("internal_sku", None)
+    d.pop("created_at", None)
+    d["checked_out"] = 0
+    d["checkout_by"] = None
+    d["checkout_date"] = None
+    d["job_ref"] = None
+    d["sold"] = 0
+    d["sold_date"] = None
+    d["expected_return_date"] = None
+    d["kit_id"] = None
+    result = _create_bulk_serial_items(d, serials, f"Bulk cloned from #{iid}")
+    return jsonify(result)
 
 
 # ── Tags autocomplete ─────────────────────────────────────────────────────────

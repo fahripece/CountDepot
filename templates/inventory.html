@@ -263,6 +263,11 @@
             </div>
           </div>
         </div>
+        <div class="field" id="fi-bulk-serial-wrap">
+          <label class="label">Bulk serial add <span style="font-weight:400;font-size:10px;color:#94a3b8">optional - one serial per line</span></label>
+          <textarea class="input mono" id="fi-bulk-serials" style="min-height:74px;resize:vertical" placeholder="SN001&#10;SN002&#10;SN003"></textarea>
+          <div style="font-size:11px;color:#64748b;margin-top:5px">When multiple serials are entered, CountDepot creates one item per serial using the same product, site, shelf, owner, cost, and fields.</div>
+        </div>
         <div class="field-row">
           <div class="field"><label class="label">Condition *</label>
             <select class="select" id="fi-condition">
@@ -1229,6 +1234,8 @@ async function quickAddDistributor(){
 
 function _clearItemForm(){
   ['fi-name','fi-manufacturer','fi-model','fi-serial','fi-sku','fi-shelf','fi-qty','fi-notes','fi-cost','fi-sale','fi-po'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const bulkSerials=document.getElementById('fi-bulk-serials');if(bulkSerials)bulkSerials.value='';
+  const bulkWrap=document.getElementById('fi-bulk-serial-wrap');if(bulkWrap)bulkWrap.style.display='';
   document.getElementById('fi-purchased-from').value='';
   document.getElementById('fi-date').value='';
   document.getElementById('fi-cat').value='';
@@ -1269,6 +1276,7 @@ function openAddItem(){
 function editItem(item){
   if(!item)return;
   _clearItemForm();
+  const bulkWrap=document.getElementById('fi-bulk-serial-wrap');if(bulkWrap)bulkWrap.style.display='none';
   document.getElementById('editItemId').value=item.id;
   document.getElementById('itemModalTitle').textContent='Edit Item';
   if(item.internal_sku){const d=document.getElementById('fi-sku-display');d.textContent='Auto SKU: '+item.internal_sku;d.style.display='';}
@@ -1336,6 +1344,8 @@ async function saveItem(){
   }
   const extra_fields={};
   catFieldDefs.forEach(f=>{const el=document.getElementById('fi-dyn-'+f.field_key);if(!el)return;extra_fields[f.field_key]=el.type==='checkbox'?el.checked?1:0:el.value.trim()||null;});
+  const bulkSerialsRaw=(document.getElementById('fi-bulk-serials')?.value||'').trim();
+  const bulkSerials=bulkSerialsRaw?bulkSerialsRaw.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean):[];
   pendingSaveData={
     name,
     product_id:document.getElementById('fi-product').value||null,
@@ -1370,6 +1380,10 @@ async function saveItem(){
     po_number:document.getElementById('fi-po').value.trim()||null,
     extra_fields,
   };
+  if(!document.getElementById('editItemId').value && bulkSerials.length>1){
+    pendingSaveData.serials=bulkSerials;
+    pendingSaveData.serial=bulkSerials[0];
+  }
   const id=document.getElementById('editItemId').value;
   if(id)pendingSaveData.id=parseInt(id);
   const owner=pendingSaveData.owner_company;
@@ -1394,8 +1408,19 @@ async function confirmedSaveItem(){
   if(saveBtn){saveBtn.disabled=true;}
   const d=pendingSaveData;pendingSaveData=null;
   try{
-    const res=await api(d.id?'/api/item/edit':'/api/item/add',d);
-    if(res.ok){toast(d.id?'Item updated ✓':'Item added ✓','ok');closeModal('itemModal');loadItems();}
+    const isBulkSerial=!d.id&&Array.isArray(d.serials)&&d.serials.length>1;
+    const res=await api(isBulkSerial?'/api/items/bulk-serial-add':(d.id?'/api/item/edit':'/api/item/add'),d);
+    if(res.ok){
+      toast(isBulkSerial?`${res.count||d.serials.length} items added`:(d.id?'Item updated ✓':'Item added ✓'),'ok');
+      closeModal('itemModal');
+      await loadItems();
+      if(isBulkSerial&&res.created?.length&&confirm(`Print labels for ${res.created.length} new items?`)){
+        const ids=new Set(res.created.map(i=>i.id));
+        labelItems=allItems.filter(i=>ids.has(i.id));
+        _updateLabelBatchInfo();
+        _loadJsBarcode(()=>{renderLabels();openModal('labelModal');});
+      }
+    }
     else{document.getElementById('errMsg').innerHTML=res.msg||'Error saving item';openModal('errModal');}
   }finally{
     _savingItem=false;
@@ -1937,9 +1962,28 @@ async function confirmBulkEdit(){
 }
 // Clone
 async function cloneItem(id){
-  if(!confirm('Clone this item? A copy will be created without serial/SKU. You can edit it next.'))return;
-  const res=await api('/api/item/'+id+'/clone',{});
-  if(res.ok){toast('Cloned — opening new item…','ok');closeDetail();await loadItems();const newItem=allItems.find(i=>i.id===res.id);if(newItem)editItem(newItem);}
+  const serialText=prompt('Clone this item.\n\nFor one normal clone, leave this blank.\nFor bulk serial clone, paste one serial number per line.');
+  if(serialText===null)return;
+  const serials=serialText.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
+  const res=serials.length>1
+    ? await api('/api/item/'+id+'/bulk-clone',{serials})
+    : await api('/api/item/'+id+'/clone',{});
+  if(res.ok){
+    closeDetail();
+    await loadItems();
+    if(serials.length>1){
+      toast(`${res.count||serials.length} clones created`,'ok');
+      if(res.created?.length&&confirm(`Print labels for ${res.created.length} new items?`)){
+        const ids=new Set(res.created.map(i=>i.id));
+        labelItems=allItems.filter(i=>ids.has(i.id));
+        _updateLabelBatchInfo();
+        _loadJsBarcode(()=>{renderLabels();openModal('labelModal');});
+      }
+    }else{
+      toast('Cloned - opening new item...','ok');
+      const newItem=allItems.find(i=>i.id===res.id);if(newItem)editItem(newItem);
+    }
+  }
   else toast(res.msg||'Error','err');
 }
 

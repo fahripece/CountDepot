@@ -13,6 +13,8 @@ from app.blueprints.api import (
     api_items,
     api_product_edit,
     api_product_add,
+    api_items_bulk_serial_add,
+    api_item_bulk_clone,
     api_qty_adjust,
     api_user_add,
     api_user_invite,
@@ -477,6 +479,159 @@ def test_required_category_field_is_enforced_server_side_on_add(app, tenant):
     assert response.status_code == 200
     assert data["ok"] is False
     assert "Asset Tag" in data["msg"]
+
+
+def test_bulk_serial_add_creates_individual_items(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Bulk Serial Category", "#ffffff"],
+    ).lastrowid
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,require_serial,require_internal_sku,active,created_at) "
+        "VALUES (?,?,1,1,1,'2026-01-01 00:00:00')",
+        ["Bulk Serial Product", category_id],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/items/bulk-serial-add",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "name": "Bulk Serial Product",
+            "product_id": product_id,
+            "category_id": category_id,
+            "condition": "New",
+            "shelf": "BULK-A",
+            "cost_price": 11.5,
+            "serials": ["BSN-001", "BSN-002", "BSN-003"],
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_items_bulk_serial_add())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["count"] == 3
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    rows = db.execute(
+        "SELECT name, serial, sku, shelf, cost_price FROM items WHERE product_id=? ORDER BY serial",
+        [product_id],
+    ).fetchall()
+    db.close()
+
+    assert [r["serial"] for r in rows] == ["BSN-001", "BSN-002", "BSN-003"]
+    assert all(r["name"] == "Bulk Serial Product" for r in rows)
+    assert all(r["sku"] is None for r in rows)
+    assert all(r["shelf"] == "BULK-A" for r in rows)
+
+
+def test_bulk_serial_add_rejects_existing_duplicate_serial(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Bulk Duplicate Category", "#ffffff"],
+    ).lastrowid
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,require_serial,require_internal_sku,active,created_at) "
+        "VALUES (?,?,1,1,1,'2026-01-01 00:00:00')",
+        ["Bulk Duplicate Product", category_id],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO items (name,product_id,category_id,serial,shelf,cost_price,active,created_at) "
+        "VALUES (?,?,?,?,?,?,1,'2026-01-01 00:00:00')",
+        ["Existing", product_id, category_id, "DUP-001", "A1", 5.0],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/items/bulk-serial-add",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "name": "Bulk Duplicate Product",
+            "product_id": product_id,
+            "category_id": category_id,
+            "condition": "New",
+            "shelf": "BULK-B",
+            "cost_price": 11.5,
+            "serials": ["DUP-001", "DUP-002"],
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_items_bulk_serial_add())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is False
+    assert "DUP-001" in data["msg"]
+
+
+def test_bulk_clone_creates_same_item_with_new_serials(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Bulk Clone Category", "#ffffff"],
+    ).lastrowid
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,require_serial,require_internal_sku,active,created_at) "
+        "VALUES (?,?,1,1,1,'2026-01-01 00:00:00')",
+        ["Bulk Clone Product", category_id],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (name,product_id,category_id,serial,shelf,cost_price,condition,active,created_at) "
+        "VALUES (?,?,?,?,?,?,?,1,'2026-01-01 00:00:00')",
+        ["Bulk Clone Product", product_id, category_id, "SRC-001", "CLONE-A", 22.0, "New"],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        f"/api/item/{item_id}/bulk-clone",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"serials": ["CLONE-001", "CLONE-002"]},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_item_bulk_clone(item_id))
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["count"] == 2
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    rows = db.execute(
+        "SELECT name, serial, shelf, cost_price FROM items WHERE product_id=? AND serial LIKE 'CLONE-%' ORDER BY serial",
+        [product_id],
+    ).fetchall()
+    db.close()
+
+    assert [r["serial"] for r in rows] == ["CLONE-001", "CLONE-002"]
+    assert all(r["name"] == "Bulk Clone Product" for r in rows)
+    assert all(r["shelf"] == "CLONE-A" for r in rows)
 
 
 def test_incomplete_cost_requirement_can_be_disabled(app, tenant):
