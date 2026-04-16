@@ -113,7 +113,7 @@
 <div class="table-wrap">
   <table>
     <thead><tr>
-      {% if session.get('role')=='admin' %}
+      {% if session.get('role')!='viewer' %}
       <th style="width:36px;padding:10px 8px 10px 14px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this.checked)"></th>
       {% endif %}
       <th style="width:44px;color:#94a3b8;font-size:10.5px;font-weight:600;letter-spacing:.3px">ID</th>
@@ -696,16 +696,17 @@
 </div>
 
 <!-- ══ BULK ACTION BAR ══ -->
-<div id="bulkBar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;border-radius:12px;padding:10px 16px;gap:8px;align-items:center;z-index:800;box-shadow:0 8px 32px rgba(0,0,0,0.35);font-size:13px;min-width:480px">
+<div id="bulkBar" class="bulk-action-bar" style="display:none">
   <span id="bulkCount" style="font-weight:600;min-width:80px"></span>
   <button class="btn btn-sm" id="selectionDetailsBtn" style="background:#475569;color:#fff;border:none" onclick="openSelectedDetails()">Details</button>
-  <button class="btn btn-sm" style="background:#b91c1c;color:#fff;border:none" onclick="openReserveSelected()">Reserve</button>
-  <button class="btn btn-sm" style="background:#1e40af;color:#fff;border:none" onclick="openBulkCheckout()">📤 Checkout</button>
-  <button class="btn btn-sm" style="background:#15803d;color:#fff;border:none" onclick="bulkCheckin()">📥 Check In</button>
-  <button class="btn btn-sm" style="background:#374151;color:#fff;border:none" onclick="printSelectedLabels()">Print Labels</button>
-  <button class="btn btn-sm" style="background:#475569;color:#fff;border:none" onclick="openBulkEdit()">Edit</button>
-  <button class="btn btn-sm" style="background:#991b1b;color:#fff;border:none" onclick="massDelete()">🗑 Delete</button>
-  <button style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:0 4px;margin-left:4px" onclick="selectedIds.clear();updateSelectionUI();document.querySelectorAll('.row-cb').forEach(c=>c.checked=false);if(document.getElementById('selectAll'))document.getElementById('selectAll').checked=false" title="Clear selection">x</button>
+  <button class="btn btn-sm" id="selectionReserveBtn" style="background:#b91c1c;color:#fff;border:none" onclick="openReserveSelected()">Reserve</button>
+  <button class="btn btn-sm" id="selectionCheckoutBtn" style="background:#1e40af;color:#fff;border:none" onclick="openBulkCheckout()">Checkout</button>
+  <button class="btn btn-sm" id="selectionCheckinBtn" style="background:#15803d;color:#fff;border:none" onclick="bulkCheckin()">Check In</button>
+  <button class="btn btn-sm" id="selectionPrintBtn" style="background:#374151;color:#fff;border:none" onclick="printSelectedLabels()">Print Labels</button>
+  <button class="btn btn-sm" id="selectionEditBtn" style="background:#475569;color:#fff;border:none" onclick="openBulkEdit()">Edit</button>
+  <button class="btn btn-sm" id="selectionCloneBtn" style="background:#475569;color:#fff;border:none" onclick="openSelectedClone()">Clone</button>
+  <button class="btn btn-sm" id="selectionDeleteBtn" style="background:#991b1b;color:#fff;border:none" onclick="massDelete()">Delete</button>
+  <button class="bulk-action-clear" onclick="clearSelection()" title="Clear selection">x</button>
 </div>
 
 <!-- ══ BULK CHECKOUT MODAL ══ -->
@@ -816,6 +817,17 @@
 .tag-incomplete{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600;padding:1px 7px;border-radius:4px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;margin-left:6px;cursor:help}
 .bulk-clone-footer{display:flex;flex-wrap:wrap;gap:8px}
 .bulk-clone-footer .btn{flex:1 1 140px;min-width:0;justify-content:center}
+.bulk-action-bar{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:#0f172a;color:#fff;border-radius:14px;padding:10px 12px;
+  gap:8px;align-items:center;justify-content:center;z-index:800;
+  box-shadow:0 8px 32px rgba(15,23,42,.35);font-size:13px;
+  width:min(920px,calc(100vw - 28px));flex-wrap:wrap;
+}
+.bulk-action-bar .btn{min-width:82px;justify-content:center}
+.bulk-action-bar #bulkCount{flex:0 0 auto}
+.bulk-action-clear{background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:18px;padding:0 4px;margin-left:4px}
+.bulk-action-clear:hover{color:#fff}
 .detail#detailPanel .detail-inner{width:min(1040px,calc(100vw - 48px));max-height:calc(100vh - 48px)}
 .detail#detailPanel .detail-body{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;overflow:auto}
 #dp-fields,#dp-notes-section,#dp-photos-section,#dp-timeline-section{grid-column:1}
@@ -829,10 +841,22 @@ tr.selected td{background:#eff6ff!important}
   .detail#detailPanel .detail-body{display:block}
   #dp-reservations-section{position:static;margin-top:12px!important}
 }
+@media(max-width:640px){
+  .bulk-action-bar{bottom:12px;justify-content:flex-start}
+  .bulk-action-bar .btn{flex:1 1 calc(33.333% - 8px);min-width:92px}
+  .bulk-action-bar #bulkCount{flex:1 0 100%}
+}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 <script>
 const IS_ADMIN = {{ 'true' if session.get('role')=='admin' else 'false' }};
+const USER_ROLE = {{ session.get('role','viewer') | tojson }};
+const USER_PERMISSIONS = new Set({{ (session.get('permissions') or '').split(',') | tojson }});
+const CAN_SELECT = USER_ROLE !== 'viewer';
+const CAN_CHECKOUT = IS_ADMIN || USER_PERMISSIONS.has('checkout_checkin');
+const CAN_WRITE_ITEMS = IS_ADMIN || USER_PERMISSIONS.has('write_items');
+const CAN_QTY_ADJUST = IS_ADMIN || USER_PERMISSIONS.has('qty_adjust');
+const CAN_DELETE_ITEMS = IS_ADMIN || USER_PERMISSIONS.has('delete_items');
 const ALL_PRODUCTS = {{ products | tojson }};
 const CATEGORY_FIELDS = {{ category_fields | tojson }};
 const companies = {{ companies | tojson }};
@@ -1006,8 +1030,11 @@ function renderTable(items){
     const prodLabel=item.product_name?`<div style="font-size:10.5px;color:#15803d;margin-top:1px">📦 ${item.product_name}</div>`:'';
     const incLabel=item.is_incomplete?`<span class="tag-incomplete" title="Missing: ${item.missing_fields.join(', ')}">⚠ Incomplete</span>`:'';
     const photoIcon=item.photo_count>0?`<span title="${item.photo_count} photo${item.photo_count!==1?'s':''}" style="font-size:11px;color:#64748b;margin-left:4px;opacity:.7">📷${item.photo_count>1?'<sup style=font-size:9px>'+item.photo_count+'</sup>':''}</span>`:'';
-    const cbCol=IS_ADMIN?`<td style="padding:10px 8px 10px 14px" onclick="event.stopPropagation()"><input type="checkbox" class="row-cb" data-id="${item.id}" onchange="onRowCheck(this)" ${selectedIds.has(item.id)?'checked':''}></td>`:'';
-    return `<tr class="${item.is_low?'low-row':''}${selectedIds.has(item.id)?' selected':''}" onclick="toggleRowSelect(${item.id})">
+    const cbCol=CAN_SELECT?`<td style="padding:10px 8px 10px 14px" onclick="event.stopPropagation()"><input type="checkbox" class="row-cb" data-id="${item.id}" onchange="onRowCheck(this)" ${selectedIds.has(item.id)?'checked':''}></td>`:'';
+    const rowAction=CAN_WRITE_ITEMS
+      ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button>`
+      : `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();showDetail(allItems.find(i=>i.id===${item.id}))">Details</button>`;
+    return `<tr class="${item.is_low?'low-row':''}${selectedIds.has(item.id)?' selected':''}" onclick="showDetail(allItems.find(i=>i.id===${item.id}))">
       ${cbCol}
       <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#94a3b8;white-space:nowrap">#${item.id}</td>
       <td><div style="font-weight:500;font-size:13px">${item.name} ${incLabel}${photoIcon}</div>${item.manufacturer?`<div style="font-size:11px;color:#aaa">${item.manufacturer}</div>`:''}${prodLabel}</td>
@@ -1017,7 +1044,7 @@ function renderTable(items){
       <td>${cond}${tagsHtml}</td>
       <td>${status}${resBadge?`<br>${resBadge}`:''}</td>
       <td>${cost}<br>${saleProfit}</td>
-      <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();printLabel(${item.id})" title="Print label" style="padding:5px 7px;margin-right:4px">Label</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button></td>
+      <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();printLabel(${item.id})" title="Print label" style="padding:5px 7px;margin-right:4px">Label</button>${rowAction}</td>
     </tr>`;
   }).join('');
 }
@@ -1127,15 +1154,14 @@ function showDetail(item){
   } else if(item.sold){
     acts=`<div style="background:#eff6ff;border-radius:7px;padding:10px 12px;font-size:12.5px;color:#1d4ed8;font-weight:500">✓ Sold — $${parseFloat(item.sold_price||0).toFixed(2)}${item.sold_to?' to '+item.sold_to:''}<br><span style="font-weight:400;color:#94a3b8">${item.sold_date||''}</span></div>`;
   } else if(item.qty!==null){
-    acts=`<button class="btn btn-primary" onclick="openQtyAdjust(${item.id})">Adjust Quantity</button>`;
+    acts=CAN_QTY_ADJUST?`<button class="btn btn-primary" onclick="openQtyAdjust(${item.id})">Adjust Quantity</button>`:'';
   } else if(item.checked_out){
-    acts=`<button class="btn btn-success" onclick="openCheckin(${item.id})">📥 Check In</button>`;
+    acts=CAN_CHECKOUT?`<button class="btn btn-success" onclick="openCheckin(${item.id})">📥 Check In</button>`:'';
   } else {
-    acts=`<button class="btn btn-danger" onclick="closeDetail();openCheckout(${item.id})">📤 Check Out</button>`;
+    acts=CAN_CHECKOUT?`<button class="btn btn-danger" onclick="closeDetail();openCheckout(${item.id})">📤 Check Out</button>`:'';
   }
   acts+=`<button class="btn btn-danger" onclick="selectedIds=new Set([${item.id}]);updateSelectionUI();closeDetail();openReserveSelected()">Reserve</button>`;
-  acts+=`<button class="btn btn-secondary" onclick="closeDetail();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button>`;
-  acts+=`<button class="btn btn-secondary" onclick="cloneItem(${item.id})" title="Clone this item (copy without serial/SKU)">⧉ Clone</button>`;
+  if(CAN_WRITE_ITEMS)acts+=`<button class="btn btn-secondary" onclick="closeDetail();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button>`;
   acts+=`<button class="btn btn-secondary" onclick="printLabel(${item.id})" style="font-size:11px">Print Label</button>`;
   if(item.is_incomplete){
     acts+=`<button class="btn btn-secondary" style="background:#fef3c7;color:#92400e;border-color:#fde68a;font-size:11px" onclick="openConfirmScan(${item.id})" title="Scan the label to confirm this item">Scan to Confirm</button>`;
@@ -1955,6 +1981,16 @@ function toggleRowSelect(id){
   updateSelectionUI();
 }
 function toggleSelectAll(checked){allItems.forEach(i=>{if(checked)selectedIds.add(i.id);else selectedIds.delete(i.id);});updateSelectionUI();document.querySelectorAll('.row-cb').forEach(cb=>{cb.checked=selectedIds.has(parseInt(cb.dataset.id));});}
+function clearSelection(){
+  selectedIds.clear();
+  updateSelectionUI();
+  const selectAll=document.getElementById('selectAll');
+  if(selectAll)selectAll.checked=false;
+}
+function setBarButton(id, show){
+  const el=document.getElementById(id);
+  if(el)el.style.display=show?'inline-flex':'none';
+}
 function updateSelectionUI(){
   const n=selectedIds.size;
   // legacy topbar buttons
@@ -1965,8 +2001,14 @@ function updateSelectionUI(){
   if(bar){
     bar.style.display=n>0?'flex':'none';
     document.getElementById('bulkCount').textContent=n+' selected';
-    const details=document.getElementById('selectionDetailsBtn');
-    if(details)details.style.display=n===1?'inline-flex':'none';
+    setBarButton('selectionDetailsBtn', n===1);
+    setBarButton('selectionReserveBtn', n>0);
+    setBarButton('selectionCheckoutBtn', n>0&&CAN_CHECKOUT);
+    setBarButton('selectionCheckinBtn', n>0&&CAN_CHECKOUT);
+    setBarButton('selectionPrintBtn', n>0);
+    setBarButton('selectionEditBtn', n>0&&CAN_WRITE_ITEMS);
+    setBarButton('selectionCloneBtn', n===1&&CAN_WRITE_ITEMS);
+    setBarButton('selectionDeleteBtn', n>0&&CAN_DELETE_ITEMS);
   }
   document.querySelectorAll('.row-cb').forEach(cb=>{cb.checked=selectedIds.has(parseInt(cb.dataset.id));});
 }
@@ -1974,6 +2016,11 @@ function openSelectedDetails(){
   if(selectedIds.size!==1){toast('Select one item for details','warn');return;}
   const item=allItems.find(i=>i.id===[...selectedIds][0]);
   if(item)showDetail(item);
+}
+function openSelectedClone(){
+  if(!CAN_WRITE_ITEMS){toast('You do not have permission to clone items','err');return;}
+  if(selectedIds.size!==1){toast('Select one item to clone','warn');return;}
+  cloneItem([...selectedIds][0]);
 }
 function openReserveSelected(){
   if(!selectedIds.size){toast('Select item(s) to reserve','warn');return;}
@@ -2019,6 +2066,7 @@ async function confirmReserveSelected(){
   if(failed.length)toast(failed[0],'err');
 }
 async function massDelete(){
+  if(!CAN_DELETE_ITEMS){toast('You do not have permission to delete items','err');return;}
   const n=selectedIds.size;
   if(!n)return;
   if(!confirm(`Delete ${n} selected item${n===1?'':'s'}? This cannot be undone.`))return;
@@ -2033,7 +2081,7 @@ async function massDelete(){
 }
 
 // Bulk checkout
-function openBulkCheckout(){if(!selectedIds.size){toast('Select items first','warn');return;}document.getElementById('bco-who').value='';document.getElementById('bco-jobref').value='';document.getElementById('bco-return').value='';const cEl=document.getElementById('bco-count');if(cEl)cEl.textContent=selectedIds.size+' item'+(selectedIds.size===1?'':'s');openModal('bulkCheckoutModal');}
+function openBulkCheckout(){if(!CAN_CHECKOUT){toast('You do not have permission to check items out','err');return;}if(!selectedIds.size){toast('Select items first','warn');return;}document.getElementById('bco-who').value='';document.getElementById('bco-jobref').value='';document.getElementById('bco-return').value='';const cEl=document.getElementById('bco-count');if(cEl)cEl.textContent=selectedIds.size+' item'+(selectedIds.size===1?'':'s');openModal('bulkCheckoutModal');}
 async function confirmBulkCheckout(){
   const who=document.getElementById('bco-who').value.trim();
   if(!who){toast('Name/initials required','warn');return;}
@@ -2044,6 +2092,7 @@ async function confirmBulkCheckout(){
   else toast(res.msg||'Error','err');
 }
 async function bulkCheckin(){
+  if(!CAN_CHECKOUT){toast('You do not have permission to check items in','err');return;}
   const n=selectedIds.size;if(!n)return;
   if(!confirm(`Check in ${n} selected item${n===1?'':'s'}?`))return;
   const res=await api('/api/items/bulk-checkin',{ids:[...selectedIds]});
@@ -2052,6 +2101,7 @@ async function bulkCheckin(){
 }
 // Bulk edit
 function openBulkEdit(){
+  if(!CAN_WRITE_ITEMS){toast('You do not have permission to edit items','err');return;}
   if(!selectedIds.size){toast('Select items first','warn');return;}
   document.getElementById('be-condition').value='';
   document.getElementById('be-shelf').value='';
@@ -2082,6 +2132,7 @@ async function confirmBulkEdit(){
 }
 // Clone
 async function cloneItem(id){
+  if(!CAN_WRITE_ITEMS){toast('You do not have permission to clone items','err');return;}
   const item=allItems.find(i=>i.id===id);
   closeDetail();
   closeModal('itemModal');
