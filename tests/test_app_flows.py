@@ -328,6 +328,41 @@ def test_product_category_is_inherited_when_item_payload_omits_category(app, ten
     assert legacy["product_category_id"] == category_id
 
 
+def test_data_repair_backfills_existing_item_category_from_product(app, tenant):
+    from app.schema import _run_data_repairs
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Repair Product Category", "#abcdef"],
+    ).lastrowid
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,active,created_at) VALUES (?,?,1,datetime('now'))",
+        ["Repair Category Product", category_id],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (name,product_id,category_id,active,created_at) "
+        "VALUES (?,?,NULL,1,datetime('now'))",
+        ["Repair Missing Category Item", product_id],
+    ).lastrowid
+    db.execute("DELETE FROM settings WHERE key='repair_items_category_from_product_v1'")
+    db.commit()
+
+    _run_data_repairs(db)
+    db.commit()
+
+    saved_category_id = db.execute(
+        "SELECT category_id FROM items WHERE id=?", [item_id]
+    ).fetchone()[0]
+    repair_flag = db.execute(
+        "SELECT value FROM settings WHERE key='repair_items_category_from_product_v1'"
+    ).fetchone()[0]
+    db.close()
+
+    assert saved_category_id == category_id
+    assert repair_flag == "1"
+
+
 def test_admin_add_user_reports_invite_email_failure(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302

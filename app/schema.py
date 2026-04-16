@@ -181,6 +181,8 @@ def run_migrations_only():
                 PRIMARY KEY (user_id, location_id)
             );
         """)
+        _run_data_repairs(db)
+        db.commit()
     except Exception:
         pass
 
@@ -730,6 +732,7 @@ def _init_db_conn(db):
     # (e.g. shopify_status). If we created indexes first, fresh tenant DBs would
     # crash on init with "no such column: shopify_status".
     _run_migrations(db)
+    _run_data_repairs(db)
 
     # ── Indexes ────────────────────────────────────────────────────────────────
     db.executescript("""
@@ -778,6 +781,39 @@ def _run_migrations(db):
                 import logging
                 logging.getLogger(__name__).warning(
                     f"Migration failed: ALTER TABLE {table} ADD COLUMN {column} — {e}")
+
+
+def _run_data_repairs(db):
+    """One-time safe data repairs for legacy rows that newer code now prevents."""
+    key = "repair_items_category_from_product_v1"
+    try:
+        done = db.execute("SELECT value FROM settings WHERE key=?", [key]).fetchone()
+        if done:
+            return
+        db.execute("""
+            UPDATE items
+            SET category_id = (
+                SELECT p.category_id
+                FROM products p
+                WHERE p.id = items.product_id
+            )
+            WHERE product_id IS NOT NULL
+              AND (
+                category_id IS NULL
+                OR category_id NOT IN (SELECT id FROM categories)
+              )
+              AND EXISTS (
+                SELECT 1
+                FROM products p
+                WHERE p.id = items.product_id
+                  AND p.category_id IS NOT NULL
+              )
+        """)
+        db.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", [key, "1"])
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"Data repair failed: {key} - {e}")
 
 
 def seed_tenant(slug):
