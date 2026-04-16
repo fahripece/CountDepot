@@ -784,13 +784,10 @@ def _run_migrations(db):
 
 
 def _run_data_repairs(db):
-    """One-time safe data repairs for legacy rows that newer code now prevents."""
-    key = "repair_items_category_from_product_v1"
+    """Safe data repairs for legacy rows that newer code now prevents."""
+    key = "repair_items_category_from_product_v2"
     try:
-        done = db.execute("SELECT value FROM settings WHERE key=?", [key]).fetchone()
-        if done:
-            return
-        db.execute("""
+        cur = db.execute("""
             UPDATE items
             SET category_id = (
                 SELECT p.category_id
@@ -809,7 +806,10 @@ def _run_data_repairs(db):
                   AND p.category_id IS NOT NULL
               )
         """)
-        db.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", [key, "1"])
+        db.execute(
+            "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
+            [key, str(cur.rowcount if cur.rowcount is not None else 0)],
+        )
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(

@@ -345,7 +345,9 @@ def test_data_repair_backfills_existing_item_category_from_product(app, tenant):
         "VALUES (?,?,NULL,1,datetime('now'))",
         ["Repair Missing Category Item", product_id],
     ).lastrowid
-    db.execute("DELETE FROM settings WHERE key='repair_items_category_from_product_v1'")
+    db.execute(
+        "INSERT OR REPLACE INTO settings (key,value) VALUES ('repair_items_category_from_product_v2','0')"
+    )
     db.commit()
 
     _run_data_repairs(db)
@@ -355,12 +357,66 @@ def test_data_repair_backfills_existing_item_category_from_product(app, tenant):
         "SELECT category_id FROM items WHERE id=?", [item_id]
     ).fetchone()[0]
     repair_flag = db.execute(
-        "SELECT value FROM settings WHERE key='repair_items_category_from_product_v1'"
+        "SELECT value FROM settings WHERE key='repair_items_category_from_product_v2'"
     ).fetchone()[0]
     db.close()
 
     assert saved_category_id == category_id
     assert repair_flag == "1"
+
+
+def test_product_category_edit_updates_existing_items(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    old_category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Old Product Category", "#111111"],
+    ).lastrowid
+    new_category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["New Product Category", "#222222"],
+    ).lastrowid
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,require_internal_sku,active,created_at) "
+        "VALUES (?,?,1,1,datetime('now'))",
+        ["Moved Category Product", old_category_id],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (name,product_id,category_id,active,created_at) "
+        "VALUES (?,?,?,1,datetime('now'))",
+        ["Moved Category Item", product_id, old_category_id],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/product/edit",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "id": product_id,
+            "name": "Moved Category Product",
+            "category_id": new_category_id,
+            "require_internal_sku": 1,
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_product_edit())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+
+    db = sqlite3.connect(tenant["db_path"])
+    item_category_id = db.execute(
+        "SELECT category_id FROM items WHERE id=?", [item_id]
+    ).fetchone()[0]
+    db.close()
+    assert item_category_id == new_category_id
 
 
 def test_admin_add_user_reports_invite_email_failure(app, tenant):

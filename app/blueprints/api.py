@@ -3022,6 +3022,9 @@ def api_product_edit():
          int(d.get("low_stock_threshold", 0)) if d.get("low_stock_threshold") not in (None, "") else 0,
          d.get("vendor_sku") or None,
          d["id"]])
+    if d.get("category_id") not in (None, ""):
+        execute("UPDATE items SET category_id=? WHERE product_id=? AND active=1",
+                [d.get("category_id"), d["id"]])
     resync = _resync_completion_tasks("product_id=?", [d["id"]])
     log_action("PRODUCT_EDIT", detail=f"Edited product: {d['name']}")
     return jsonify({"ok": True, "resynced": resync, "product": _product_response_row(d["id"])})
