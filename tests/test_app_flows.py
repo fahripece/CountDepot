@@ -702,6 +702,56 @@ def test_bulk_clone_handles_legacy_null_numeric_fields(app, tenant):
     assert all(json.loads(r["extra_fields"]) == {"asset_tag": "AT-100"} for r in rows)
 
 
+def test_inventory_load_handles_double_encoded_extra_fields(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Double Encoded Category", "#ffffff"],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO category_fields (category_id,field_label,field_key,field_type,required,sort_order) "
+        "VALUES (?,?,?,?,1,1)",
+        [category_id, "Asset Tag", "asset_tag", "text"],
+    )
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,require_serial,active,created_at) "
+        "VALUES (?,?,1,1,'2026-01-01 00:00:00')",
+        ["Double Encoded Product", category_id],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO items (name,product_id,category_id,serial,shelf,cost_price,extra_fields,active,created_at) "
+        "VALUES (?,?,?,?,?,?,?,1,'2026-01-01 00:00:00')",
+        [
+            "Double Encoded Product",
+            product_id,
+            category_id,
+            "DE-001",
+            "DE-A",
+            10.0,
+            json.dumps(json.dumps({"asset_tag": "AT-200"})),
+        ],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/items",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        response = _as_response(app, app.preprocess_request() or api_items())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    rows = [row for row in data["items"] if row["serial"] == "DE-001"]
+    assert len(rows) == 1
+    assert rows[0]["is_incomplete"] is False
+
+
 def test_bulk_edit_can_update_cost_and_sale_prices(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302

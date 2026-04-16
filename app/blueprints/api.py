@@ -288,13 +288,14 @@ def _coerce_int(value, default=0):
 
 
 def _normalize_extra_fields(raw):
-    if isinstance(raw, str):
+    for _ in range(2):
+        if not isinstance(raw, str):
+            break
         try:
-            parsed = json.loads(raw or "{}")
-            return parsed if isinstance(parsed, dict) else {}
+            raw = json.loads(raw or "{}")
         except Exception:
             return {}
-    return raw or {}
+    return raw if isinstance(raw, dict) else {}
 
 
 def _save_item(d, iid=None):

@@ -427,10 +427,14 @@ def incomplete_cost_required():
 def _extra_fields_dict(raw):
     if isinstance(raw, dict):
         return raw
-    try:
-        return json.loads(raw or "{}")
-    except Exception:
-        return {}
+    for _ in range(2):
+        if not isinstance(raw, str):
+            break
+        try:
+            raw = json.loads(raw or "{}")
+        except Exception:
+            return {}
+    return raw if isinstance(raw, dict) else {}
 
 
 def _value_missing(value, field_type="text"):
