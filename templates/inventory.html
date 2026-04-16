@@ -617,7 +617,7 @@
         <div id="bulkCloneCount" style="font-size:11px;color:#64748b;margin-top:6px">0 serials ready</div>
       </div>
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer bulk-clone-footer">
       <button class="btn btn-secondary" onclick="closeModal('bulkCloneModal')">Cancel</button>
       <button class="btn btn-secondary" onclick="confirmOneClone()">Create One Clone</button>
       <button class="btn btn-primary" onclick="confirmBulkClone()">Create Bulk Clones</button>
@@ -814,6 +814,8 @@
 .lineage-link:hover{background:#dbeafe}
 .product-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:4px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
 .tag-incomplete{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600;padding:1px 7px;border-radius:4px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;margin-left:6px;cursor:help}
+.bulk-clone-footer{display:flex;flex-wrap:wrap;gap:8px}
+.bulk-clone-footer .btn{flex:1 1 140px;min-width:0;justify-content:center}
 .detail#detailPanel .detail-inner{width:min(1040px,calc(100vw - 48px));max-height:calc(100vh - 48px)}
 .detail#detailPanel .detail-body{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;overflow:auto}
 #dp-fields,#dp-notes-section,#dp-photos-section,#dp-timeline-section{grid-column:1}
