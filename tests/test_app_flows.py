@@ -20,6 +20,7 @@ from app.blueprints.api import (
     api_qty_adjust,
     api_user_add,
     api_user_invite,
+    api_user_permissions,
 )
 
 
@@ -802,6 +803,78 @@ def test_bulk_edit_can_update_cost_and_sale_prices(app, tenant):
     assert all(row["cost_price"] == 12.5 for row in rows)
     assert all(row["sale_price"] == 20.0 for row in rows)
     assert all(task["status"] == "done" for task in tasks)
+
+
+def test_permission_changes_apply_to_active_worker_session(app, tenant):
+    admin_response, admin_session = _login(app, tenant)
+    assert admin_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Permission Refresh Category", "#ffffff"],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (name,category_id,serial,shelf,active,created_at) "
+        "VALUES (?,?,?,?,1,'2026-01-01 00:00:00')",
+        ["Permission Refresh Item", category_id, "PERM-001", "OLD"],
+    ).lastrowid
+    worker_id = db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,1,0)",
+        [
+            "perm.worker@example.com",
+            hash_pw("Password1!"),
+            "worker",
+            "view_inventory",
+            "perm.worker@example.com",
+        ],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    worker_response, worker_session = _login(
+        app, tenant, "perm.worker@example.com", "Password1!"
+    )
+    assert worker_response.status_code == 302
+    assert worker_session["permissions"] == "view_inventory"
+
+    with app.test_request_context(
+        "/api/user/permissions",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"id": worker_id, "permissions": ["view_inventory", "write_items"]},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(admin_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_user_permissions())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+
+    with app.test_request_context(
+        "/api/items/bulk-edit",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"ids": [item_id], "shelf": "NEW"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(worker_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_bulk_edit())
+        data = response.get_json()
+        refreshed_permissions = session["permissions"]
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert "write_items" in refreshed_permissions.split(",")
+
+    db = sqlite3.connect(tenant["db_path"])
+    shelf = db.execute("SELECT shelf FROM items WHERE id=?", [item_id]).fetchone()[0]
+    db.close()
+    assert shelf == "NEW"
 
 
 def test_incomplete_cost_requirement_can_be_disabled(app, tenant):

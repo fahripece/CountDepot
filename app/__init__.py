@@ -219,13 +219,30 @@ def create_app():
             return redirect(url_for("auth.login_page"))
 
         # Verify session token — catches force-logged-out users
-        db_tok = query("SELECT session_token FROM users WHERE id=?",
-                       [session["user_id"]], one=True)
-        if not db_tok or db_tok["session_token"] != session.get("session_token"):
+        db_user = query(
+            "SELECT id, username, role, permissions, must_change_password, session_token "
+            "FROM users WHERE id=?",
+            [session["user_id"]],
+            one=True,
+        )
+        if not db_user or db_user["session_token"] != session.get("session_token"):
             session.clear()
             if request.path.startswith("/api/") or request.is_json:
                 return jsonify({"ok": False, "msg": "Session invalidated"}), 401
             return redirect(url_for("auth.login_page"))
+
+        # Keep active sessions in sync with admin permission/site changes.
+        from app.helpers import get_user_perms, get_user_location_ids
+        perms = get_user_perms(
+            db_user["id"],
+            db_user["role"],
+            db_user["permissions"] if "permissions" in db_user.keys() else "",
+        )
+        session["username"] = db_user["username"]
+        session["role"] = db_user["role"]
+        session["permissions"] = ",".join(perms)
+        session["must_change_password"] = bool(db_user["must_change_password"])
+        session["location_ids"] = get_user_location_ids(db_user["id"], db_user["role"])
 
         # Force password change on first login — block API too
         if session.get("must_change_password"):
