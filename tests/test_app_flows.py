@@ -21,6 +21,7 @@ from app.blueprints.api import (
     api_user_add,
     api_user_invite,
     api_user_permissions,
+    api_set_user_locations,
 )
 
 
@@ -875,6 +876,64 @@ def test_permission_changes_apply_to_active_worker_session(app, tenant):
     shelf = db.execute("SELECT shelf FROM items WHERE id=?", [item_id]).fetchone()[0]
     db.close()
     assert shelf == "NEW"
+
+
+def test_location_changes_do_not_force_logout_active_worker(app, tenant):
+    admin_response, admin_session = _login(app, tenant)
+    assert admin_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    loc_id = db.execute(
+        "INSERT INTO locations (name,created_at) VALUES (?,datetime('now'))",
+        ["Worker Site"],
+    ).lastrowid
+    worker_id = db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,1,0)",
+        [
+            "site.worker@example.com",
+            hash_pw("Password1!"),
+            "worker",
+            "view_inventory",
+            "site.worker@example.com",
+        ],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    worker_response, worker_session = _login(
+        app, tenant, "site.worker@example.com", "Password1!"
+    )
+    assert worker_response.status_code == 302
+
+    with app.test_request_context(
+        f"/api/user/{worker_id}/locations",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"location_ids": [loc_id]},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(admin_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_set_user_locations(worker_id))
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+
+    with app.test_request_context(
+        "/api/items",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(worker_session)
+        response = _as_response(app, app.preprocess_request() or api_items())
+        data = response.get_json()
+        refreshed_locations = session["location_ids"]
+
+    assert response.status_code == 200
+    assert "items" in data
+    assert refreshed_locations == [loc_id]
 
 
 def test_incomplete_cost_requirement_can_be_disabled(app, tenant):
