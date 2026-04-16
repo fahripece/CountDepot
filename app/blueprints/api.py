@@ -2899,14 +2899,39 @@ def api_shopify_sync_orders():
 
 # ── Products ──────────────────────────────────────────────────────────────────
 
+def _product_response_row(product_id):
+    row = query("""
+        SELECT p.*, c.name as category_name, c.color as category_color,
+               COALESCE(ic.item_count, 0) as item_count
+        FROM products p
+        LEFT JOIN categories c ON c.id=p.category_id
+        LEFT JOIN (
+            SELECT product_id, COUNT(*) as item_count
+            FROM items
+            WHERE active=1
+            GROUP BY product_id
+        ) ic ON ic.product_id=p.id
+        WHERE p.id=?
+    """, [product_id], one=True)
+    return dict(row) if row else None
+
+
 @bp.route("/api/products")
 @login_required
 def api_products():
     q   = request.args.get("q", "")
     cat = request.args.get("cat", "")
     sql = """SELECT p.*, c.name as category_name, c.color as category_color,
-                    (SELECT COUNT(*) FROM items i WHERE i.product_id=p.id AND i.active=1) as item_count
-             FROM products p LEFT JOIN categories c ON c.id=p.category_id WHERE p.active=1"""
+                    COALESCE(ic.item_count, 0) as item_count
+             FROM products p
+             LEFT JOIN categories c ON c.id=p.category_id
+             LEFT JOIN (
+                SELECT product_id, COUNT(*) as item_count
+                FROM items
+                WHERE active=1
+                GROUP BY product_id
+             ) ic ON ic.product_id=p.id
+             WHERE p.active=1"""
     args = []
     if q:
         sql += " AND (p.name LIKE ? OR p.manufacturer LIKE ? OR p.model LIKE ?)"
@@ -2947,7 +2972,7 @@ def api_product_add():
              int(d.get("low_stock_threshold", 0)) if d.get("low_stock_threshold") not in (None, "") else 0,
              d.get("vendor_sku") or None, now])
         log_action("PRODUCT_ADD", detail=f"Added product: {d['name']}")
-        return jsonify({"ok": True, "id": pid})
+        return jsonify({"ok": True, "id": pid, "product": _product_response_row(pid)})
     except Exception as e:
         return jsonify({"ok": False, "msg": str(e)})
 
@@ -2981,7 +3006,7 @@ def api_product_edit():
          d["id"]])
     resync = _resync_completion_tasks("product_id=?", [d["id"]])
     log_action("PRODUCT_EDIT", detail=f"Edited product: {d['name']}")
-    return jsonify({"ok": True, "resynced": resync})
+    return jsonify({"ok": True, "resynced": resync, "product": _product_response_row(d["id"])})
 
 
 @bp.route("/api/product/delete", methods=["POST"])
@@ -3024,7 +3049,7 @@ def api_product_to_item():
 
 @bp.route("/api/category/add", methods=["POST"])
 @login_required
-@admin_required
+@perm_required("write_items")
 def api_cat_add():
     d = request.json
     try:
@@ -3038,7 +3063,7 @@ def api_cat_add():
 
 @bp.route("/api/category/edit", methods=["POST"])
 @login_required
-@admin_required
+@perm_required("write_items")
 def api_cat_edit():
     d = request.json
     execute("UPDATE categories SET name=?,color=?,is_expense=? WHERE id=?",
@@ -3049,7 +3074,7 @@ def api_cat_edit():
 
 @bp.route("/api/category/delete", methods=["POST"])
 @login_required
-@admin_required
+@perm_required("delete_items")
 def api_cat_delete():
     d          = request.json
     item_count = query("SELECT COUNT(*) FROM items WHERE category_id=? AND active=1", [d["id"]], one=True)[0]
@@ -3081,7 +3106,7 @@ def api_category_fields():
 
 @bp.route("/api/category/fields/save", methods=["POST"])
 @login_required
-@admin_required
+@perm_required("write_items")
 def api_category_fields_save():
     d      = request.json
     cat_id = d.get("category_id")

@@ -271,6 +271,7 @@ def checkout_page():
 
 @bp.route("/categories")
 @login_required
+@perm_required("write_items")
 def categories_page():
     cats = [dict(r) for r in query("SELECT * FROM categories ORDER BY name")]
     for cat in cats:
@@ -364,6 +365,7 @@ def admin_page():
 
 @bp.route("/contacts")
 @login_required
+@perm_required("write_items")
 def contacts_page():
     return render_template("contacts.html",
         companies    = [dict(r) for r in query("SELECT * FROM companies WHERE active=1 ORDER BY name")],
@@ -379,6 +381,7 @@ def todo_page():
 
 @bp.route("/products")
 @login_required
+@perm_required("write_items")
 def products_page():
     return render_template("products.html",
         categories      = [dict(r) for r in query("SELECT * FROM categories ORDER BY name")],

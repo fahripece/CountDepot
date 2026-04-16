@@ -7,14 +7,16 @@ from flask import session
 from config import Config
 from app.helpers import PERM_KEYS, hash_pw
 from app.blueprints.auth import login_page
-from app.blueprints.main import admin_page, inventory
+from app.blueprints.main import admin_page, categories_page, inventory, products_page
 from app.blueprints.api import (
     api_add_reservation,
+    api_cat_add,
     api_category_fields_save,
     api_item_add,
     api_items,
     api_product_edit,
     api_product_add,
+    api_products,
     api_items_bulk_serial_add,
     api_item_bulk_clone,
     api_bulk_edit,
@@ -132,6 +134,8 @@ def test_admin_can_create_product_and_item_and_fetch_inventory(app, tenant):
 
     assert product_response.status_code == 200
     assert product_data["ok"] is True
+    assert product_data["product"]["id"] == product_data["id"]
+    assert product_data["product"]["item_count"] == 0
 
     with app.test_request_context(
         "/api/item/add",
@@ -153,6 +157,21 @@ def test_admin_can_create_product_and_item_and_fetch_inventory(app, tenant):
 
     assert item_response.status_code == 200
     assert item_data["ok"] is True
+
+    with app.test_request_context(
+        "/api/products",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        products_response = _as_response(app, app.preprocess_request() or api_products())
+        products = products_response.get_json()
+
+    assert products_response.status_code == 200
+    assert any(
+        product["id"] == product_data["id"] and product["item_count"] == 1
+        for product in products
+    )
 
     with app.test_request_context(
         "/api/items?q=Roadmap%20Test&hide_out=0",
@@ -1061,6 +1080,112 @@ def test_full_permission_worker_sees_relevant_settings_nav(app, tenant):
     assert ">Importer<" in html
     assert "Users &amp; Permissions" not in html
     assert ">Billing<" not in html
+
+
+def test_write_items_worker_can_manage_categories_and_add_products(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    worker_id = db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,1,0)",
+        [
+            "product.manager@example.com",
+            hash_pw("Password1!"),
+            "worker",
+            "view_inventory,write_items",
+            "product.manager@example.com",
+        ],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(
+        app, tenant, "product.manager@example.com", "Password1!"
+    )
+    assert response.status_code == 302
+    assert saved_session["user_id"] == worker_id
+
+    with app.test_request_context(
+        "/categories",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        html = app.preprocess_request() or categories_page()
+
+    assert "+ New Category" in html
+    assert "Fields" in html
+
+    with app.test_request_context(
+        "/api/category/add",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"name": "Worker Product Category", "color": "#ffffff"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        cat_response = _as_response(app, app.preprocess_request() or api_cat_add())
+        cat_data = cat_response.get_json()
+
+    assert cat_response.status_code == 200
+    assert cat_data["ok"] is True
+    category_id = cat_data["id"]
+
+    with app.test_request_context(
+        "/api/category/fields/save",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "category_id": category_id,
+            "fields": [
+                {
+                    "field_label": "Asset Tag",
+                    "field_key": "asset_tag",
+                    "field_type": "text",
+                    "required": 1,
+                }
+            ],
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        fields_response = _as_response(
+            app, app.preprocess_request() or api_category_fields_save()
+        )
+        fields_data = fields_response.get_json()
+
+    assert fields_response.status_code == 200
+    assert fields_data["ok"] is True
+
+    with app.test_request_context(
+        "/products",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        html = app.preprocess_request() or products_page()
+
+    assert "+ New Product" in html
+
+    with app.test_request_context(
+        "/api/product/add",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "name": "Worker Created Product",
+            "category_id": category_id,
+            "require_internal_sku": 1,
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        product_response = _as_response(app, app.preprocess_request() or api_product_add())
+        product_data = product_response.get_json()
+
+    assert product_response.status_code == 200
+    assert product_data["ok"] is True
 
 
 def test_incomplete_cost_requirement_can_be_disabled(app, tenant):

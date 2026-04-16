@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Categories · CountDepot{% endblock %}
 {% block content %}
+{% set user_perms = (session.get('permissions') or '').split(',') %}
+{% set can_write_items = session.get('role') == 'admin' or 'write_items' in user_perms %}
+{% set can_delete_items = session.get('role') == 'admin' or 'delete_items' in user_perms %}
 <div class="topbar">
   <span class="topbar-title">Categories</span>
   <span class="topbar-sub" style="margin-left:6px">{{ categories|length }} total</span>
   <div class="topbar-right">
-    {% if session.get('role') == 'admin' %}
+    {% if can_write_items %}
     <button class="btn btn-primary btn-sm" onclick="openAddCat()">+ New Category</button>
     {% endif %}
   </div>
@@ -33,11 +36,13 @@
             <div style="font-size:11.5px;color:var(--muted);margin-top:2px">{{ cat.item_count }} item{{ 's' if cat.item_count != 1 }} · {{ cat.product_count or 0 }} product{{ 's' if (cat.product_count or 0) != 1 }}</div>
           </div>
         </div>
-        {% if session.get('role') == 'admin' %}
+        {% if can_write_items %}
         <div style="display:flex;gap:6px">
           <button class="btn btn-secondary btn-sm" onclick="openEditCat({{ cat.id }},'{{ cat.name|replace("'","\\'") }}','{{ cat.color or "#ffffff" }}',{{ cat.is_expense or 0 }})">Edit</button>
           <button class="btn btn-secondary btn-sm" onclick="openFieldEditor({{ cat.id }},'{{ cat.name|replace("'","\\'") }}')">&#9881; Fields</button>
+          {% if can_delete_items %}
           <button class="btn btn-danger btn-sm" onclick="deleteCat({{ cat.id }},'{{ cat.name|replace("'","\\'") }}',{{ cat.item_count }})">Delete</button>
+          {% endif %}
         </div>
         {% endif %}
       </div>
@@ -53,7 +58,7 @@
           {% endfor %}
         </div>
         {% else %}
-        <div style="font-size:12px;color:#bbb;font-style:italic">No fields defined{% if session.get('role') == 'admin' %} — click &#9881; Fields to add some{% endif %}</div>
+        <div style="font-size:12px;color:#bbb;font-style:italic">No fields defined{% if can_write_items %} - click &#9881; Fields to add some{% endif %}</div>
         {% endif %}
       </div>
     </div>
