@@ -1,7 +1,8 @@
 import html
 import json
 import re
-from flask import Blueprint, render_template, request, session, redirect, url_for, jsonify
+from flask import (Blueprint, render_template, request, session, redirect, url_for,
+                   jsonify, current_app, make_response, send_from_directory)
 
 from datetime import datetime
 
@@ -64,6 +65,24 @@ def health():
         checks["backup"] = f"error: {e}"
 
     return jsonify({"ok": ok, "service": "countdepot", "checks": checks}), 200 if ok else 503
+
+
+@bp.route("/manifest.webmanifest")
+def web_manifest():
+    return send_from_directory(
+        current_app.static_folder,
+        "manifest.webmanifest",
+        mimetype="application/manifest+json",
+    )
+
+
+@bp.route("/sw.js")
+def service_worker():
+    response = make_response(send_from_directory(current_app.static_folder, "sw.js"))
+    response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @bp.route("/api-docs")
@@ -221,6 +240,15 @@ def inventory():
         category_fields = _cat_fields(),
         products     = _products_list(),
         user_perms   = list(session.get("permissions", "").split(",")))
+
+
+@bp.route("/mobile")
+@login_required
+def mobile_app():
+    return render_template("mobile.html",
+        categories=query("SELECT * FROM categories ORDER BY name"),
+        products=_products_list(),
+        user_perms=list(session.get("permissions", "").split(",")))
 
 
 @bp.route("/add-item")

@@ -111,6 +111,9 @@ def create_app():
                 or request.path == "/_health"
                 or request.path == "/_stripe/webhook"
                 or request.path == "/api/demo-request"
+                or request.path == "/manifest.webmanifest"
+                or request.path == "/sw.js"
+                or request.path.startswith("/static/")
                 or request.path.startswith("/signup")
                 or request.path.startswith("/verify-signup")
                 or request.path == "/resend-signup-verify"

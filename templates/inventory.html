@@ -2081,6 +2081,8 @@ async function confirmBulkEdit(){
 // Clone
 async function cloneItem(id){
   const item=allItems.find(i=>i.id===id);
+  closeDetail();
+  closeModal('itemModal');
   document.getElementById('bulkCloneItemId').value=id;
   document.getElementById('bulkCloneName').textContent=item?`${item.name}${item.serial?' - '+item.serial:''}`:`Item #${id}`;
   document.getElementById('bulkCloneSerials').value='';

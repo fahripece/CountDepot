@@ -890,6 +890,36 @@ def test_quantity_use_for_reservation_fulfills_remaining_units(app, tenant):
     assert row == (0, 1)
 
 
+def test_quantity_mobile_return_reduces_checked_out_units(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    item_id = db.execute(
+        "INSERT INTO items (name,category_id,qty,qty_out,active,created_at) VALUES (?,?,?,?,1,datetime('now'))",
+        ["Mobile Qty Return", 1, 10, 4],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/qty_adjust",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"id": item_id, "action": "return", "amount": 3, "note": "Mobile check-in"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_qty_adjust())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["qty"] == 10
+    assert data["qty_out"] == 1
+
+
 def test_viewer_cannot_add_items(app, tenant):
     db = sqlite3.connect(tenant["db_path"])
     db.execute(
@@ -955,6 +985,23 @@ def test_public_demo_request_skips_csrf_and_bare_domain_landing(app):
     db.close()
 
     assert tuple(row) == ("Fahri Pece", "DSSIT", "fpece@dssitny.com", "1-10 people")
+
+
+def test_mobile_app_assets_are_public_on_bare_domain(app):
+    client = app.test_client()
+
+    manifest = client.get("/manifest.webmanifest", base_url="http://countdepot.com")
+    assert manifest.status_code == 200
+    assert manifest.get_json()["short_name"] == "CountDepot"
+
+    sw = client.get("/sw.js", base_url="http://countdepot.com")
+    assert sw.status_code == 200
+    assert sw.headers["Service-Worker-Allowed"] == "/"
+    assert "countdepot-mobile" in sw.get_data(as_text=True)
+
+    icon = client.get("/static/icons/icon.svg", base_url="http://countdepot.com")
+    assert icon.status_code == 200
+    assert "image/svg" in icon.headers["Content-Type"]
 
 
 def test_demo_request_email_goes_to_platform_admin(app, monkeypatch):
@@ -1111,6 +1158,7 @@ def test_core_authenticated_pages_render(app, tenant):
         "/api-docs",
         "/webhooks",
         "/billing",
+        "/mobile",
     ]
 
     for path in paths:

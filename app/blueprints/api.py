@@ -1839,6 +1839,13 @@ def api_qty_adjust():
         u  = query("SELECT qty, qty_out FROM items WHERE id=?", [item["id"]], one=True)
         log_action("QTY_REMOVE", item["id"], item["name"], f"-{amount}. {note}. Left:{u['qty']-(u['qty_out'] or 0)}", before, {"qty_out": u["qty_out"]})
         notify_low_stock_if_needed(item.get("product_id"))
+    elif action == "return":
+        current_out = int(item["qty_out"] or 0)
+        if amount > current_out:
+            return jsonify({"ok": False, "msg": f"Only {current_out} unit(s) are checked out"})
+        execute("UPDATE items SET qty_out=MAX(0, qty_out-?) WHERE id=?", [amount, item["id"]])
+        u = query("SELECT qty, qty_out FROM items WHERE id=?", [item["id"]], one=True)
+        log_action("QTY_RETURN", item["id"], item["name"], f"+{amount} returned. {note}. Out:{u['qty_out']}", before, {"qty_out": u["qty_out"]})
     elif action == "set":
         execute("UPDATE items SET qty=?,qty_out=0 WHERE id=?", [amount, item["id"]])
         log_action("QTY_SET", item["id"], item["name"], f"Set to {amount}. {note}", before, {"qty": amount})

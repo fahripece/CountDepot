@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}Mobile Scanner · CountDepot{% endblock %}
+{% block content %}
+<main class="m-app">
+  <header class="m-head">
+    <div>
+      <div class="m-kicker">Worker scanner</div>
+      <h1>CountDepot Mobile</h1>
+      <p>Scan, check in/out, reserve, and add field inventory.</p>
+    </div>
+    <a class="m-logout" href="/logout">Sign out</a>
+  </header>
+
+  <section class="m-scan">
+    <button class="m-scan-btn" onclick="scanWithCamera()">Scan Barcode</button>
+    <div class="m-search">
+      <input id="mQuery" placeholder="Scan or search serial, SKU, item name..." autocomplete="off" onkeydown="if(event.key==='Enter')lookupInput()">
+      <button onclick="lookupInput()">Find</button>
+    </div>
+  </section>
+
+  <section class="m-tabs" role="tablist">
+    <button class="active" data-tab="lookup" onclick="setTab('lookup')">Item</button>
+    <button data-tab="reserve" onclick="setTab('reserve')">Reserve</button>
+    <button data-tab="add" onclick="setTab('add')">Add</button>
+    <button data-tab="active" onclick="setTab('active')">Active</button>
+  </section>
+
+  <section class="m-panel" id="lookupPanel">
+    <div id="mResult" class="m-empty">Scan or search an item to start.</div>
+  </section>
+
+  <section class="m-panel" id="reservePanel" hidden>
+    <h2>Create Reservation</h2>
+    <div id="reserveItemLabel" class="m-note">Scan or search an item first, then reserve it.</div>
+    <div class="m-grid">
+      <label>Reserved for<input id="resBy" placeholder="Person, team, customer"></label>
+      <label>Quantity<input id="resQty" type="number" min="1" value="1"></label>
+      <label>From<input id="resFrom" type="date"></label>
+      <label>To<input id="resTo" type="date"></label>
+    </div>
+    <label>Reason / title<input id="resPurpose" placeholder="Install, job, customer, project"></label>
+    <button class="m-primary" onclick="createReservation()">Reserve Item</button>
+  </section>
+
+  <section class="m-panel" id="addPanel" hidden>
+    <h2>Add Item</h2>
+    <label>Product
+      <select id="addProduct" onchange="fillProductName()">
+        <option value="">No product / custom item</option>
+        {% for p in products %}
+        <option value="{{ p.id }}" data-name="{{ p.name }}" data-category="{{ p.category_id or '' }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Item name<input id="addName" placeholder="Item name"></label>
+    <div class="m-grid">
+      <label>Serial #<input id="addSerial" placeholder="Scan or type serial"></label>
+      <label>Vendor SKU<input id="addSku" placeholder="Optional"></label>
+      <label>Shelf / bin<input id="addShelf" placeholder="A-12"></label>
+      <label>Quantity<input id="addQty" type="number" min="1" placeholder="Leave blank for single item"></label>
+    </div>
+    <label>Category
+      <select id="addCategory">
+        <option value="">No category</option>
+        {% for c in categories %}
+        <option value="{{ c.id }}">{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="m-primary" onclick="addItem()">Add Inventory</button>
+  </section>
+
+  <section class="m-panel" id="activePanel" hidden>
+    <div class="m-row-head">
+      <h2>Active Reservations</h2>
+      <button class="m-lite" onclick="loadReservations()">Refresh</button>
+    </div>
+    <div id="activeReservations" class="m-empty">Loading...</div>
+  </section>
+</main>
+
+<div class="m-actionbar" id="actionBar" hidden>
+  <button onclick="confirmCheckout()">Check Out</button>
+  <button onclick="confirmCheckin()">Check In</button>
+  <button onclick="setTab('reserve')">Reserve</button>
+</div>
+
+<style>
+body:has(.m-app) .sidebar,body:has(.m-app) .mob-sidebar-overlay,body:has(.m-app) .mob-sidebar{display:none!important}
+body:has(.m-app) .layout{display:block;height:auto;min-height:100vh}
+body:has(.m-app) .main{display:block;min-height:100vh;overflow:visible}
+body:has(.m-app){background:#eef2f7}
+.m-app{min-height:100vh;padding:18px 14px 92px;background:radial-gradient(circle at 20% -10%,rgba(100,66,214,.2),transparent 34%),linear-gradient(180deg,#f8fafc,#eef2f7)}
+.m-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:16px}
+.m-kicker{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:900;color:#6442d6}
+.m-head h1{font-family:var(--font-display);font-size:28px;line-height:1;margin:3px 0 6px;color:#111827}
+.m-head p{font-size:13px;color:#64748b;margin:0;max-width:260px}
+.m-logout{font-size:12px;font-weight:800;color:#dc2626;background:#fff;border:1px solid #fecaca;border-radius:999px;padding:8px 11px;box-shadow:var(--shadow-1)}
+.m-scan{background:#111827;color:#fff;border-radius:26px;padding:16px;box-shadow:0 18px 44px rgba(15,23,42,.22);margin-bottom:12px}
+.m-scan-btn{width:100%;height:72px;border:0;border-radius:20px;background:#6442d6;color:#fff;font-size:22px;font-weight:900;box-shadow:0 12px 28px rgba(100,66,214,.34)}
+.m-search{display:flex;gap:8px;margin-top:12px}
+.m-search input,.m-search button,.m-panel input,.m-panel select{height:46px;border-radius:14px;border:1px solid #e2e8f0;padding:0 13px;font-size:15px;background:#fff;color:#111827}
+.m-search input{min-width:0;flex:1;background:#fff}
+.m-search button{border:0;background:#c8b3fd;color:#24145f;font-weight:900}
+.m-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px}
+.m-tabs button{height:42px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#64748b;font-weight:900}
+.m-tabs button.active{background:#111827;color:#fff;border-color:#111827}
+.m-panel{background:#fff;border:1px solid #e2e8f0;border-radius:24px;padding:16px;box-shadow:var(--shadow-1);margin-bottom:12px}
+.m-panel h2{font-size:18px;margin:0 0 12px;color:#111827}
+.m-empty,.m-note{color:#64748b;font-size:13px;line-height:1.5;text-align:center;padding:22px 8px}
+.m-card{border:1px solid #e2e8f0;border-radius:20px;padding:14px;background:#f8fafc}
+.m-title{font-size:20px;font-weight:900;color:#111827;line-height:1.1}
+.m-sub{font-size:12px;color:#64748b;margin-top:5px}
+.m-badges{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.m-badge{font-size:11px;font-weight:900;border-radius:999px;padding:5px 9px;background:#ede7ff;color:#4f2fbd}
+.m-badge.red{background:#fee2e2;color:#b91c1c}.m-badge.green{background:#dcfce7;color:#15803d}.m-badge.amber{background:#fef3c7;color:#92400e}
+.m-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.m-actions button,.m-primary,.m-lite{height:48px;border:0;border-radius:15px;font-weight:900;font-size:15px}
+.m-primary,.m-actions button:first-child{background:#6442d6;color:#fff}.m-actions button:nth-child(2),.m-lite{background:#f1f5f9;color:#111827}
+.m-actions button.warn{background:#fee2e2;color:#b91c1c}
+.m-panel label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:#64748b;font-weight:900;margin:10px 0 6px}
+.m-panel label input,.m-panel label select{display:block;width:100%;margin-top:5px;text-transform:none;letter-spacing:0;font-weight:600;color:#111827}
+.m-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.m-row-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.m-res{border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin-bottom:8px;background:#f8fafc}
+.m-res strong{display:block;color:#111827}.m-res span{display:block;color:#64748b;font-size:12px;margin-top:3px}
+.m-warn{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:16px;padding:12px;font-size:13px;font-weight:800;margin:12px 0}
+.m-actionbar{position:fixed;left:0;right:0;bottom:0;z-index:80;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.92);border-top:1px solid #e2e8f0;backdrop-filter:blur(14px)}
+.m-actionbar button{height:50px;border:0;border-radius:15px;background:#111827;color:#fff;font-weight:900}
+.m-actionbar button:nth-child(2){background:#16a34a}.m-actionbar button:nth-child(3){background:#6442d6}
+@media(min-width:760px){.m-app{max-width:560px;margin:0 auto;padding-top:28px}.m-actionbar{left:50%;transform:translateX(-50%);max-width:560px;border:1px solid #e2e8f0;border-bottom:0;border-radius:22px 22px 0 0}}
+</style>
+
+<script>
+const csrf=document.querySelector('meta[name="csrf-token"]').content;
+const userName={{ session.get('username','')|tojson }};
+let currentItem=null;
+let currentReservations=[];
+let searchResults=[];
+
+function toastMsg(msg,type='info'){ if(window.toast) toast(msg,type); else alert(msg); }
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+function today(){return new Date().toISOString().slice(0,10);}
+function setTab(tab){
+  document.querySelectorAll('.m-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  ['lookup','reserve','add','active'].forEach(id=>document.getElementById(id+'Panel').hidden=id!==tab);
+  if(tab==='active') loadReservations();
+}
+function scanWithCamera(){openCameraScanner(code=>{document.getElementById('mQuery').value=code;lookupInput();});}
+async function lookupInput(){
+  const q=document.getElementById('mQuery').value.trim();
+  if(!q){toastMsg('Scan or type something first','error');return;}
+  setTab('lookup');
+  document.getElementById('mResult').innerHTML='<div class="m-empty">Searching...</div>';
+  let r=await fetch('/api/scan?code='+encodeURIComponent(q));
+  let data=await r.json();
+  if(data.found){await selectHydratedItem(data.item);return;}
+  r=await fetch('/api/items?q='+encodeURIComponent(q)+'&hide_out=0&per_page=20');
+  data=await r.json();
+  const items=Array.isArray(data)?data:(data.items||[]);
+  if(!items.length){document.getElementById('mResult').innerHTML='<div class="m-empty">No item found.</div>';document.getElementById('actionBar').hidden=true;return;}
+  if(items.length===1){selectItem(items[0]);return;}
+  searchResults=items.slice(0,10);
+  document.getElementById('mResult').innerHTML=searchResults.map((i,idx)=>`
+    <button class="m-card" style="width:100%;text-align:left;margin-bottom:8px" onclick="selectItem(searchResults[${idx}])">
+      <div class="m-title">${esc(i.name)}</div>
+      <div class="m-sub">#${i.id} ${esc(i.serial||i.sku||i.internal_sku||'')} ${i.checked_out?' · checked out':''}</div>
+    </button>`).join('');
+}
+async function selectHydratedItem(item){
+  const r=await fetch('/api/items?q=%23'+encodeURIComponent(item.id)+'&hide_out=0');
+  const data=await r.json();
+  const rows=Array.isArray(data)?data:(data.items||[]);
+  selectItem(rows.find(x=>Number(x.id)===Number(item.id))||item);
+}
+function selectItem(item){
+  currentItem=item;
+  document.getElementById('actionBar').hidden=false;
+  document.getElementById('reserveItemLabel').textContent=`Reserving: ${item.name} (#${item.id})`;
+  const qtyTracked=item.qty!==null&&item.qty!==undefined;
+  const reserved=Number(item.reserved_qty||0);
+  const available=qtyTracked?Number(item.available ?? Math.max(0,(item.qty||0)-(item.qty_out||0)-reserved)):null;
+  const status=item.sold?'Sold':(item.checked_out?'Checked out':'Available');
+  const resWarn=reserved>0?`<div class="m-warn">Reserved: ${reserved} unit(s). If you use this, choose a reservation or override with a reason.</div>`:'';
+  document.getElementById('mResult').innerHTML=`
+    <article class="m-card">
+      <div class="m-title">${esc(item.name)}</div>
+      <div class="m-sub">#${item.id} ${esc(item.category||'')} ${esc(item.location_name||'')}</div>
+      <div class="m-badges">
+        <span class="m-badge ${item.checked_out?'red':'green'}">${status}</span>
+        ${qtyTracked?`<span class="m-badge">${available} available / ${item.qty||0} total / ${reserved} reserved</span>`:''}
+        ${item.serial?`<span class="m-badge">SN ${esc(item.serial)}</span>`:''}
+        ${item.sku?`<span class="m-badge">SKU ${esc(item.sku)}</span>`:''}
+      </div>
+      ${resWarn}
+      <div class="m-actions">
+        <button onclick="confirmCheckout()">Check Out</button>
+        <button onclick="confirmCheckin()">Check In</button>
+        <button onclick="setTab('reserve')">Reserve</button>
+        <button onclick="setTab('add')">Add Similar</button>
+      </div>
+    </article>`;
+}
+async function postJSON(url,body){
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(body)});
+  return r.json();
+}
+async function chooseReservationIfNeeded(item, qty){
+  if(!(Number(item.reserved_qty||0)>0)) return {};
+  const r=await fetch('/api/item/'+item.id+'/reservations');
+  const reservations=await r.json();
+  const active=(reservations||[]).filter(x=>!x.fulfilled&&Number(x.qty_remaining||x.qty_reserved||1)>0);
+  if(!active.length) return {};
+  const list=active.map((x,i)=>`${i+1}. ${x.reserved_by} (${x.qty_remaining||x.qty_reserved} units) ${x.reserved_from} to ${x.reserved_to}`).join('\n');
+  const choice=prompt(`This item is reserved.\n\n${list}\n\nEnter reservation number to use it, or type OVERRIDE to continue anyway.`);
+  if(!choice) throw new Error('Cancelled');
+  if(choice.toUpperCase()==='OVERRIDE'){
+    const reason=prompt('Override reason required:')||'Mobile override';
+    return {override_reservation:true, job_ref:reason, note:reason};
+  }
+  const idx=Number(choice)-1;
+  if(!active[idx]) throw new Error('Invalid reservation choice');
+  return {use_reservation:true,reservation_id:active[idx].id};
+}
+async function confirmCheckout(){
+  if(!currentItem){toastMsg('Scan an item first','error');return;}
+  const qtyTracked=currentItem.qty!==null&&currentItem.qty!==undefined;
+  const qty=qtyTracked?Number(prompt('Quantity to check out:', '1')||0):1;
+  if(qtyTracked&&qty<1)return;
+  if(!confirm(`Check out ${qtyTracked?qty+' unit(s) of ':''}${currentItem.name}?`))return;
+  try{
+    const resChoice=await chooseReservationIfNeeded(currentItem,qty);
+    const body={id:currentItem.id,who:userName,amount:qty,action:'remove',note:'Mobile checkout',...resChoice};
+    const data=qtyTracked?await postJSON('/api/qty_adjust',body):await postJSON('/api/checkout',{id:currentItem.id,who:userName,scanned_code:document.getElementById('mQuery').value,...resChoice});
+    if(!data.ok){toastMsg(data.detail||data.msg||'Checkout failed','error');return;}
+    toastMsg('Checked out','success');lookupInput();
+  }catch(e){ if(e.message!=='Cancelled') toastMsg(e.message,'error'); }
+}
+async function confirmCheckin(){
+  if(!currentItem){toastMsg('Scan an item first','error');return;}
+  const qtyTracked=currentItem.qty!==null&&currentItem.qty!==undefined;
+  const qty=qtyTracked?Number(prompt('Quantity to check in:', '1')||0):1;
+  if(qtyTracked&&qty<1)return;
+  if(!confirm(`Check in ${qtyTracked?qty+' unit(s) of ':''}${currentItem.name}?`))return;
+  const data=qtyTracked?await postJSON('/api/qty_adjust',{id:currentItem.id,amount:qty,action:'return',note:'Mobile check-in'}):await postJSON('/api/checkin',{id:currentItem.id,checkin_note:'Mobile check-in'});
+  if(!data.ok){toastMsg(data.msg||'Check-in failed','error');return;}
+  toastMsg('Checked in','success');lookupInput();
+}
+async function createReservation(){
+  if(!currentItem){toastMsg('Scan an item first','error');return;}
+  const from=document.getElementById('resFrom').value||today();
+  const to=document.getElementById('resTo').value||from;
+  const body={item_id:currentItem.id,start_date:from,end_date:to,reserved_by:document.getElementById('resBy').value||userName,qty_reserved:Number(document.getElementById('resQty').value||1),notes:document.getElementById('resPurpose').value};
+  const data=await postJSON('/api/reservations',body);
+  if(!data.ok){toastMsg(data.msg||'Reservation failed','error');return;}
+  toastMsg('Reserved','success');setTab('active');loadReservations();
+}
+async function loadReservations(){
+  const r=await fetch('/api/reservations?active=1');
+  const data=await r.json();
+  const rows=data.reservations||[];
+  document.getElementById('activeReservations').innerHTML=rows.length?rows.map(x=>`
+    <div class="m-res"><strong>${esc(x.item_name)}</strong><span>${esc(x.reserved_by)} · ${x.qty_remaining||x.qty_reserved} unit(s)</span><span>${x.start_date} to ${x.end_date}</span><span>${esc(x.notes||'')}</span></div>
+  `).join(''):'<div class="m-empty">No active reservations.</div>';
+}
+function fillProductName(){
+  const opt=document.getElementById('addProduct').selectedOptions[0];
+  if(!opt)return;
+  if(opt.dataset.name&&!document.getElementById('addName').value)document.getElementById('addName').value=opt.dataset.name;
+  if(opt.dataset.category)document.getElementById('addCategory').value=opt.dataset.category;
+}
+async function addItem(){
+  const productId=document.getElementById('addProduct').value||null;
+  const qtyVal=document.getElementById('addQty').value;
+  const body={name:document.getElementById('addName').value,product_id:productId,category_id:document.getElementById('addCategory').value||null,serial:document.getElementById('addSerial').value,sku:document.getElementById('addSku').value,shelf:document.getElementById('addShelf').value,qty:qtyVal?Number(qtyVal):null,condition:'Used'};
+  const data=await postJSON('/api/item/add',body);
+  if(!data.ok){toastMsg(data.msg||'Add failed','error');return;}
+  toastMsg('Item added','success');document.getElementById('mQuery').value='#'+data.id;lookupInput();
+}
+document.getElementById('resFrom').value=today();
+document.getElementById('resTo').value=today();
+if(new URLSearchParams(location.search).get('action')==='add')setTab('add');
+loadReservations();
+</script>
+{% endblock %}

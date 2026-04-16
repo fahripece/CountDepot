@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="CountDepot">
+  <rect width="512" height="512" fill="#6442D6"/>
+  <circle cx="256" cy="256" r="214" fill="#7658F0"/>
+  <path d="M148 150c0-22 18-40 40-40h136c22 0 40 18 40 40v212c0 22-18 40-40 40H188c-22 0-40-18-40-40V150Z" fill="#fff"/>
+  <path d="M188 176h136v40H188v-40Zm0 74h136v40H188v-40Zm0 74h88v40h-88v-40Z" fill="#6442D6"/>
+  <path d="M344 315h42v42h-42v-42Zm0-74h42v42h-42v-42Zm0-74h42v42h-42v-42Z" fill="#C8B3FD"/>
+</svg>

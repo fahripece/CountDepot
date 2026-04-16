@@ -1,0 +1,44 @@
+{
+  "name": "CountDepot Inventory Management",
+  "short_name": "CountDepot",
+  "description": "Inventory, reservations, scanning, and team operations for CountDepot.",
+  "id": "/",
+  "start_url": "/mobile",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "background_color": "#EEF2F7",
+  "theme_color": "#6442D6",
+  "orientation": "portrait-primary",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/static/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add Item",
+      "short_name": "Add",
+      "description": "Create a new inventory item.",
+      "url": "/mobile?action=add",
+      "icons": [{ "src": "/static/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Scan Inventory",
+      "short_name": "Scan",
+      "description": "Open CountDepot inventory for scanning.",
+      "url": "/mobile",
+      "icons": [{ "src": "/static/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}
