@@ -299,6 +299,17 @@ def _normalize_extra_fields(raw):
     return raw if isinstance(raw, dict) else {}
 
 
+def _resolve_item_category_id(data):
+    category_id = data.get("category_id") or None
+    if category_id:
+        return category_id
+    product_id = data.get("product_id")
+    if not product_id:
+        return None
+    product = query("SELECT category_id FROM products WHERE id=?", [product_id], one=True)
+    return product["category_id"] if product else None
+
+
 def _save_item(d, iid=None):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if iid and d.get("qty") in (None, ""):
@@ -325,7 +336,7 @@ def _save_item(d, iid=None):
         model                 = d.get("model") or None,
         serial                = d.get("serial") or None,
         sku                   = d.get("sku") or None,
-        category_id           = d.get("category_id") or None,
+        category_id           = _resolve_item_category_id(d),
         condition             = d.get("condition") or "New",
         owner_company         = d.get("owner_company") or None,
         purchase_date         = d.get("purchase_date") or None,
@@ -916,6 +927,7 @@ def api_items():
     base_where = """FROM items i
              LEFT JOIN categories c   ON c.id=i.category_id
              LEFT JOIN products p     ON p.id=i.product_id
+             LEFT JOIN categories pc  ON pc.id=p.category_id
              LEFT JOIN companies co   ON co.id=i.company_id
              LEFT JOIN locations l    ON l.id=i.location_id
              LEFT JOIN departments d  ON d.id=i.department_id
@@ -932,7 +944,9 @@ def api_items():
                           AND reserved_to >= date('now')
                         GROUP BY item_id) rv ON rv.item_id=i.id
              WHERE i.active=1 AND COALESCE(i.retired,0)=""" + ("1" if show_retired else "0")
-    sql  = """SELECT i.*, c.name as category, c.color,
+    sql  = """SELECT i.*, p.category_id as product_category_id,
+                    COALESCE(c.name, pc.name) as category,
+                    COALESCE(c.color, pc.color) as color,
                     p.name as product_name, p.serial_tracked, p.qty_tracked,
                     p.require_scan_checkout as product_scan_req,
                     p.require_serial as product_req_serial,
@@ -960,7 +974,7 @@ def api_items():
         sql += cond
     loc_sql, loc_args = location_filter_sql("i")
     sql += loc_sql; args += loc_args
-    if cat_id:  sql += " AND i.category_id=?"; args.append(cat_id)
+    if cat_id:  sql += " AND COALESCE(i.category_id,p.category_id)=?"; args.append(cat_id)
     if prod_id: sql += " AND i.product_id=?";  args.append(prod_id)
     if loc_id:  sql += " AND i.location_id=?";   args.append(loc_id)
     if dept_id: sql += " AND i.department_id=?"; args.append(dept_id)
@@ -988,7 +1002,7 @@ def api_items():
             "(i.shelf IS NULL OR i.shelf='')",
             """EXISTS (
                 SELECT 1 FROM category_fields cf
-                WHERE cf.category_id=i.category_id AND cf.required=1
+                WHERE cf.category_id=COALESCE(i.category_id,p.category_id) AND cf.required=1
                   AND (
                     (COALESCE(cf.field_type,'text')='checkbox'
                      AND COALESCE(json_extract(COALESCE(i.extra_fields,'{}'), '$.' || cf.field_key), 0)
@@ -1019,7 +1033,7 @@ def api_items():
         if not no_paginate:
             sql += " AND i.checked_out=0 AND i.sold=0"
 
-    order = {"name": "i.name", "shelf": "i.shelf", "cat": "c.name",
+    order = {"name": "i.name", "shelf": "i.shelf", "cat": "COALESCE(c.name,pc.name)",
              "cost": "i.cost_price", "sale": "i.sale_price",
              "date": "i.purchase_date"}.get(sort, "i.name")
 
@@ -2064,6 +2078,10 @@ def api_item_add():
         return jsonify({"ok": False, "msg": "Invalid category"})
     if prod_id and not query("SELECT id FROM products WHERE id=?",   [prod_id], one=True):
         return jsonify({"ok": False, "msg": "Invalid product"})
+    if prod_id and not cat_id:
+        inferred_cat_id = _resolve_item_category_id(d)
+        if inferred_cat_id:
+            d["category_id"] = inferred_cat_id
     if prod_id:
         prod = query("SELECT require_serial, require_vendor_sku FROM products WHERE id=?", [prod_id], one=True)
         if prod:

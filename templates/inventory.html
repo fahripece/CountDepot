@@ -1407,7 +1407,7 @@ function editItem(item){
   document.getElementById('editItemId').value=item.id;
   document.getElementById('itemModalTitle').textContent='Edit Item';
   if(item.internal_sku){const d=document.getElementById('fi-sku-display');d.textContent='Auto SKU: '+item.internal_sku;d.style.display='';}
-  document.getElementById('fi-cat').value=item.category_id||'';
+    document.getElementById('fi-cat').value=item.category_id||item.product_category_id||'';
   onCatChange();
   setTimeout(()=>{
     if(item.product_id) document.getElementById('fi-product').value=item.product_id;
@@ -1444,7 +1444,7 @@ function editItem(item){
     document.getElementById('fi-ebay-price').value=item.ebay_listed_price||'';
     document.getElementById('fi-ebay-fields').style.display=es!=='not_listed'?'':'none';
     const extraFields=JSON.parse(item.extra_fields||'{}');
-    const catFields=(CATEGORY_FIELDS[String(item.category_id)])||[];
+    const catFields=(CATEGORY_FIELDS[String(item.category_id||item.product_category_id)])||[];
     catFields.forEach(f=>{const el=document.getElementById('fi-dyn-'+f.field_key);if(!el)return;if(el.type==='checkbox')el.checked=!!(extraFields[f.field_key]);else el.value=extraFields[f.field_key]||'';});
     updateProfitPreview();
   },50);

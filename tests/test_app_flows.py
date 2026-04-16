@@ -261,6 +261,73 @@ def test_internal_sku_product_item_is_visible_in_inventory(app, tenant):
     )
 
 
+def test_product_category_is_inherited_when_item_payload_omits_category(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Inherited Product Category", "#123456"],
+    ).lastrowid
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,require_internal_sku,active,created_at) "
+        "VALUES (?,?,1,1,datetime('now'))",
+        ["Inherited Category Product", category_id],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/item/add",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "name": "Inherited Category Item",
+            "product_id": product_id,
+            "condition": "New",
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        item_response = _as_response(app, app.preprocess_request() or api_item_add())
+        item_data = item_response.get_json()
+
+    assert item_response.status_code == 200
+    assert item_data["ok"] is True
+
+    db = sqlite3.connect(tenant["db_path"])
+    saved_category_id = db.execute(
+        "SELECT category_id FROM items WHERE id=?", [item_data["id"]]
+    ).fetchone()[0]
+    legacy_item_id = db.execute(
+        "INSERT INTO items (name,product_id,category_id,active,created_at) "
+        "VALUES (?,?,NULL,1,datetime('now'))",
+        ["Legacy Missing Category Item", product_id],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    assert saved_category_id == category_id
+
+    with app.test_request_context(
+        "/api/items?hide_out=0",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        inventory_response = _as_response(app, app.preprocess_request() or api_items())
+        items = inventory_response.get_json()
+
+    created = next(item for item in items if item["id"] == item_data["id"])
+    legacy = next(item for item in items if item["id"] == legacy_item_id)
+    assert created["category"] == "Inherited Product Category"
+    assert created["color"] == "#123456"
+    assert legacy["category"] == "Inherited Product Category"
+    assert legacy["product_category_id"] == category_id
+
+
 def test_admin_add_user_reports_invite_email_failure(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302
