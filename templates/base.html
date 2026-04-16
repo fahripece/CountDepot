@@ -460,13 +460,16 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
       </a>
     </nav>
 
-    <!-- ── SETTINGS (collapsible, admin) ─────────── -->
-    {% if session.get('role') == 'admin' %}
+    <!-- ── SETTINGS (collapsible) ─────────── -->
+    {% set user_perms = (session.get('permissions') or '').split(',') %}
+    {% set can_manage_settings = session.get('role') == 'admin' or 'write_items' in user_perms or 'import_export' in user_perms %}
+    {% if can_manage_settings %}
     <div class="sb-section sb-accordion {% if in_settings %}open{% endif %}" style="margin-top:10px" onclick="toggleAccordion(this,'settings')" id="settings-hdr">
       <span>Settings</span>
       <svg id="settings-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px;margin-left:auto;transition:transform .2s;{% if in_settings %}transform:rotate(180deg){% endif %}"><polyline points="6 9 12 15 18 9"/></svg>
     </div>
     <nav class="nav sb-accordion-body {% if not in_settings %}collapsed{% endif %}" id="settings-nav">
+      {% if session.get('role') == 'admin' or 'write_items' in user_perms %}
       <a href="/categories" class="navlink {% if request.path == '/categories' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
         <span>Categories</span>
@@ -479,6 +482,8 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
         <span>Contacts</span>
       </a>
+      {% endif %}
+      {% if session.get('role') == 'admin' %}
       <a href="/admin" class="navlink {% if request.path == '/admin' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         <span>Users &amp; Permissions</span>
@@ -487,16 +492,19 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
         <span>Integrations</span>
       </a>
-      {% if 'import_export' in (session.get('permissions') or '') or session.get('role') == 'admin' %}
+      {% endif %}
+      {% if 'import_export' in user_perms or session.get('role') == 'admin' %}
       <a href="/importer" class="navlink {% if request.path == '/importer' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         <span>Importer</span>
       </a>
       {% endif %}
+      {% if session.get('role') == 'admin' %}
       <a href="/billing" class="navlink {% if request.path.startswith('/billing') %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
         <span>Billing</span>
       </a>
+      {% endif %}
     </nav>
     {% endif %}
     {% endif %}

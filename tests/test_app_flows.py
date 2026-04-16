@@ -7,6 +7,7 @@ from flask import session
 from config import Config
 from app.helpers import hash_pw
 from app.blueprints.auth import login_page
+from app.blueprints.main import inventory
 from app.blueprints.api import (
     api_add_reservation,
     api_category_fields_save,
@@ -934,6 +935,41 @@ def test_location_changes_do_not_force_logout_active_worker(app, tenant):
     assert response.status_code == 200
     assert "items" in data
     assert refreshed_locations == [loc_id]
+
+
+def test_full_permission_worker_sees_relevant_settings_nav(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,1,0)",
+        [
+            "full.worker@example.com",
+            hash_pw("Password1!"),
+            "worker",
+            "view_inventory,view_dashboard,view_audit,checkout_checkin,write_items,qty_adjust,sell_items,delete_items,import_export",
+            "full.worker@example.com",
+        ],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(
+        app, tenant, "full.worker@example.com", "Password1!"
+    )
+    assert response.status_code == 302
+
+    with app.test_request_context("/", base_url=f"http://{tenant['host']}", method="GET"):
+        session.update(saved_session)
+        response = app.preprocess_request()
+        html = response or inventory()
+
+    assert "Settings" in html
+    assert ">Categories<" in html
+    assert ">Products<" in html
+    assert ">Contacts<" in html
+    assert ">Importer<" in html
+    assert "Users &amp; Permissions" not in html
+    assert ">Billing<" not in html
 
 
 def test_incomplete_cost_requirement_can_be_disabled(app, tenant):

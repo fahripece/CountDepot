@@ -46,6 +46,9 @@
         {% if u.role == 'worker' %}
         <span style="font-size:11px;color:#94a3b8;margin-right:4px" id="permtoggle-{{ u.id }}">▸ Permissions</span>
         {% endif %}
+        {% if u.id != current_user_id %}
+        <button class="btn btn-secondary btn-sm" onclick='event.stopPropagation();openEditRole({{ u.id }}, {{ u.username|tojson }}, "{{ u.role }}")'>Role</button>
+        {% endif %}
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditEmail({{ u.id }},'{{ u.username }}','{{ u.email or '' }}')">Email</button>
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();resendInvite({{ u.id }},'{{ u.username }}')">Resend Invite</button>
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openResetPw({{ u.id }},'{{ u.username }}')">Reset PW</button>
@@ -516,6 +519,31 @@
   </div>
 </div>
 
+<!-- EDIT ROLE MODAL -->
+<div class="overlay" id="editRoleModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Change Role</div><button class="modal-close" onclick="closeModal('editRoleModal')">x</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="editRoleUserId">
+      <div style="font-size:13px;color:#475569;margin-bottom:14px">Role for <strong id="editRoleUsername"></strong></div>
+      <div class="field"><label class="label">Role</label>
+        <select class="select" id="edit-role-val">
+          <option value="worker">Worker</option>
+          <option value="viewer">Viewer (read-only - inventory only)</option>
+          <option value="admin">Admin (full access - users, billing, settings)</option>
+        </select>
+      </div>
+      <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:12px;color:#92400e">
+        Admins can manage users, billing, settings, and all inventory data. Use this only for trusted operators.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('editRoleModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmEditRole()">Save Role</button>
+    </div>
+  </div>
+</div>
+
 <!-- EDIT EMAIL MODAL -->
 <div class="overlay" id="editEmailModal">
   <div class="modal modal-sm">
@@ -674,6 +702,24 @@ async function saveUser(){
   }
   if(res.ok){toast(res.msg||'Invite sent ✓','ok');closeModal('userModal');location.reload();}
   else toast(res.msg||'Error','err');
+}
+
+function openEditRole(id,name,currentRole){
+  document.getElementById('editRoleUserId').value=id;
+  document.getElementById('editRoleUsername').textContent=name;
+  document.getElementById('edit-role-val').value=currentRole||'worker';
+  openModal('editRoleModal');
+}
+
+async function confirmEditRole(){
+  const id=parseInt(document.getElementById('editRoleUserId').value);
+  const role=document.getElementById('edit-role-val').value;
+  const res=await api('/api/user/role',{id,role});
+  if(res.ok){
+    toast('Role updated','ok');
+    closeModal('editRoleModal');
+    location.reload();
+  } else toast(res.msg||'Error','err');
 }
 
 async function resendInvite(id,name){

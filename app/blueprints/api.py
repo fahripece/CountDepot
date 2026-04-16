@@ -18,7 +18,8 @@ from app.helpers import (login_required, perm_required, admin_required,
                          _parse_date_range, _date_filter_sql,
                          location_filter_sql, notify_low_stock_if_needed,
                          ALL_PERMISSIONS, PERM_KEYS,
-                         ADMIN_DEFAULT_PERMS, WORKER_DEFAULT_PERMS)
+                         ADMIN_DEFAULT_PERMS, WORKER_DEFAULT_PERMS,
+                         VIEWER_DEFAULT_PERMS)
 
 bp = Blueprint("api", __name__)
 
@@ -3315,11 +3316,13 @@ def api_user_add():
         return jsonify({"ok": False, "msg": "Valid email address required"})
     role = d.get("role", "worker")
     if role == "admin":
-        perm_str = ",".join(ADMIN_DEFAULT_PERMS)
+        perm_str = ",".join(sorted(ADMIN_DEFAULT_PERMS))
+    elif role == "viewer":
+        perm_str = ",".join(sorted(VIEWER_DEFAULT_PERMS))
     else:
         custom = d.get("permissions")
         perm_str = (",".join(set(custom) & set(PERM_KEYS)) if custom is not None
-                    else ",".join(WORKER_DEFAULT_PERMS))
+                    else ",".join(sorted(WORKER_DEFAULT_PERMS)))
     import secrets as _sec
     # Create user with unusable random password — invite link sets the real one
     placeholder_pw = hash_pw(_sec.token_hex(32))
@@ -3383,6 +3386,47 @@ def api_user_permissions():
     execute("UPDATE users SET permissions=? WHERE id=?", [perm_str, d["id"]])
     log_action("USER_PERMS", detail=f"Updated perms for {user['username']}: {perm_str}")
     return jsonify({"ok": True})
+
+
+@bp.route("/api/user/role", methods=["POST"])
+@login_required
+@admin_required
+@api_rate_limit(max_attempts=30, window=60)
+def api_user_role():
+    d = request.json or {}
+    uid = d.get("id")
+    role = (d.get("role") or "").strip().lower()
+    if not uid:
+        return jsonify({"ok": False, "msg": "User ID required"})
+    if role not in {"admin", "worker", "viewer"}:
+        return jsonify({"ok": False, "msg": "Invalid role"})
+    if uid == session.get("user_id"):
+        return jsonify({"ok": False, "msg": "Cannot change your own role"})
+
+    user = query("SELECT id, username, role, permissions FROM users WHERE id=?",
+                 [uid], one=True)
+    if not user:
+        return jsonify({"ok": False, "msg": "User not found"})
+
+    if user["role"] == "admin":
+        admin_count = query("SELECT COUNT(*) FROM users WHERE role='admin'", one=True)[0]
+        if admin_count <= 1:
+            return jsonify({"ok": False, "msg": "Cannot remove the last admin"})
+
+    if role == "admin":
+        perm_str = ",".join(sorted(ADMIN_DEFAULT_PERMS))
+    elif role == "viewer":
+        perm_str = ",".join(sorted(VIEWER_DEFAULT_PERMS))
+    else:
+        existing = set((user["permissions"] or "").split(",")) & set(PERM_KEYS)
+        if user["role"] == "worker" and existing:
+            perm_str = ",".join(sorted(existing))
+        else:
+            perm_str = ",".join(sorted(WORKER_DEFAULT_PERMS))
+
+    execute("UPDATE users SET role=?, permissions=? WHERE id=?", [role, perm_str, uid])
+    log_action("USER_ROLE", detail=f"Changed role for {user['username']}: {user['role']} -> {role}")
+    return jsonify({"ok": True, "role": role, "permissions": perm_str})
 
 
 @bp.route("/api/user/password", methods=["POST"])
