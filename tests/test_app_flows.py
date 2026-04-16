@@ -5,9 +5,9 @@ import sqlite3
 from flask import session
 
 from config import Config
-from app.helpers import hash_pw
+from app.helpers import PERM_KEYS, hash_pw
 from app.blueprints.auth import login_page
-from app.blueprints.main import inventory
+from app.blueprints.main import admin_page, inventory
 from app.blueprints.api import (
     api_add_reservation,
     api_category_fields_save,
@@ -22,6 +22,7 @@ from app.blueprints.api import (
     api_user_add,
     api_user_invite,
     api_user_permissions,
+    api_user_role,
     api_set_user_locations,
 )
 
@@ -877,6 +878,96 @@ def test_permission_changes_apply_to_active_worker_session(app, tenant):
     shelf = db.execute("SELECT shelf FROM items WHERE id=?", [item_id]).fetchone()[0]
     db.close()
     assert shelf == "NEW"
+
+
+def test_admin_can_promote_worker_to_admin_and_active_session_refreshes(app, tenant):
+    admin_response, admin_session = _login(app, tenant)
+    assert admin_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    worker_id = db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,1,0)",
+        [
+            "promote.worker@example.com",
+            hash_pw("Password1!"),
+            "worker",
+            "view_inventory",
+            "promote.worker@example.com",
+        ],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    worker_response, worker_session = _login(
+        app, tenant, "promote.worker@example.com", "Password1!"
+    )
+    assert worker_response.status_code == 302
+    assert worker_session["role"] == "worker"
+
+    with app.test_request_context(
+        "/api/user/role",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"id": worker_id, "role": "admin"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(admin_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_user_role())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+
+    db = sqlite3.connect(tenant["db_path"])
+    row = db.execute(
+        "SELECT role, permissions FROM users WHERE id=?", [worker_id]
+    ).fetchone()
+    db.close()
+    assert row[0] == "admin"
+    assert set(row[1].split(",")) == set(PERM_KEYS)
+
+    with app.test_request_context(
+        "/admin",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(worker_session)
+        response = app.preprocess_request()
+        html = response or admin_page()
+        refreshed_role = session["role"]
+
+    assert refreshed_role == "admin"
+    assert "Users &amp; Permissions" in html
+
+
+def test_admin_cannot_change_own_role(app, tenant):
+    admin_response, admin_session = _login(app, tenant)
+    assert admin_response.status_code == 302
+
+    with app.test_request_context(
+        "/api/user/role",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"id": admin_session["user_id"], "role": "worker"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(admin_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_user_role())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is False
+    assert "own role" in data["msg"]
+
+    db = sqlite3.connect(tenant["db_path"])
+    role = db.execute(
+        "SELECT role FROM users WHERE id=?", [admin_session["user_id"]]
+    ).fetchone()[0]
+    db.close()
+    assert role == "admin"
 
 
 def test_location_changes_do_not_force_logout_active_worker(app, tenant):
