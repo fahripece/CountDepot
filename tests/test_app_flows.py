@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 
@@ -633,6 +634,72 @@ def test_bulk_clone_creates_same_item_with_new_serials(app, tenant):
     assert [r["serial"] for r in rows] == ["CLONE-001", "CLONE-002"]
     assert all(r["name"] == "Bulk Clone Product" for r in rows)
     assert all(r["shelf"] == "CLONE-A" for r in rows)
+
+
+def test_bulk_clone_handles_legacy_null_numeric_fields(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Legacy Clone Category", "#ffffff"],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO category_fields (category_id,field_label,field_key,field_type,required,sort_order) "
+        "VALUES (?,?,?,?,1,1)",
+        [category_id, "Asset Tag", "asset_tag", "text"],
+    )
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,require_serial,require_internal_sku,active,created_at) "
+        "VALUES (?,?,1,1,1,'2026-01-01 00:00:00')",
+        ["Legacy Clone Product", category_id],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (name,product_id,category_id,serial,shelf,cost_price,condition,tax_paid,has_poe,extra_fields,active,created_at) "
+        "VALUES (?,?,?,?,?,?,?,NULL,NULL,?,1,'2026-01-01 00:00:00')",
+        [
+            "Legacy Clone Product",
+            product_id,
+            category_id,
+            "SRC-LEGACY",
+            "LEG-A",
+            22.0,
+            "New",
+            json.dumps({"asset_tag": "AT-100"}),
+        ],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        f"/api/item/{item_id}/bulk-clone",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"serials": ["LEG-001", "LEG-002"]},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_item_bulk_clone(item_id))
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["count"] == 2
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    rows = db.execute(
+        "SELECT serial, tax_paid, has_poe, extra_fields FROM items WHERE product_id=? AND serial LIKE 'LEG-%' ORDER BY serial",
+        [product_id],
+    ).fetchall()
+    db.close()
+
+    assert [r["serial"] for r in rows] == ["LEG-001", "LEG-002"]
+    assert all(r["tax_paid"] == -1 for r in rows)
+    assert all(r["has_poe"] == 0 for r in rows)
+    assert all(json.loads(r["extra_fields"]) == {"asset_tag": "AT-100"} for r in rows)
 
 
 def test_bulk_edit_can_update_cost_and_sale_prices(app, tenant):

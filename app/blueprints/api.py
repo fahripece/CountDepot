@@ -281,6 +281,22 @@ def _record_reservation_override(item, qty, username, note=""):
 
 # ── Save item (shared for add + edit) ─────────────────────────────────────────
 
+def _coerce_int(value, default=0):
+    if value in (None, ""):
+        return default
+    return int(value)
+
+
+def _normalize_extra_fields(raw):
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw or "{}")
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return raw or {}
+
+
 def _save_item(d, iid=None):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if iid and d.get("qty") in (None, ""):
@@ -291,7 +307,7 @@ def _save_item(d, iid=None):
 
     cost = float(d["cost_price"])  if d.get("cost_price")  not in (None, "") else None
     sale = float(d["sale_price"])  if d.get("sale_price")  not in (None, "") else None
-    tax  = int(d.get("tax_paid", -1))
+    tax  = _coerce_int(d.get("tax_paid"), -1)
     rate = float(d.get("tax_rate", 0)) if d.get("tax_rate") not in (None, "") else 0
 
     if iid and d.get("low_stock_threshold") in (None, ""):
@@ -332,7 +348,7 @@ def _save_item(d, iid=None):
         po_number             = d.get("po_number") or None,
         resolution            = d.get("resolution") or None,
         lens_type             = d.get("lens_type") or None,
-        has_poe               = int(d.get("has_poe", 0)),
+        has_poe               = _coerce_int(d.get("has_poe"), 0),
         wireless_standard     = d.get("wireless_standard") or None,
         port_count            = int(d["port_count"]) if d.get("port_count") not in (None, "") else None,
         poe_budget            = d.get("poe_budget") or None,
@@ -346,7 +362,7 @@ def _save_item(d, iid=None):
         cable_gauge           = d.get("cable_gauge") or None,
         connector_type        = d.get("connector_type") or None,
         cable_length          = d.get("cable_length") or None,
-        extra_fields          = json.dumps(d.get("extra_fields") or {}),
+        extra_fields          = json.dumps(_normalize_extra_fields(d.get("extra_fields"))),
         purchased_from        = d.get("purchased_from") or None,
         sale_state            = d.get("sale_state") or None,
         depreciation_rate     = float(d["depreciation_rate"]) if d.get("depreciation_rate") not in (None, "") else None,
