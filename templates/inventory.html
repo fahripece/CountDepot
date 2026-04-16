@@ -1030,11 +1030,8 @@ function renderTable(items){
     const prodLabel=item.product_name?`<div style="font-size:10.5px;color:#15803d;margin-top:1px">📦 ${item.product_name}</div>`:'';
     const incLabel=item.is_incomplete?`<span class="tag-incomplete" title="Missing: ${item.missing_fields.join(', ')}">⚠ Incomplete</span>`:'';
     const photoIcon=item.photo_count>0?`<span title="${item.photo_count} photo${item.photo_count!==1?'s':''}" style="font-size:11px;color:#64748b;margin-left:4px;opacity:.7">📷${item.photo_count>1?'<sup style=font-size:9px>'+item.photo_count+'</sup>':''}</span>`:'';
-    const cbCol=CAN_SELECT?`<td style="padding:10px 8px 10px 14px" onclick="event.stopPropagation()"><input type="checkbox" class="row-cb" data-id="${item.id}" onchange="onRowCheck(this)" ${selectedIds.has(item.id)?'checked':''}></td>`:'';
-    const rowAction=CAN_WRITE_ITEMS
-      ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button>`
-      : `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();showDetail(allItems.find(i=>i.id===${item.id}))">Details</button>`;
-    return `<tr class="${item.is_low?'low-row':''}${selectedIds.has(item.id)?' selected':''}" onclick="showDetail(allItems.find(i=>i.id===${item.id}))">
+    const cbCol=CAN_SELECT?`<td style="padding:10px 8px 10px 14px" onclick="event.stopPropagation()"><input type="checkbox" class="row-cb" data-id="${item.id}" onchange="onRowCheck(this,event)" ${selectedIds.has(item.id)?'checked':''}></td>`:'';
+    return `<tr class="${item.is_low?'low-row':''}${selectedIds.has(item.id)?' selected':''}" onclick="toggleRowSelect(${item.id})">
       ${cbCol}
       <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#94a3b8;white-space:nowrap">#${item.id}</td>
       <td><div style="font-weight:500;font-size:13px">${item.name} ${incLabel}${photoIcon}</div>${item.manufacturer?`<div style="font-size:11px;color:#aaa">${item.manufacturer}</div>`:''}${prodLabel}</td>
@@ -1044,7 +1041,7 @@ function renderTable(items){
       <td>${cond}${tagsHtml}</td>
       <td>${status}${resBadge?`<br>${resBadge}`:''}</td>
       <td>${cost}<br>${saleProfit}</td>
-      <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();printLabel(${item.id})" title="Print label" style="padding:5px 7px;margin-right:4px">Label</button>${rowAction}</td>
+      <td style="white-space:nowrap;color:#94a3b8;font-size:12px">Select row</td>
     </tr>`;
   }).join('');
 }
@@ -1972,7 +1969,7 @@ function renderLabels(){
 function doPrint(){const content=document.getElementById('labelPreview').innerHTML;const w=window.open('','_blank','width=950,height=750');w.document.write(`<!DOCTYPE html><html><head><title>Labels</title><script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"><\/script></head><body>${content}</body></html>`);w.document.close();}
 
 // ── Selection / Mass ops ──
-function onRowCheck(cb){const id=parseInt(cb.dataset.id);if(cb.checked)selectedIds.add(id);else selectedIds.delete(id);updateSelectionUI();}
+function onRowCheck(cb,evt){if(evt)evt.stopPropagation();const id=parseInt(cb.dataset.id);if(cb.checked)selectedIds.add(id);else selectedIds.delete(id);updateSelectionUI();}
 function toggleRowSelect(id){
   id=parseInt(id);
   if(selectedIds.has(id))selectedIds.delete(id);else selectedIds.add(id);
