@@ -17,7 +17,7 @@ SESSION_LIFETIME_HOURS = 8
 def _build_session(user, perms):
     """Return a dict of session keys for a logged-in user."""
     loc_ids = get_user_location_ids(user["id"], user["role"])
-    return {
+    sess = {
         "user_id":              user["id"],
         "username":             user["username"],
         "role":                 user["role"],
@@ -27,6 +27,10 @@ def _build_session(user, perms):
         "session_token":        _secrets.token_hex(32),
         "location_ids":         loc_ids,
     }
+    tour_done = bool(user["intro_tour_completed_at"] if "intro_tour_completed_at" in user.keys() else None)
+    if not tour_done:
+        sess["show_intro_tour"] = True
+    return sess
 
 
 def check_session_expiry():
@@ -122,10 +126,6 @@ def login_page():
                 user["id"], user["role"],
                 user["permissions"] if "permissions" in user.keys() else "")
             sess = _build_session(user, perms)
-            first_login = not (user["last_login"] if "last_login" in user.keys() else None)
-            tour_done = bool(user["intro_tour_completed_at"] if "intro_tour_completed_at" in user.keys() else None)
-            if first_login and not tour_done:
-                sess["show_intro_tour"] = True
             session.clear()
             session.update(sess)
             now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")

@@ -7,7 +7,7 @@ from flask import session
 from config import Config
 from app.helpers import PERM_KEYS, hash_pw
 from app.blueprints.auth import login_page
-from app.blueprints.main import admin_page, categories_page, inventory, products_page
+from app.blueprints.main import admin_page, categories_page, integrations_page, inventory, products_page
 from app.blueprints.api import (
     api_add_reservation,
     api_cat_add,
@@ -122,6 +122,20 @@ def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
     second_response, second_session = _login(app, tenant)
     assert second_response.status_code == 302
     assert not second_session.get("show_intro_tour")
+
+
+def test_intro_tour_shows_until_completed_even_if_user_has_logged_in_before(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "UPDATE users SET last_login='2026-04-17 09:00:00', intro_tour_completed_at=NULL WHERE email=?",
+        [tenant["email"]],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant)
+    assert response.status_code == 302
+    assert saved_session["show_intro_tour"] is True
 
 
 def test_onboarding_gate_redirects_unfinished_tenant(app):
@@ -1932,6 +1946,26 @@ def test_admin_can_configure_expanded_integration_catalog(app, tenant):
 
     assert tested.status_code == 200
     assert tested.get_json()["ok"] is True
+
+
+def test_integrations_page_uses_single_page_scroll_layout(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/integrations",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or integrations_page())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'class="integrations-page"' in body
+    assert "integrations-main-scroll" in body
+    assert "flex:1;overflow-y:auto;padding:20px 24px" not in body
 
 
 def test_zapier_connector_creates_real_outbound_webhook(app, tenant):
