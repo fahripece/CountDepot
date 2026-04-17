@@ -630,9 +630,6 @@ footer{
 }
 .footer-logo span{color:var(--accent)}
 footer p{font-size:13px;color:var(--muted);font-weight:300}
-.footer-seo{width:100%;display:flex;flex-wrap:wrap;gap:10px 18px;justify-content:center;border-top:1px solid rgba(255,255,255,.08);padding-top:22px;margin-top:10px}
-.footer-seo a{font-size:12px;color:var(--muted2);font-weight:600;text-decoration:none}
-.footer-seo a:hover{color:var(--accent)}
 
 /* ── RESPONSIVE ── */
 /* ── PRODUCT PREVIEW ── */
@@ -1414,16 +1411,6 @@ async function submitDemoRequest(){
   <div class="footer-logo">Count<span>Depot</span></div>
   <p>© 2026 CountDepot. Inventory Management Made Easy.</p>
   <a href="/signup" class="nav-cta">Get started free</a>
-  <nav class="footer-seo" aria-label="Industry inventory software">
-    <a href="/inventory-management-for-repair-shops">Repair shops</a>
-    <a href="/inventory-software-for-nonprofits">Nonprofits</a>
-    <a href="/inventory-management-for-photographers">Photographers</a>
-    <a href="/inventory-tracking-for-restaurants">Restaurants</a>
-    <a href="/inventory-software-for-churches">Churches</a>
-    <a href="/inventory-management-for-gyms">Gyms</a>
-    <a href="/inventory-software-for-auto-detailing">Auto detailing</a>
-    <a href="/inventory-tracking-for-veterinary-clinics">Veterinary clinics</a>
-  </nav>
 </footer>
 
 <script>
@@ -1442,12 +1429,6 @@ document.querySelectorAll('a[href="#pricing"], .plan-cta').forEach(link => {
   link.addEventListener('click', () => trackMarketingEvent('pricing_click', {
     link_text: (link.textContent || '').trim(),
     page_location: window.location.href
-  }));
-});
-document.querySelectorAll('.footer-seo a').forEach(link => {
-  link.addEventListener('click', () => trackMarketingEvent('seo_internal_link_click', {
-    target_path: link.getAttribute('href'),
-    link_text: (link.textContent || '').trim()
   }));
 });
 // Sign in modal

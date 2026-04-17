@@ -1740,14 +1740,14 @@ def test_homepage_has_schema_internal_links_and_marketing_events(app):
     assert '"@type": "Organization"' in body
     assert '"@type": "SoftwareApplication"' in body
     assert '"applicationCategory": "BusinessApplication"' in body
-    assert 'aria-label="Industry inventory software"' in body
-    assert 'href="/inventory-management-for-repair-shops"' in body
-    assert 'href="/inventory-software-for-nonprofits"' in body
-    assert 'href="/inventory-tracking-for-veterinary-clinics"' in body
+    assert 'aria-label="Industry inventory software"' not in body
+    assert 'href="/inventory-management-for-repair-shops"' not in body
+    assert 'href="/inventory-software-for-nonprofits"' not in body
+    assert 'href="/inventory-tracking-for-veterinary-clinics"' not in body
     assert "signup_click" in body
     assert "pricing_click" in body
     assert "demo_request" in body
-    assert "seo_internal_link_click" in body
+    assert "seo_internal_link_click" not in body
 
 
 def test_signup_page_has_seo_meta_and_submit_event(app):
@@ -1863,6 +1863,9 @@ def test_landing_page_promotes_available_and_planned_integrations(app):
     assert '<div class="nav-links">\n    <a href="#features">Features</a>\n    <a href="#how">How it works</a>\n    <a href="#pricing">Pricing</a>' in body
     assert '<div class="nav-actions">\n    <a href="#signin" class="nav-link-signin">Sign in</a>\n    <a href="/signup" class="nav-cta">Start free trial</a>' in body
     assert "\nnav{" not in body
+    assert "footer-seo" not in body
+    assert "Repair shops" not in body
+    assert "Veterinary clinics" not in body
     assert 'id="integrations"' in body
     assert "Available now" in body
     assert "Expanded connector catalog" in body
