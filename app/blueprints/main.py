@@ -9,6 +9,7 @@ from datetime import datetime
 from app.db import query, execute
 from app.helpers import (login_required, perm_required, admin_required,
                          check_rate_limit, log_action, ALL_PERMISSIONS, PERM_KEYS)
+from app.seo_pages import seo_page_for_slug, seo_slugs
 
 bp = Blueprint("main", __name__)
 
@@ -83,6 +84,37 @@ def service_worker():
     response.headers["Service-Worker-Allowed"] = "/"
     response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+@bp.route("/robots.txt")
+def robots_txt():
+    body = "User-agent: *\nAllow: /\nSitemap: " + request.url_root.rstrip("/") + "/sitemap.xml\n"
+    response = make_response(body)
+    response.headers["Content-Type"] = "text/plain; charset=utf-8"
+    return response
+
+
+@bp.route("/sitemap.xml")
+def sitemap_xml():
+    base = request.url_root.rstrip("/")
+    urls = [base + "/"] + [base + "/" + slug for slug in seo_slugs()]
+    body = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    body += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    for url in urls:
+        body += f"  <url><loc>{html.escape(url)}</loc></url>\n"
+    body += "</urlset>\n"
+    response = make_response(body)
+    response.headers["Content-Type"] = "application/xml; charset=utf-8"
+    return response
+
+
+@bp.route("/<path:slug>")
+def seo_landing_page(slug):
+    page = seo_page_for_slug(slug)
+    if not page:
+        return redirect(url_for("auth.login_page"))
+    canonical_url = request.url_root.rstrip("/") + "/" + slug.strip("/")
+    return render_template("seo_landing.html", page=page, canonical_url=canonical_url)
 
 
 @bp.route("/api-docs")

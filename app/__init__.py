@@ -106,6 +106,9 @@ def create_app():
                     return jsonify({"ok": False, "msg": "CSRF validation failed"}), 403
                 abort(403)
 
+        from app.seo_pages import seo_page_for_slug
+        path_slug = request.path.strip("/")
+
         # These routes bypass tenant resolution entirely
         if (request.path.startswith("/_platform")
                 or request.path == "/_health"
@@ -113,6 +116,9 @@ def create_app():
                 or request.path == "/api/demo-request"
                 or request.path == "/manifest.webmanifest"
                 or request.path == "/sw.js"
+                or request.path == "/robots.txt"
+                or request.path == "/sitemap.xml"
+                or seo_page_for_slug(path_slug)
                 or request.path.startswith("/static/")
                 or request.path.startswith("/signup")
                 or request.path.startswith("/verify-signup")

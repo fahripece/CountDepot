@@ -1646,6 +1646,38 @@ def test_public_demo_request_skips_csrf_and_bare_domain_landing(app):
     assert tuple(row) == ("Fahri Pece", "DSSIT", "fpece@dssitny.com", "1-10 people")
 
 
+def test_public_seo_pages_render_on_bare_domain(app):
+    from app.seo_pages import SEO_PAGES
+
+    client = app.test_client()
+
+    for slug, page in SEO_PAGES.items():
+        response = client.get(f"/{slug}", base_url="http://countdepot.com")
+        body = response.get_data(as_text=True)
+        assert response.status_code == 200, slug
+        assert page["keyword"] in body
+        assert page["title"] in body
+        assert f'href="http://countdepot.com/{slug}"' in body
+        assert "Start free trial" in body
+
+
+def test_public_sitemap_and_robots_include_seo_pages(app):
+    from app.seo_pages import seo_slugs
+
+    client = app.test_client()
+
+    sitemap = client.get("/sitemap.xml", base_url="http://countdepot.com")
+    sitemap_body = sitemap.get_data(as_text=True)
+    assert sitemap.status_code == 200
+    assert "application/xml" in sitemap.headers["Content-Type"]
+    for slug in seo_slugs():
+        assert f"http://countdepot.com/{slug}" in sitemap_body
+
+    robots = client.get("/robots.txt", base_url="http://countdepot.com")
+    assert robots.status_code == 200
+    assert "Sitemap: http://countdepot.com/sitemap.xml" in robots.get_data(as_text=True)
+
+
 def test_mobile_app_assets_are_public_on_bare_domain(app):
     client = app.test_client()
 
