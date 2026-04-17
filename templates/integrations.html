@@ -192,8 +192,19 @@
   </div>
 
   <!-- More integrations (placeholder) -->
-  <div style="margin-top:20px;padding:20px;background:#fafaf8;border:1px dashed #e5e3de;border-radius:10px;text-align:center;color:#94a3b8;font-size:13px">
+  <div style="display:none;margin-top:20px;padding:20px;background:#fafaf8;border:1px dashed #e5e3de;border-radius:10px;text-align:center;color:#94a3b8;font-size:13px">
     More integrations coming soon — Grainger, TD SYNNEX
+  </div>
+
+  <div style="margin:22px 0 14px">
+    <div style="font-size:17px;font-weight:800;color:#0f172a">Expanded Integration Categories</div>
+    <div style="font-size:12.5px;color:#64748b;margin-top:4px;max-width:760px;line-height:1.6">
+      These connectors cover the Zoho-style categories buyers expect. Existing native integrations stay above;
+      this catalog stores the credentials and settings needed to enable deeper sync jobs as demand prioritizes them.
+    </div>
+  </div>
+  <div id="connector-catalog">
+    <div style="color:#94a3b8;font-size:13px">Loading integration catalog...</div>
   </div>
 
 </div>
@@ -204,8 +215,23 @@
 .int-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .int-badge.connected{background:#dcfce7;color:#166534}
 .int-badge.disconnected{background:#f1f5f9;color:#64748b}
+.int-badge.ready{background:#ede9fe;color:#5b21b6}
 .form-row{margin-bottom:12px}
 .form-label{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px}
+.connector-group{margin-bottom:18px}
+.connector-group-title{font-size:13px;font-weight:800;color:#334155;text-transform:uppercase;letter-spacing:.5px;margin:0 0 4px}
+.connector-group-desc{font-size:12px;color:#64748b;margin-bottom:10px;line-height:1.55}
+.connector-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.connector-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;overflow:hidden}
+.connector-card-body{padding:16px}
+.connector-card-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px}
+.connector-card-title strong{font-size:14px;color:#0f172a}
+.connector-summary{font-size:12px;color:#64748b;line-height:1.5;min-height:36px}
+.connector-form{display:none;border-top:1px solid #f1f5f9;padding:14px 16px;background:#fafaf8}
+.connector-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.connector-toggle{display:flex;align-items:center;gap:7px;font-size:12px;color:#475569;margin-top:10px}
+.connector-result{display:none;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:12px}
+@media(max-width:900px){.connector-grid{grid-template-columns:1fr}.int-card-head{align-items:flex-start;flex-direction:column}}
 </style>
 
 <script>
@@ -215,6 +241,115 @@ async function apiPost(url, body){
   if(csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf[1]);
   const r = await fetch(url, {method:'POST', headers, body: JSON.stringify(body)});
   return r.json();
+}
+
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadConnectorCatalog(){
+  const wrap = document.getElementById('connector-catalog');
+  if(!wrap) return;
+  const data = await fetch('/api/integrations/catalog').then(r=>r.json()).catch(()=>({ok:false}));
+  if(!data.ok){
+    wrap.innerHTML = '<div style="color:#b91c1c;font-size:13px">Could not load integration catalog.</div>';
+    return;
+  }
+  wrap.innerHTML = data.groups.map(group => `
+    <div class="connector-group">
+      <div class="connector-group-title">${esc(group.name)}</div>
+      <div class="connector-group-desc">${esc(group.description)}</div>
+      <div class="connector-grid">
+        ${group.connectors.map(connectorCard).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function connectorCard(c){
+  const badgeClass = c.enabled ? 'connected' : (c.configured ? 'ready' : 'disconnected');
+  const badgeText = c.enabled ? 'Enabled' : (c.configured ? 'Configured' : 'Not set up');
+  return `
+    <div class="connector-card" id="connector-${esc(c.key)}">
+      <div class="connector-card-body">
+        <div class="connector-card-title">
+          <strong>${esc(c.name)}</strong>
+          <span class="int-badge ${badgeClass}">${badgeText}</span>
+        </div>
+        <div class="connector-summary">${esc(c.summary)}</div>
+        <div class="connector-actions">
+          <button class="btn btn-secondary btn-sm" onclick="toggleConnectorForm('${esc(c.key)}')">Configure</button>
+          <button class="btn btn-secondary btn-sm" onclick="testConnector('${esc(c.key)}')">Test</button>
+        </div>
+      </div>
+      <div class="connector-form" id="connector-form-${esc(c.key)}">
+        ${c.fields.map(f => `
+          <div class="form-row">
+            <label class="form-label">${esc(f.label)} ${f.required ? '<span style="color:#dc2626">*</span>' : '<span style="font-weight:400;color:#94a3b8">(optional)</span>'}</label>
+            <input class="input connector-field" data-key="${esc(f.key)}" type="${f.type === 'password' ? 'password' : 'text'}" value="${esc((c.saved_fields||{})[f.key] || '')}" placeholder="${f.type === 'password' ? 'Enter to update' : ''}">
+          </div>
+        `).join('')}
+        <label class="connector-toggle">
+          <input type="checkbox" class="connector-enabled" ${c.enabled ? 'checked' : ''}>
+          Enable this connector category
+        </label>
+        <div class="form-row" style="margin-top:10px">
+          <label class="form-label">Internal notes <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+          <textarea class="input connector-notes" rows="2" style="height:auto;resize:vertical" placeholder="Example: customer requested this, waiting on API keys">${esc(c.notes || '')}</textarea>
+        </div>
+        <div class="connector-actions">
+          <button class="btn btn-primary btn-sm" onclick="saveConnector('${esc(c.key)}')">Save Connector</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleConnectorForm('${esc(c.key)}')">Cancel</button>
+        </div>
+        <div class="connector-result" id="connector-result-${esc(c.key)}"></div>
+      </div>
+    </div>
+  `;
+}
+
+function toggleConnectorForm(key){
+  const form = document.getElementById(`connector-form-${key}`);
+  if(!form) return;
+  form.style.display = form.style.display === 'block' ? 'none' : 'block';
+}
+
+function connectorPayload(key){
+  const form = document.getElementById(`connector-form-${key}`);
+  const fields = {};
+  form.querySelectorAll('.connector-field').forEach(input => {
+    fields[input.dataset.key] = input.value.trim();
+  });
+  return {
+    enabled: !!form.querySelector('.connector-enabled')?.checked,
+    notes: form.querySelector('.connector-notes')?.value.trim() || '',
+    fields
+  };
+}
+
+function showConnectorResult(key, ok, msg){
+  const result = document.getElementById(`connector-result-${key}`);
+  if(!result) return;
+  result.style.display = 'block';
+  result.style.background = ok ? '#dcfce7' : '#fee2e2';
+  result.style.color = ok ? '#166534' : '#991b1b';
+  result.textContent = msg;
+}
+
+async function saveConnector(key){
+  const res = await apiPost(`/api/integrations/catalog/${key}`, connectorPayload(key));
+  if(res.ok){
+    showConnectorResult(key, true, res.enabled ? 'Connector saved and enabled.' : 'Connector saved.');
+    await loadConnectorCatalog();
+  } else {
+    showConnectorResult(key, false, res.msg || 'Could not save connector.');
+  }
+}
+
+async function testConnector(key){
+  const form = document.getElementById(`connector-form-${key}`);
+  if(form && form.style.display !== 'block') form.style.display = 'block';
+  const res = await apiPost(`/api/integrations/catalog/${key}/test`, {});
+  showConnectorResult(key, !!res.ok, res.msg || (res.ok ? 'Connector is configured.' : 'Connector is missing required fields.'));
 }
 
 async function loadAmzStatus(){
@@ -391,6 +526,7 @@ async function startDistPunchout(key,name){
   else alert('Error: '+(res.msg||'Could not start punch-out'));
 }
 loadDistributors();
+loadConnectorCatalog();
 </script>
 
 <!-- Distributor Punch-out -->

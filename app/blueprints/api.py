@@ -34,6 +34,57 @@ def api_user_intro_tour_complete():
     return jsonify({"ok": True})
 
 
+@bp.route("/api/integrations/catalog")
+@login_required
+@admin_required
+def api_integrations_catalog():
+    from app.integration_catalog import catalog_with_status
+    return jsonify({"ok": True, "groups": catalog_with_status()})
+
+
+@bp.route("/api/integrations/catalog/<connector_key>", methods=["POST"])
+@login_required
+@admin_required
+def api_integrations_catalog_save(connector_key):
+    from app.integration_catalog import connector_status, save_connector
+    d = request.json or {}
+    try:
+        save_connector(
+            connector_key,
+            enabled=bool(d.get("enabled")),
+            fields=d.get("fields") if isinstance(d.get("fields"), dict) else {},
+            notes=d.get("notes") or "",
+        )
+        status = connector_status(connector_key)
+    except KeyError:
+        return jsonify({"ok": False, "msg": "Unknown integration connector"}), 404
+    log_action("INTEGRATION_CONNECTOR_SAVED",
+               detail=f"{connector_key} connector {'enabled' if d.get('enabled') else 'saved'}")
+    return jsonify({"ok": True, **status})
+
+
+@bp.route("/api/integrations/catalog/<connector_key>/test", methods=["POST"])
+@login_required
+@admin_required
+def api_integrations_catalog_test(connector_key):
+    from app.integration_catalog import connector_definition, connector_status
+    definition = connector_definition(connector_key)
+    if not definition:
+        return jsonify({"ok": False, "msg": "Unknown integration connector"}), 404
+    status = connector_status(connector_key)
+    if not status["configured"]:
+        return jsonify({
+            "ok": False,
+            "msg": "Missing required fields before this connector can be enabled.",
+            **status,
+        }), 400
+    return jsonify({
+        "ok": True,
+        "msg": f"{definition['name']} connector is configured. Native sync jobs can now be added on top of this saved connection.",
+        **status,
+    })
+
+
 def _tenant_invite_url(slug, token):
     from config import Config
     return f"https://{slug}.{Config.APP_DOMAIN}/reset-password/{token}"

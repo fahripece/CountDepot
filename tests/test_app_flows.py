@@ -26,6 +26,9 @@ from app.blueprints.api import (
     api_user_permissions,
     api_user_role,
     api_user_intro_tour_complete,
+    api_integrations_catalog,
+    api_integrations_catalog_save,
+    api_integrations_catalog_test,
     api_set_user_locations,
 )
 
@@ -1846,6 +1849,79 @@ def test_google_analytics_tag_is_present_once_on_public_and_app_pages(app, tenan
 
     assert mobile.status_code == 200
     assert mobile.get_data(as_text=True).count(tag_src) == 1
+
+
+def test_landing_page_promotes_available_and_planned_integrations(app):
+    response = app.test_client().get("/", base_url="http://countdepot.com")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'id="integrations"' in body
+    assert "Available now" in body
+    assert "Expanded connector catalog" in body
+    assert "Amazon Business" in body
+    assert "QuickBooks Online" in body
+    assert "Shopify" in body
+    assert "WooCommerce" in body
+    assert "Avalara tax" in body
+    assert "Grainger cXML" in body
+
+
+def test_admin_can_configure_expanded_integration_catalog(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/api/integrations/catalog",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        catalog = _as_response(app, app.preprocess_request() or api_integrations_catalog())
+
+    data = catalog.get_json()
+    assert catalog.status_code == 200
+    assert data["ok"] is True
+    names = {connector["name"] for group in data["groups"] for connector in group["connectors"]}
+    assert {"WooCommerce", "Etsy", "EasyPost", "Stripe", "Avalara", "Zapier", "Twilio SMS"} <= names
+
+    with app.test_request_context(
+        "/api/integrations/catalog/woocommerce",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "enabled": True,
+            "fields": {
+                "store_url": "https://store.example.com",
+                "consumer_key": "ck_test_123",
+                "consumer_secret": "cs_test_456",
+            },
+            "notes": "Priority ecommerce connector",
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        saved = _as_response(app, app.preprocess_request() or api_integrations_catalog_save("woocommerce"))
+
+    assert saved.status_code == 200
+    assert saved.get_json()["configured"] is True
+    assert saved.get_json()["enabled"] is True
+
+    with app.test_request_context(
+        "/api/integrations/catalog/woocommerce/test",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        tested = _as_response(app, app.preprocess_request() or api_integrations_catalog_test("woocommerce"))
+
+    assert tested.status_code == 200
+    assert tested.get_json()["ok"] is True
 
 
 def test_content_security_policy_allows_google_analytics(app):

@@ -320,6 +320,154 @@ section{padding:100px 24px}
 }
 .feature p{font-size:14px;color:var(--muted2);line-height:1.7;font-weight:300}
 
+.integrations-section{
+  background:
+    radial-gradient(circle at 12% 20%,rgba(200,179,253,.12),transparent 34%),
+    radial-gradient(circle at 86% 0%,rgba(100,66,214,.16),transparent 32%),
+    var(--bg);
+}
+.integrations-layout{
+  display:grid;
+  grid-template-columns:minmax(0,.9fr) minmax(0,1.35fr);
+  gap:28px;
+  align-items:stretch;
+  margin-top:64px;
+}
+.integration-proof{
+  background:linear-gradient(145deg,rgba(23,32,51,.94),rgba(15,22,40,.94));
+  border:1px solid rgba(200,179,253,.18);
+  border-radius:var(--radius);
+  padding:32px;
+  box-shadow:0 22px 70px rgba(0,0,0,.24);
+}
+.integration-proof h3{
+  font-size:22px;
+  letter-spacing:-.4px;
+  margin-bottom:12px;
+}
+.integration-proof p{
+  color:var(--muted2);
+  line-height:1.75;
+  font-size:15px;
+  font-weight:300;
+}
+.integration-proof-list{
+  display:grid;
+  gap:12px;
+  margin:26px 0 0;
+}
+.integration-proof-item{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  padding:14px;
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:16px;
+  background:rgba(255,255,255,.03);
+}
+.integration-proof-icon{
+  width:28px;
+  height:28px;
+  border-radius:9px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  background:rgba(100,66,214,.18);
+  color:var(--accent);
+  font-size:14px;
+  font-weight:800;
+}
+.integration-proof-item strong{
+  display:block;
+  font-size:14px;
+  margin-bottom:2px;
+}
+.integration-proof-item span{
+  display:block;
+  color:var(--muted2);
+  font-size:12px;
+  line-height:1.55;
+}
+.integration-groups{
+  display:grid;
+  gap:16px;
+}
+.integration-group{
+  background:rgba(23,32,51,.82);
+  border:1px solid var(--border);
+  border-radius:22px;
+  padding:24px;
+}
+.integration-group-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  margin-bottom:18px;
+}
+.integration-group h3{
+  font-size:18px;
+  letter-spacing:-.3px;
+}
+.integration-status{
+  white-space:nowrap;
+  border-radius:999px;
+  padding:5px 11px;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.3px;
+  text-transform:uppercase;
+}
+.integration-status-live{
+  background:rgba(22,163,74,.14);
+  color:#86efac;
+  border:1px solid rgba(34,197,94,.22);
+}
+.integration-status-roadmap{
+  background:rgba(217,119,6,.14);
+  color:#fbbf24;
+  border:1px solid rgba(251,191,36,.22);
+}
+.integration-status-custom{
+  background:rgba(100,66,214,.18);
+  color:var(--accent);
+  border:1px solid rgba(200,179,253,.26);
+}
+.integration-chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.integration-chip{
+  display:inline-flex;
+  align-items:center;
+  min-height:34px;
+  padding:7px 12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(15,22,40,.72);
+  color:var(--text);
+  font-size:13px;
+  font-weight:600;
+}
+.integration-chip-muted{
+  color:var(--muted2);
+  background:rgba(15,22,40,.38);
+}
+.integrations-cta{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  flex-wrap:wrap;
+  margin-top:28px;
+}
+.integrations-note{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.55;
+}
+
 /* ── HOW IT WORKS ── */
 .steps{
   display:grid;
@@ -576,6 +724,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 
 @media(max-width:1080px){
   .features-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .integrations-layout{grid-template-columns:1fr;max-width:780px;margin-left:auto;margin-right:auto}
   .steps{grid-template-columns:repeat(2,minmax(0,1fr))}
   .pricing-grid{grid-template-columns:1fr;max-width:520px;margin-left:auto;margin-right:auto}
   .reviews-grid{grid-template-columns:1fr;max-width:520px}
@@ -617,6 +766,12 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   /* Features */
   .features-grid{grid-template-columns:1fr;margin-top:40px;padding:8px}
   .feature{padding:28px 24px}
+  .integrations-layout{margin-top:40px;gap:16px}
+  .integration-proof,.integration-group{padding:22px}
+  .integration-group-head{align-items:flex-start;flex-direction:column}
+  .integration-status{white-space:normal}
+  .integration-chip{width:100%;justify-content:center}
+  .integrations-cta{align-items:stretch;flex-direction:column}
 
   /* Section titles */
   .section-title{font-size:clamp(22px,6vw,36px)!important;letter-spacing:-0.5px;word-break:break-word}
@@ -650,6 +805,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   <div class="nav-links">
     <a href="#features">Features</a>
     <a href="#how">How it works</a>
+    <a href="#integrations">Integrations</a>
     <a href="#pricing">Pricing</a>
     <a href="#signin" class="nav-link-signin">Sign in</a>
     <a href="/signup" class="nav-cta">Start free trial</a>
@@ -896,6 +1052,110 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
         <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
         <h3>Full Audit Log</h3>
         <p>Every action is permanently recorded. See exactly who did what and when — immutable and searchable.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INTEGRATIONS -->
+<section id="integrations" class="integrations-section">
+  <div class="container">
+    <div class="section-label">Integrations</div>
+    <h2 class="section-title">Connect inventory to the tools you already use.</h2>
+    <p class="section-sub">CountDepot now covers the integration categories buyers expect from a Zoho competitor: sales channels, accounting, procurement, shipping, payments, tax, alerts, and automation.</p>
+
+    <div class="integrations-layout">
+      <div class="integration-proof">
+        <h3>Built around inventory-first workflows.</h3>
+        <p>Zoho competes broadly across a full business suite. CountDepot should win where teams need a simpler, cheaper inventory system that still connects to marketplaces, books, vendors, notifications, and custom systems.</p>
+
+        <div class="integration-proof-list">
+          <div class="integration-proof-item">
+            <div class="integration-proof-icon">1</div>
+            <div>
+              <strong>Sell or sync from channels</strong>
+              <span>Push items to sales channels and pull paid orders back into inventory status.</span>
+            </div>
+          </div>
+          <div class="integration-proof-item">
+            <div class="integration-proof-icon">2</div>
+            <div>
+              <strong>Keep finance connected</strong>
+              <span>Accounting exports and connected accounting systems keep asset value and sales data usable.</span>
+            </div>
+          </div>
+          <div class="integration-proof-item">
+            <div class="integration-proof-icon">3</div>
+            <div>
+              <strong>Automate the edge cases</strong>
+              <span>Webhooks, alerts, SSO, and cXML support cover the workflows that one-size-fits-all tools miss.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="integrations-cta">
+          <a href="/signup" class="btn-primary">Start free for 30 days</a>
+          <span class="integrations-note">Need a specific integration? Request it during onboarding and we can prioritize by demand.</span>
+        </div>
+      </div>
+
+      <div class="integration-groups" aria-label="CountDepot integration coverage">
+        <div class="integration-group">
+          <div class="integration-group-head">
+            <h3>Available now</h3>
+            <span class="integration-status integration-status-live">Live coverage</span>
+          </div>
+          <div class="integration-chips">
+            <span class="integration-chip">Amazon Business</span>
+            <span class="integration-chip">eBay</span>
+            <span class="integration-chip">Shopify</span>
+            <span class="integration-chip">QuickBooks Online</span>
+            <span class="integration-chip">Xero</span>
+            <span class="integration-chip">Slack alerts</span>
+            <span class="integration-chip">Microsoft Teams alerts</span>
+            <span class="integration-chip">Google sign-in</span>
+            <span class="integration-chip">SSO controls</span>
+            <span class="integration-chip">Webhooks</span>
+            <span class="integration-chip">API docs</span>
+            <span class="integration-chip">cXML PunchOut</span>
+          </div>
+        </div>
+
+        <div class="integration-group">
+          <div class="integration-group-head">
+            <h3>Expanded connector catalog</h3>
+            <span class="integration-status integration-status-roadmap">Available categories</span>
+          </div>
+          <div class="integration-chips">
+            <span class="integration-chip integration-chip-muted">WooCommerce</span>
+            <span class="integration-chip integration-chip-muted">Etsy</span>
+            <span class="integration-chip integration-chip-muted">Amazon Seller</span>
+            <span class="integration-chip integration-chip-muted">Shipping carriers</span>
+            <span class="integration-chip integration-chip-muted">EasyPost / Easyship</span>
+            <span class="integration-chip integration-chip-muted">Stripe payments</span>
+            <span class="integration-chip integration-chip-muted">PayPal</span>
+            <span class="integration-chip integration-chip-muted">Avalara tax</span>
+            <span class="integration-chip integration-chip-muted">CRM sync</span>
+            <span class="integration-chip integration-chip-muted">Google Shopping</span>
+            <span class="integration-chip integration-chip-muted">Zapier / Make</span>
+            <span class="integration-chip integration-chip-muted">Twilio SMS</span>
+          </div>
+        </div>
+
+        <div class="integration-group">
+          <div class="integration-group-head">
+            <h3>Procurement and distributor workflows</h3>
+            <span class="integration-status integration-status-custom">Custom ready</span>
+          </div>
+          <div class="integration-chips">
+            <span class="integration-chip">Grainger cXML</span>
+            <span class="integration-chip">TD SYNNEX cXML</span>
+            <span class="integration-chip">Ingram Micro cXML</span>
+            <span class="integration-chip">Henry Schein cXML</span>
+            <span class="integration-chip integration-chip-muted">EDI partners</span>
+            <span class="integration-chip integration-chip-muted">Vendor catalogs</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
