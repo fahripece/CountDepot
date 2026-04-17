@@ -83,7 +83,7 @@ body{
 }
 
 /* ── NAV ── */
-nav{
+.site-nav{
   position:fixed;top:0;left:0;right:0;z-index:100;
   padding:18px max(24px,calc((100vw - var(--max)) / 2));
   display:flex;align-items:center;justify-content:space-between;
@@ -733,7 +733,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 
 @media(max-width:768px){
   /* Nav */
-  nav{padding:16px 20px}
+  .site-nav{padding:16px 20px}
   .nav-links{display:none}
   .nav-actions{display:flex;gap:8px}
   .nav-link-signin{padding:8px 12px;font-size:13px}
@@ -805,7 +805,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 <body>
 
 <!-- NAV -->
-<nav>
+<nav class="site-nav">
   <div class="nav-logo">Count<span>Depot</span></div>
   <div class="nav-links">
     <a href="#features">Features</a>

@@ -1859,8 +1859,10 @@ def test_landing_page_promotes_available_and_planned_integrations(app):
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
+    assert '<nav class="site-nav">' in body
     assert '<div class="nav-links">\n    <a href="#features">Features</a>\n    <a href="#how">How it works</a>\n    <a href="#pricing">Pricing</a>' in body
     assert '<div class="nav-actions">\n    <a href="#signin" class="nav-link-signin">Sign in</a>\n    <a href="/signup" class="nav-cta">Start free trial</a>' in body
+    assert "\nnav{" not in body
     assert 'id="integrations"' in body
     assert "Available now" in body
     assert "Expanded connector catalog" in body
