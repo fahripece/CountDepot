@@ -8,6 +8,51 @@ SEO_PAGES = {
         "hero": "Inventory management built for repair shops that need parts, tools, and jobs under control.",
         "pain": "Repair shops lose margin when parts disappear, job materials are not reserved, or techs waste time asking what is in stock.",
         "use_cases": ["Track parts by shelf, SKU, vendor, or serial number", "Reserve parts for upcoming jobs", "Check tools in and out by technician", "Spot low-stock supplies before jobs get delayed"],
+        "phase2": {
+            "intro": "Repair shops do not need a bloated ERP to fix inventory. They need fast answers: what parts are available, what is reserved for a job, which tools are checked out, and what needs to be reordered before work stalls.",
+            "workflow": [
+                {
+                    "title": "Create clean part and tool records",
+                    "copy": "Store part names, vendor SKUs, serial numbers, shelf bins, cost, sale price, condition, and category in one place so the team stops hunting through spreadsheets."
+                },
+                {
+                    "title": "Reserve inventory before a job starts",
+                    "copy": "Hold parts for upcoming repairs so another technician does not accidentally use material already promised to a customer job."
+                },
+                {
+                    "title": "Check tools and equipment in or out",
+                    "copy": "Use the mobile web scanner to check shared tools out to a person, job, truck, or department, then check them back in when work is done."
+                },
+                {
+                    "title": "See low-stock risk early",
+                    "copy": "Use quantity tracking and low-stock visibility to reorder common repair supplies before a missing part delays the schedule."
+                }
+            ],
+            "examples": [
+                "Phone repair shop tracking screens, batteries, adhesives, tools, and serialized devices",
+                "Appliance repair shop tracking parts by shelf, job, vendor, and technician",
+                "Electronics repair bench tracking components, test equipment, and customer-job materials",
+                "Small engine or equipment repair shop tracking parts, consumables, and shared tools"
+            ],
+            "faq": [
+                {
+                    "question": "Can CountDepot track both repair parts and tools?",
+                    "answer": "Yes. You can track serialized tools, quantity-based parts, shelf locations, costs, categories, and checkout history in the same workspace."
+                },
+                {
+                    "question": "Can technicians use it from a phone?",
+                    "answer": "Yes. CountDepot includes a mobile-friendly web scanner for lookup, check in, check out, reservations, and simple item adds without requiring an app-store install."
+                },
+                {
+                    "question": "Can I reserve parts for a repair job?",
+                    "answer": "Yes. Reservations show how many units are available, reserved, and total, which helps prevent accidentally using parts already assigned to a future job."
+                },
+                {
+                    "question": "Is this only for large repair operations?",
+                    "answer": "No. CountDepot is designed to be affordable and practical for small teams that need better control than spreadsheets but do not want enterprise software."
+                }
+            ]
+        },
     },
     "inventory-software-for-nonprofits": {
         "tier": "Tier 1",

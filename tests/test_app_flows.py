@@ -1667,6 +1667,51 @@ def test_homepage_has_core_seo_meta_tags(app):
     assert f'<meta name="twitter:title" content="{title}">' in body
 
 
+def test_homepage_has_schema_internal_links_and_marketing_events(app):
+    response = app.test_client().get("/", base_url="http://countdepot.com")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert '"@type": "Organization"' in body
+    assert '"@type": "SoftwareApplication"' in body
+    assert '"applicationCategory": "BusinessApplication"' in body
+    assert 'aria-label="Industry inventory software"' in body
+    assert 'href="/inventory-management-for-repair-shops"' in body
+    assert 'href="/inventory-software-for-nonprofits"' in body
+    assert 'href="/inventory-tracking-for-veterinary-clinics"' in body
+    assert "signup_click" in body
+    assert "pricing_click" in body
+    assert "demo_request" in body
+    assert "seo_internal_link_click" in body
+
+
+def test_signup_page_has_seo_meta_and_submit_event(app):
+    response = app.test_client().get("/signup", base_url="http://countdepot.com")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "<title>Start Free Inventory Management Trial | CountDepot</title>" in body
+    assert body.count("<title>") == 1
+    assert (
+        '<meta name="description" content="Create your CountDepot workspace in under a minute. '
+        'Start a 30-day free inventory management trial with barcode scanning and no credit card required.">'
+    ) in body
+    assert '<link rel="canonical" href="https://countdepot.com/signup">' in body
+    assert "signup_submit" in body
+
+
+def test_www_countdepot_redirects_to_apex(app):
+    response = app.test_client().get(
+        "/inventory-management-for-repair-shops?utm_source=test",
+        base_url="https://www.countdepot.com",
+    )
+
+    assert response.status_code == 301
+    assert response.headers["Location"] == (
+        "https://countdepot.com/inventory-management-for-repair-shops?utm_source=test"
+    )
+
+
 def test_public_seo_pages_render_on_bare_domain(app):
     from app.seo_pages import SEO_PAGES
 
@@ -1680,6 +1725,37 @@ def test_public_seo_pages_render_on_bare_domain(app):
         assert page["title"] in body
         assert f'href="http://countdepot.com/{slug}"' in body
         assert "Start free trial" in body
+
+
+def test_repair_shop_seo_page_has_phase_two_content(app):
+    client = app.test_client()
+
+    response = client.get(
+        "/inventory-management-for-repair-shops",
+        base_url="http://countdepot.com",
+    )
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Repair shop inventory workflow" in body
+    assert "From scattered parts lists to a clear repair workflow." in body
+    assert "Reserve inventory before a job starts" in body
+    assert "Phone repair shop tracking screens" in body
+    assert "Questions repair shops ask before replacing spreadsheets." in body
+    assert '"@type": "FAQPage"' in body
+    assert "Can CountDepot track both repair parts and tools?" in body
+
+
+def test_generic_seo_pages_do_not_show_repair_shop_phase_two_content(app):
+    response = app.test_client().get(
+        "/inventory-software-for-nonprofits",
+        base_url="http://countdepot.com",
+    )
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Repair shop inventory workflow" not in body
+    assert '"@type": "FAQPage"' not in body
 
 
 def test_google_analytics_tag_is_present_once_on_public_and_app_pages(app, tenant):

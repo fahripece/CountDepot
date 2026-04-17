@@ -14,6 +14,38 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="CountDepot - Inventory Management for Any Industry">
 <meta name="twitter:description" content="Track assets, scan barcodes, and generate financial reports. Inventory management that adapts to your industry. Free tier available, no credit card required.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://countdepot.com/#organization",
+      "name": "CountDepot",
+      "url": "https://countdepot.com/",
+      "logo": "https://countdepot.com/static/icons/icon.svg"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://countdepot.com/#software",
+      "name": "CountDepot",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://countdepot.com/",
+      "description": "Inventory management software for tracking assets, scanning barcodes, reservations, checkouts, and financial reports.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "description": "30-day free trial available without a credit card."
+      },
+      "publisher": {
+        "@id": "https://countdepot.com/#organization"
+      }
+    }
+  ]
+}
+</script>
 {#
 <title>CountDepot — Inventory Management Made Easy</title>
 #}
@@ -449,6 +481,9 @@ footer{
 }
 .footer-logo span{color:var(--accent)}
 footer p{font-size:13px;color:var(--muted);font-weight:300}
+.footer-seo{width:100%;display:flex;flex-wrap:wrap;gap:10px 18px;justify-content:center;border-top:1px solid rgba(255,255,255,.08);padding-top:22px;margin-top:10px}
+.footer-seo a{font-size:12px;color:var(--muted2);font-weight:600;text-decoration:none}
+.footer-seo a:hover{color:var(--accent)}
 
 /* ── RESPONSIVE ── */
 /* ── PRODUCT PREVIEW ── */
@@ -1102,7 +1137,7 @@ async function submitDemoRequest(){
   try{
     const r=await fetch('/api/demo-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,company,email,size})});
     const d=await r.json();
-    if(d.ok){document.getElementById('demo-success').style.display='block';}
+    if(d.ok){trackMarketingEvent('demo_request',{team_size:size||'unknown'});document.getElementById('demo-success').style.display='block';}
     else{errEl.textContent=d.msg||'Something went wrong.';errEl.style.display='block';}
   }catch(e){errEl.textContent='Network error. Please try again.';errEl.style.display='block';}
 }
@@ -1113,9 +1148,42 @@ async function submitDemoRequest(){
   <div class="footer-logo">Count<span>Depot</span></div>
   <p>© 2026 CountDepot. Inventory Management Made Easy.</p>
   <a href="/signup" class="nav-cta">Get started free</a>
+  <nav class="footer-seo" aria-label="Industry inventory software">
+    <a href="/inventory-management-for-repair-shops">Repair shops</a>
+    <a href="/inventory-software-for-nonprofits">Nonprofits</a>
+    <a href="/inventory-management-for-photographers">Photographers</a>
+    <a href="/inventory-tracking-for-restaurants">Restaurants</a>
+    <a href="/inventory-software-for-churches">Churches</a>
+    <a href="/inventory-management-for-gyms">Gyms</a>
+    <a href="/inventory-software-for-auto-detailing">Auto detailing</a>
+    <a href="/inventory-tracking-for-veterinary-clinics">Veterinary clinics</a>
+  </nav>
 </footer>
 
 <script>
+function trackMarketingEvent(name, params) {
+  if (typeof gtag === 'function') {
+    gtag('event', name, params || {});
+  }
+}
+document.querySelectorAll('a[href="/signup"]').forEach(link => {
+  link.addEventListener('click', () => trackMarketingEvent('signup_click', {
+    link_text: (link.textContent || '').trim(),
+    page_location: window.location.href
+  }));
+});
+document.querySelectorAll('a[href="#pricing"], .plan-cta').forEach(link => {
+  link.addEventListener('click', () => trackMarketingEvent('pricing_click', {
+    link_text: (link.textContent || '').trim(),
+    page_location: window.location.href
+  }));
+});
+document.querySelectorAll('.footer-seo a').forEach(link => {
+  link.addEventListener('click', () => trackMarketingEvent('seo_internal_link_click', {
+    target_path: link.getAttribute('href'),
+    link_text: (link.textContent || '').trim()
+  }));
+});
 // Sign in modal
 function openSignin() {
   const overlay = document.getElementById('signin-overlay');

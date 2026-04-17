@@ -11,6 +11,26 @@
 <meta property="og:description" content="{{ page.description }}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="{{ canonical_url }}">
+{% if page.phase2 %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for item in page.phase2.faq %}
+    {
+      "@type": "Question",
+      "name": {{ item.question|tojson }},
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": {{ item.answer|tojson }}
+      }
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+{% endif %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -39,9 +59,13 @@ h2{font-size:clamp(30px,4vw,46px);line-height:1.05;letter-spacing:-.045em;margin
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px}.card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:24px}.card strong{display:block;font-size:18px;margin-bottom:8px}.card p{font-size:15px}
 .list{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:30px}.list div{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:16px;font-weight:700}.list div::before{content:'✓';color:var(--success);font-weight:900;margin-right:9px}
 .compare{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:34px}.compare ul{list-style:none;display:grid;gap:12px;color:var(--muted)}.compare li::before{content:'•';color:var(--accent);font-weight:900;margin-right:9px}
+.grid.two{grid-template-columns:repeat(2,1fr)}
+.feature-strip{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:34px}.feature-strip .card{background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03))}
+.faq{display:grid;gap:14px;margin-top:30px}.faq details{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px}.faq summary{cursor:pointer;font-weight:900}.faq p{margin-top:10px;font-size:15px}
+.quote{margin-top:32px;border-left:4px solid var(--accent);padding:20px 22px;background:rgba(200,179,253,.08);border-radius:0 18px 18px 0;color:var(--text)}
 .final{padding:74px 22px;text-align:center;background:linear-gradient(135deg,var(--primary),#4f2fbd)}.final h2{max-width:820px;margin:0 auto 16px}.final p{margin:0 auto;color:#ede9fe}
 .footer{padding:30px 22px;color:var(--muted);font-size:14px;border-top:1px solid rgba(255,255,255,.08)}.footer-inner{max-width:var(--max);margin:0 auto;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
-@media(max-width:860px){.hero-inner,.grid,.list,.compare{grid-template-columns:1fr}.nav-links{gap:12px}.nav-links a:not(.nav-cta){display:none}}
+@media(max-width:860px){.hero-inner,.grid,.grid.two,.list,.compare,.feature-strip{grid-template-columns:1fr}.nav-links{gap:12px}.nav-links a:not(.nav-cta){display:none}}
 </style>
 </head>
 <body>
@@ -88,6 +112,39 @@ h2{font-size:clamp(30px,4vw,46px);line-height:1.05;letter-spacing:-.045em;margin
   </div>
 </section>
 
+{% if page.phase2 %}
+<section class="section alt">
+  <div class="wrap">
+    <div class="eyebrow">Repair shop inventory workflow</div>
+    <h2>From scattered parts lists to a clear repair workflow.</h2>
+    <p>{{ page.phase2.intro }}</p>
+    <div class="grid two">
+      {% for step in page.phase2.workflow %}
+      <div class="card">
+        <strong>{{ step.title }}</strong>
+        <p>{{ step.copy }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="eyebrow">Real repair shop use cases</div>
+    <h2>Built for parts, tools, jobs, and technicians.</h2>
+    <div class="feature-strip">
+      {% for example in page.phase2.examples %}
+      <div class="card"><strong>{{ example }}</strong></div>
+      {% endfor %}
+    </div>
+    <div class="quote">
+      CountDepot is strongest when a repair team needs practical accountability: who has the tool, where the part is stored, how many are available, and what is already reserved for the next job.
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <section class="section alt">
   <div class="wrap">
     <div class="eyebrow">Core features</div>
@@ -124,6 +181,23 @@ h2{font-size:clamp(30px,4vw,46px);line-height:1.05;letter-spacing:-.045em;margin
     </div>
   </div>
 </section>
+
+{% if page.phase2 %}
+<section class="section alt">
+  <div class="wrap">
+    <div class="eyebrow">FAQ</div>
+    <h2>Questions repair shops ask before replacing spreadsheets.</h2>
+    <div class="faq">
+      {% for item in page.phase2.faq %}
+      <details>
+        <summary>{{ item.question }}</summary>
+        <p>{{ item.answer }}</p>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
 
 <section class="final">
   <h2>Ready to try CountDepot for {{ page.audience }}?</h2>

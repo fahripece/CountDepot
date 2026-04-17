@@ -80,6 +80,11 @@ def create_app():
 
     @app.before_request
     def before():
+        host = request.host.split(":")[0]
+        if host == "www.countdepot.com":
+            target = request.url.replace("//www.countdepot.com", "//countdepot.com", 1)
+            return redirect(target, code=301 if request.method in ("GET", "HEAD") else 308)
+
         # ── API key authentication ────────────────────────────────────────────
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer sk_live_"):
@@ -130,7 +135,6 @@ def create_app():
             return
 
         # Bare domain (countdepot.com with no subdomain) → landing page
-        host = request.host.split(":")[0]
         parts = host.split(".")
         is_bare_domain = (
             host not in ("localhost", "127.0.0.1")

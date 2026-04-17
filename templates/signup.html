@@ -4,7 +4,16 @@
 {% include "_google_analytics.html" %}
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Start Free Inventory Management Trial | CountDepot</title>
+<meta name="description" content="Create your CountDepot workspace in under a minute. Start a 30-day free inventory management trial with barcode scanning and no credit card required.">
+<link rel="canonical" href="https://countdepot.com/signup">
+<meta property="og:title" content="Start Free Inventory Management Trial | CountDepot">
+<meta property="og:description" content="Create your CountDepot workspace in under a minute. Start a 30-day free inventory management trial with barcode scanning and no credit card required.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://countdepot.com/signup">
+{#
 <title>Get started · CountDepot</title>
+#}
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
@@ -52,7 +61,7 @@ a.signin:hover{text-decoration:underline}
     </a>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><div style="flex:1;height:1px;background:#e5e3de"></div><span style="font-size:12px;color:#94a3b8">or fill in manually</span><div style="flex:1;height:1px;background:#e5e3de"></div></div>
 
-    <form method="POST">
+    <form method="POST" onsubmit="if(typeof gtag==='function'){gtag('event','signup_submit',{page_location:window.location.href});}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="field">
         <label>Company name</label>
