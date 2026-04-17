@@ -143,6 +143,8 @@ MIGRATIONS = [
 
     # users — per-user low stock alert opt-in
     ("users", "low_stock_alerts", "INTEGER NOT NULL DEFAULT 0"),
+    # users — first-login product tour
+    ("users", "intro_tour_completed_at", "TEXT"),
 
     # departments — user + item assignment
     ("users", "department_id",            "INTEGER"),
@@ -210,6 +212,7 @@ def _init_db_conn(db):
             must_change_password INTEGER NOT NULL DEFAULT 0,
             last_login           TEXT,
             low_stock_alerts     INTEGER NOT NULL DEFAULT 0,
+            intro_tour_completed_at TEXT,
             department_id        INTEGER,
             restrict_to_department INTEGER NOT NULL DEFAULT 0
         );

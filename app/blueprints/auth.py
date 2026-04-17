@@ -122,6 +122,10 @@ def login_page():
                 user["id"], user["role"],
                 user["permissions"] if "permissions" in user.keys() else "")
             sess = _build_session(user, perms)
+            first_login = not (user["last_login"] if "last_login" in user.keys() else None)
+            tour_done = bool(user["intro_tour_completed_at"] if "intro_tour_completed_at" in user.keys() else None)
+            if first_login and not tour_done:
+                sess["show_intro_tour"] = True
             session.clear()
             session.update(sess)
             now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")

@@ -24,6 +24,16 @@ from app.helpers import (login_required, perm_required, admin_required,
 bp = Blueprint("api", __name__)
 
 
+@bp.route("/api/user/intro-tour-complete", methods=["POST"])
+@login_required
+def api_user_intro_tour_complete():
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    execute("UPDATE users SET intro_tour_completed_at=? WHERE id=?",
+            [now, session.get("user_id")])
+    session["show_intro_tour"] = False
+    return jsonify({"ok": True})
+
+
 def _tenant_invite_url(slug, token):
     from config import Config
     return f"https://{slug}.{Config.APP_DOMAIN}/reset-password/{token}"

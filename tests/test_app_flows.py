@@ -25,6 +25,7 @@ from app.blueprints.api import (
     api_user_invite,
     api_user_permissions,
     api_user_role,
+    api_user_intro_tour_complete,
     api_set_user_locations,
 )
 
@@ -57,6 +58,64 @@ def test_login_redirects_to_inventory_for_onboarded_tenant(app, tenant):
     assert saved_session["username"] == tenant["email"]
     assert saved_session["role"] == "admin"
     assert saved_session["user_id"]
+
+
+def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    db.execute(
+        "UPDATE users SET last_login=NULL, intro_tour_completed_at=NULL WHERE email=?",
+        [tenant["email"]],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant)
+    assert response.status_code == 302
+    assert saved_session["show_intro_tour"] is True
+
+    with app.test_request_context(
+        "/",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        page = _as_response(app, app.preprocess_request() or inventory())
+
+    body = page.get_data(as_text=True)
+    assert "First login guide" in body
+    assert "Start with categories" in body
+    assert "Create products" in body
+    assert "Use sites and locations" in body
+
+    with app.test_request_context(
+        "/api/user/intro-tour-complete",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        complete = _as_response(app, app.preprocess_request() or api_user_intro_tour_complete())
+        completed_session = dict(session)
+
+    assert complete.status_code == 200
+    assert complete.get_json()["ok"] is True
+    assert completed_session["show_intro_tour"] is False
+
+    db = sqlite3.connect(tenant["db_path"])
+    completed_at = db.execute(
+        "SELECT intro_tour_completed_at FROM users WHERE email=?",
+        [tenant["email"]],
+    ).fetchone()[0]
+    db.close()
+    assert completed_at
+
+    second_response, second_session = _login(app, tenant)
+    assert second_response.status_code == 302
+    assert not second_session.get("show_intro_tour")
 
 
 def test_onboarding_gate_redirects_unfinished_tenant(app):
