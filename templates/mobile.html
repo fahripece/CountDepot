@@ -1,29 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Mobile Scanner · CountDepot{% endblock %}
+{% block title %}Mobile Scanner - CountDepot{% endblock %}
 {% block content %}
 <main class="m-app">
   <header class="m-head">
     <div>
       <div class="m-kicker">Worker scanner</div>
       <h1>CountDepot Mobile</h1>
-      <p>Scan, check in/out, reserve, and add field inventory.</p>
+      <p>Fast check in, check out, reservations, and simple item adds.</p>
     </div>
-    <a class="m-logout" href="/logout">Sign out</a>
+    <div class="m-head-actions">
+      <span class="m-chip">Web app</span>
+      <a class="m-logout" href="/logout">Sign out</a>
+    </div>
   </header>
 
+  <section class="m-install" id="installPrompt" hidden>
+    <div>
+      <strong>Use this like an app</strong>
+      <span>Add CountDepot to your home screen for faster warehouse access.</span>
+    </div>
+    <button type="button" id="installBtn">Install</button>
+    <button type="button" class="m-install-x" onclick="dismissInstallPrompt()" aria-label="Dismiss install prompt">x</button>
+  </section>
+
   <section class="m-scan">
-    <button class="m-scan-btn" onclick="scanWithCamera()">Scan Barcode</button>
+    <button class="m-scan-btn" type="button" onclick="scanWithCamera()">Scan Item Barcode</button>
     <div class="m-search">
-      <input id="mQuery" placeholder="Scan or search serial, SKU, item name..." autocomplete="off" onkeydown="if(event.key==='Enter')lookupInput()">
-      <button onclick="lookupInput()">Find</button>
+      <input id="mQuery" placeholder="Serial, SKU, item name..." autocomplete="off" autocapitalize="none" enterkeyhint="search" onkeydown="if(event.key==='Enter')lookupInput()">
+      <button type="button" onclick="lookupInput()">Find</button>
     </div>
   </section>
 
-  <section class="m-tabs" role="tablist">
-    <button class="active" data-tab="lookup" onclick="setTab('lookup')">Item</button>
-    <button data-tab="reserve" onclick="setTab('reserve')">Reserve</button>
-    <button data-tab="add" onclick="setTab('add')">Add</button>
-    <button data-tab="active" onclick="setTab('active')">Active</button>
+  <section class="m-tabs" role="tablist" aria-label="Mobile inventory actions">
+    <button class="active" data-tab="lookup" onclick="setTab('lookup')" type="button">Item</button>
+    <button data-tab="reserve" onclick="setTab('reserve')" type="button">Reserve</button>
+    <button data-tab="add" onclick="setTab('add')" type="button">Add</button>
+    <button data-tab="active" onclick="setTab('active')" type="button">Active</button>
   </section>
 
   <section class="m-panel" id="lookupPanel">
@@ -34,13 +46,13 @@
     <h2>Create Reservation</h2>
     <div id="reserveItemLabel" class="m-note">Scan or search an item first, then reserve it.</div>
     <div class="m-grid">
-      <label>Reserved for<input id="resBy" placeholder="Person, team, customer"></label>
-      <label>Quantity<input id="resQty" type="number" min="1" value="1"></label>
+      <label>Reserved for<input id="resBy" placeholder="Person, team, customer" autocomplete="name"></label>
+      <label>Quantity<input id="resQty" type="number" min="1" value="1" inputmode="numeric"></label>
       <label>From<input id="resFrom" type="date"></label>
       <label>To<input id="resTo" type="date"></label>
     </div>
     <label>Reason / title<input id="resPurpose" placeholder="Install, job, customer, project"></label>
-    <button class="m-primary" onclick="createReservation()">Reserve Item</button>
+    <button class="m-primary" type="button" onclick="createReservation()">Reserve Item</button>
   </section>
 
   <section class="m-panel" id="addPanel" hidden>
@@ -55,10 +67,10 @@
     </label>
     <label>Item name<input id="addName" placeholder="Item name"></label>
     <div class="m-grid">
-      <label>Serial #<input id="addSerial" placeholder="Scan or type serial"></label>
+      <label>Serial #<span class="m-inline-scan"><input id="addSerial" placeholder="Scan or type serial" autocapitalize="none"><button type="button" onclick="scanAddSerial()">Scan</button></span></label>
       <label>Vendor SKU<input id="addSku" placeholder="Optional"></label>
       <label>Shelf / bin<input id="addShelf" placeholder="A-12"></label>
-      <label>Quantity<input id="addQty" type="number" min="1" placeholder="Leave blank for single item"></label>
+      <label>Quantity<input id="addQty" type="number" min="1" inputmode="numeric" placeholder="Single if blank"></label>
     </div>
     <label>Category
       <select id="addCategory">
@@ -68,22 +80,23 @@
         {% endfor %}
       </select>
     </label>
-    <button class="m-primary" onclick="addItem()">Add Inventory</button>
+    <button class="m-primary" type="button" onclick="addItem()">Add Inventory</button>
   </section>
 
   <section class="m-panel" id="activePanel" hidden>
     <div class="m-row-head">
       <h2>Active Reservations</h2>
-      <button class="m-lite" onclick="loadReservations()">Refresh</button>
+      <button class="m-lite" type="button" onclick="loadReservations()">Refresh</button>
     </div>
     <div id="activeReservations" class="m-empty">Loading...</div>
   </section>
 </main>
 
 <div class="m-actionbar" id="actionBar" hidden>
-  <button onclick="confirmCheckout()">Check Out</button>
-  <button onclick="confirmCheckin()">Check In</button>
-  <button onclick="setTab('reserve')">Reserve</button>
+  <button type="button" onclick="confirmCheckout()">Check Out</button>
+  <button type="button" onclick="confirmCheckin()">Check In</button>
+  <button type="button" onclick="setTab('reserve')">Reserve</button>
+  <button type="button" onclick="resetLookup()">Scan</button>
 </div>
 
 <style>
@@ -91,20 +104,27 @@ body:has(.m-app) .sidebar,body:has(.m-app) .mob-sidebar-overlay,body:has(.m-app)
 body:has(.m-app) .layout{display:block;height:auto;min-height:100vh}
 body:has(.m-app) .main{display:block;min-height:100vh;overflow:visible}
 body:has(.m-app){background:#eef2f7}
-.m-app{min-height:100vh;padding:18px 14px 92px;background:radial-gradient(circle at 20% -10%,rgba(100,66,214,.2),transparent 34%),linear-gradient(180deg,#f8fafc,#eef2f7)}
+.m-app{min-height:100vh;padding:18px 14px 104px;background:radial-gradient(circle at 20% -10%,rgba(100,66,214,.2),transparent 34%),linear-gradient(180deg,#f8fafc,#eef2f7)}
 .m-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:16px}
 .m-kicker{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:900;color:#6442d6}
 .m-head h1{font-family:var(--font-display);font-size:28px;line-height:1;margin:3px 0 6px;color:#111827}
 .m-head p{font-size:13px;color:#64748b;margin:0;max-width:260px}
+.m-head-actions{display:flex;flex-direction:column;align-items:flex-end;gap:7px}
+.m-chip{font-size:11px;font-weight:900;border-radius:999px;padding:5px 9px;background:#ede7ff;color:#4f2fbd;border:1px solid #ddd6fe}
 .m-logout{font-size:12px;font-weight:800;color:#dc2626;background:#fff;border:1px solid #fecaca;border-radius:999px;padding:8px 11px;box-shadow:var(--shadow-1)}
+.m-install{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;background:#fff;border:1px solid #ddd6fe;border-radius:20px;padding:12px;margin-bottom:12px;box-shadow:0 12px 30px rgba(100,66,214,.12)}
+.m-install strong{display:block;color:#111827;font-size:13px}
+.m-install span{display:block;color:#64748b;font-size:12px;line-height:1.35;margin-top:2px}
+.m-install button{border:0;border-radius:999px;font-weight:900;padding:9px 12px;background:#6442d6;color:#fff}
+.m-install .m-install-x{background:#f1f5f9;color:#64748b;width:34px;height:34px;padding:0}
 .m-scan{background:#111827;color:#fff;border-radius:26px;padding:16px;box-shadow:0 18px 44px rgba(15,23,42,.22);margin-bottom:12px}
-.m-scan-btn{width:100%;height:72px;border:0;border-radius:20px;background:#6442d6;color:#fff;font-size:22px;font-weight:900;box-shadow:0 12px 28px rgba(100,66,214,.34)}
+.m-scan-btn{width:100%;height:78px;border:0;border-radius:20px;background:#6442d6;color:#fff;font-size:22px;font-weight:900;box-shadow:0 12px 28px rgba(100,66,214,.34);touch-action:manipulation}
 .m-search{display:flex;gap:8px;margin-top:12px}
 .m-search input,.m-search button,.m-panel input,.m-panel select{height:46px;border-radius:14px;border:1px solid #e2e8f0;padding:0 13px;font-size:15px;background:#fff;color:#111827}
 .m-search input{min-width:0;flex:1;background:#fff}
-.m-search button{border:0;background:#c8b3fd;color:#24145f;font-weight:900}
+.m-search button{border:0;background:#c8b3fd;color:#24145f;font-weight:900;touch-action:manipulation}
 .m-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px}
-.m-tabs button{height:42px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#64748b;font-weight:900}
+.m-tabs button{height:44px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#64748b;font-weight:900;touch-action:manipulation}
 .m-tabs button.active{background:#111827;color:#fff;border-color:#111827}
 .m-panel{background:#fff;border:1px solid #e2e8f0;border-radius:24px;padding:16px;box-shadow:var(--shadow-1);margin-bottom:12px}
 .m-panel h2{font-size:18px;margin:0 0 12px;color:#111827}
@@ -114,30 +134,40 @@ body:has(.m-app){background:#eef2f7}
 .m-sub{font-size:12px;color:#64748b;margin-top:5px}
 .m-badges{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
 .m-badge{font-size:11px;font-weight:900;border-radius:999px;padding:5px 9px;background:#ede7ff;color:#4f2fbd}
-.m-badge.red{background:#fee2e2;color:#b91c1c}.m-badge.green{background:#dcfce7;color:#15803d}.m-badge.amber{background:#fef3c7;color:#92400e}
+.m-badge.red{background:#fee2e2;color:#b91c1c}
+.m-badge.green{background:#dcfce7;color:#15803d}
+.m-badge.amber{background:#fef3c7;color:#92400e}
 .m-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
-.m-actions button,.m-primary,.m-lite{height:48px;border:0;border-radius:15px;font-weight:900;font-size:15px}
-.m-primary,.m-actions button:first-child{background:#6442d6;color:#fff}.m-actions button:nth-child(2),.m-lite{background:#f1f5f9;color:#111827}
+.m-actions button,.m-primary,.m-lite{height:48px;border:0;border-radius:15px;font-weight:900;font-size:15px;touch-action:manipulation}
+.m-primary,.m-actions button:first-child{background:#6442d6;color:#fff}
+.m-actions button:nth-child(2),.m-lite{background:#f1f5f9;color:#111827}
 .m-actions button.warn{background:#fee2e2;color:#b91c1c}
 .m-panel label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:#64748b;font-weight:900;margin:10px 0 6px}
 .m-panel label input,.m-panel label select{display:block;width:100%;margin-top:5px;text-transform:none;letter-spacing:0;font-weight:600;color:#111827}
 .m-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.m-inline-scan{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:5px}
+.m-inline-scan input{margin-top:0!important}
+.m-inline-scan button{border:0;border-radius:14px;background:#111827;color:#fff;font-weight:900;padding:0 12px}
 .m-row-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .m-res{border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin-bottom:8px;background:#f8fafc}
-.m-res strong{display:block;color:#111827}.m-res span{display:block;color:#64748b;font-size:12px;margin-top:3px}
+.m-res strong{display:block;color:#111827}
+.m-res span{display:block;color:#64748b;font-size:12px;margin-top:3px}
 .m-warn{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:16px;padding:12px;font-size:13px;font-weight:800;margin:12px 0}
-.m-actionbar{position:fixed;left:0;right:0;bottom:0;z-index:80;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.92);border-top:1px solid #e2e8f0;backdrop-filter:blur(14px)}
-.m-actionbar button{height:50px;border:0;border-radius:15px;background:#111827;color:#fff;font-weight:900}
-.m-actionbar button:nth-child(2){background:#16a34a}.m-actionbar button:nth-child(3){background:#6442d6}
+.m-actionbar{position:fixed;left:0;right:0;bottom:0;z-index:80;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.92);border-top:1px solid #e2e8f0;backdrop-filter:blur(14px)}
+.m-actionbar button{height:50px;border:0;border-radius:15px;background:#111827;color:#fff;font-weight:900;touch-action:manipulation}
+.m-actionbar button:nth-child(2){background:#16a34a}
+.m-actionbar button:nth-child(3){background:#6442d6}
+.m-actionbar button:nth-child(4){background:#f1f5f9;color:#111827}
 @media(min-width:760px){.m-app{max-width:560px;margin:0 auto;padding-top:28px}.m-actionbar{left:50%;transform:translateX(-50%);max-width:560px;border:1px solid #e2e8f0;border-bottom:0;border-radius:22px 22px 0 0}}
+@media(max-width:380px){.m-grid{grid-template-columns:1fr}.m-actionbar{grid-template-columns:1fr 1fr}.m-head h1{font-size:25px}}
 </style>
 
 <script>
 const csrf=document.querySelector('meta[name="csrf-token"]').content;
 const userName={{ session.get('username','')|tojson }};
 let currentItem=null;
-let currentReservations=[];
 let searchResults=[];
+let deferredInstallPrompt=null;
 
 function toastMsg(msg,type='info'){ if(window.toast) toast(msg,type); else alert(msg); }
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
@@ -147,30 +177,51 @@ function setTab(tab){
   ['lookup','reserve','add','active'].forEach(id=>document.getElementById(id+'Panel').hidden=id!==tab);
   if(tab==='active') loadReservations();
 }
+async function fetchJSON(url,opts={}){
+  const r=await fetch(url,opts);
+  let data=null;
+  try{data=await r.json();}catch(_){data=null;}
+  if(r.status===401||r.status===403){throw new Error('Sign in or permission required');}
+  if(!r.ok){throw new Error((data&&(data.detail||data.msg))||'Request failed');}
+  return data;
+}
+async function postJSON(url,body){
+  return fetchJSON(url,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(body)});
+}
+function resetLookup(){
+  currentItem=null;
+  document.getElementById('mQuery').value='';
+  document.getElementById('mResult').innerHTML='<div class="m-empty">Scan or search an item to start.</div>';
+  document.getElementById('actionBar').hidden=true;
+  setTab('lookup');
+  document.getElementById('mQuery').focus();
+}
 function scanWithCamera(){openCameraScanner(code=>{document.getElementById('mQuery').value=code;lookupInput();});}
+function scanAddSerial(){openCameraScanner(code=>{document.getElementById('addSerial').value=code;});}
 async function lookupInput(){
   const q=document.getElementById('mQuery').value.trim();
   if(!q){toastMsg('Scan or type something first','error');return;}
   setTab('lookup');
   document.getElementById('mResult').innerHTML='<div class="m-empty">Searching...</div>';
-  let r=await fetch('/api/scan?code='+encodeURIComponent(q));
-  let data=await r.json();
-  if(data.found){await selectHydratedItem(data.item);return;}
-  r=await fetch('/api/items?q='+encodeURIComponent(q)+'&hide_out=0&per_page=20');
-  data=await r.json();
-  const items=Array.isArray(data)?data:(data.items||[]);
-  if(!items.length){document.getElementById('mResult').innerHTML='<div class="m-empty">No item found.</div>';document.getElementById('actionBar').hidden=true;return;}
-  if(items.length===1){selectItem(items[0]);return;}
-  searchResults=items.slice(0,10);
-  document.getElementById('mResult').innerHTML=searchResults.map((i,idx)=>`
-    <button class="m-card" style="width:100%;text-align:left;margin-bottom:8px" onclick="selectItem(searchResults[${idx}])">
-      <div class="m-title">${esc(i.name)}</div>
-      <div class="m-sub">#${i.id} ${esc(i.serial||i.sku||i.internal_sku||'')} ${i.checked_out?' · checked out':''}</div>
-    </button>`).join('');
+  try{
+    let data=await fetchJSON('/api/scan?code='+encodeURIComponent(q));
+    if(data.found){await selectHydratedItem(data.item);return;}
+    data=await fetchJSON('/api/items?q='+encodeURIComponent(q)+'&hide_out=0&per_page=20');
+    const items=Array.isArray(data)?data:(data.items||[]);
+    if(!items.length){document.getElementById('mResult').innerHTML='<div class="m-empty">No item found.</div>';document.getElementById('actionBar').hidden=true;return;}
+    if(items.length===1){selectItem(items[0]);return;}
+    searchResults=items.slice(0,10);
+    document.getElementById('mResult').innerHTML=searchResults.map((i,idx)=>`
+      <button class="m-card" type="button" style="width:100%;text-align:left;margin-bottom:8px" onclick="selectItem(searchResults[${idx}])">
+        <div class="m-title">${esc(i.name)}</div>
+        <div class="m-sub">#${i.id} ${esc(i.serial||i.sku||i.internal_sku||'')} ${i.checked_out?' - checked out':''}</div>
+      </button>`).join('');
+  }catch(e){
+    document.getElementById('mResult').innerHTML=`<div class="m-empty">${esc(e.message||'Inventory could not load.')}</div>`;
+  }
 }
 async function selectHydratedItem(item){
-  const r=await fetch('/api/items?q=%23'+encodeURIComponent(item.id)+'&hide_out=0');
-  const data=await r.json();
+  const data=await fetchJSON('/api/items?q=%23'+encodeURIComponent(item.id)+'&hide_out=0');
   const rows=Array.isArray(data)?data:(data.items||[]);
   selectItem(rows.find(x=>Number(x.id)===Number(item.id))||item);
 }
@@ -195,21 +246,16 @@ function selectItem(item){
       </div>
       ${resWarn}
       <div class="m-actions">
-        <button onclick="confirmCheckout()">Check Out</button>
-        <button onclick="confirmCheckin()">Check In</button>
-        <button onclick="setTab('reserve')">Reserve</button>
-        <button onclick="setTab('add')">Add Similar</button>
+        <button type="button" onclick="confirmCheckout()">Check Out</button>
+        <button type="button" onclick="confirmCheckin()">Check In</button>
+        <button type="button" onclick="setTab('reserve')">Reserve</button>
+        <button type="button" onclick="setTab('add')">Add Similar</button>
       </div>
     </article>`;
 }
-async function postJSON(url,body){
-  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(body)});
-  return r.json();
-}
-async function chooseReservationIfNeeded(item, qty){
+async function chooseReservationIfNeeded(item){
   if(!(Number(item.reserved_qty||0)>0)) return {};
-  const r=await fetch('/api/item/'+item.id+'/reservations');
-  const reservations=await r.json();
+  const reservations=await fetchJSON('/api/item/'+item.id+'/reservations');
   const active=(reservations||[]).filter(x=>!x.fulfilled&&Number(x.qty_remaining||x.qty_reserved||1)>0);
   if(!active.length) return {};
   const list=active.map((x,i)=>`${i+1}. ${x.reserved_by} (${x.qty_remaining||x.qty_reserved} units) ${x.reserved_from} to ${x.reserved_to}`).join('\n');
@@ -230,7 +276,7 @@ async function confirmCheckout(){
   if(qtyTracked&&qty<1)return;
   if(!confirm(`Check out ${qtyTracked?qty+' unit(s) of ':''}${currentItem.name}?`))return;
   try{
-    const resChoice=await chooseReservationIfNeeded(currentItem,qty);
+    const resChoice=await chooseReservationIfNeeded(currentItem);
     const body={id:currentItem.id,who:userName,amount:qty,action:'remove',note:'Mobile checkout',...resChoice};
     const data=qtyTracked?await postJSON('/api/qty_adjust',body):await postJSON('/api/checkout',{id:currentItem.id,who:userName,scanned_code:document.getElementById('mQuery').value,...resChoice});
     if(!data.ok){toastMsg(data.detail||data.msg||'Checkout failed','error');return;}
@@ -243,26 +289,35 @@ async function confirmCheckin(){
   const qty=qtyTracked?Number(prompt('Quantity to check in:', '1')||0):1;
   if(qtyTracked&&qty<1)return;
   if(!confirm(`Check in ${qtyTracked?qty+' unit(s) of ':''}${currentItem.name}?`))return;
-  const data=qtyTracked?await postJSON('/api/qty_adjust',{id:currentItem.id,amount:qty,action:'return',note:'Mobile check-in'}):await postJSON('/api/checkin',{id:currentItem.id,checkin_note:'Mobile check-in'});
-  if(!data.ok){toastMsg(data.msg||'Check-in failed','error');return;}
-  toastMsg('Checked in','success');lookupInput();
+  try{
+    const data=qtyTracked?await postJSON('/api/qty_adjust',{id:currentItem.id,amount:qty,action:'return',note:'Mobile check-in'}):await postJSON('/api/checkin',{id:currentItem.id,checkin_note:'Mobile check-in'});
+    if(!data.ok){toastMsg(data.msg||'Check-in failed','error');return;}
+    toastMsg('Checked in','success');lookupInput();
+  }catch(e){toastMsg(e.message||'Check-in failed','error');}
 }
 async function createReservation(){
   if(!currentItem){toastMsg('Scan an item first','error');return;}
   const from=document.getElementById('resFrom').value||today();
   const to=document.getElementById('resTo').value||from;
-  const body={item_id:currentItem.id,start_date:from,end_date:to,reserved_by:document.getElementById('resBy').value||userName,qty_reserved:Number(document.getElementById('resQty').value||1),notes:document.getElementById('resPurpose').value};
-  const data=await postJSON('/api/reservations',body);
-  if(!data.ok){toastMsg(data.msg||'Reservation failed','error');return;}
-  toastMsg('Reserved','success');setTab('active');loadReservations();
+  const qty=Number(document.getElementById('resQty').value||1);
+  if(qty<1){toastMsg('Quantity must be at least 1','error');return;}
+  const body={item_id:currentItem.id,start_date:from,end_date:to,reserved_by:document.getElementById('resBy').value||userName,qty_reserved:qty,notes:document.getElementById('resPurpose').value};
+  try{
+    const data=await postJSON('/api/reservations',body);
+    if(!data.ok){toastMsg(data.msg||'Reservation failed','error');return;}
+    toastMsg('Reserved','success');setTab('active');loadReservations();
+  }catch(e){toastMsg(e.message||'Reservation failed','error');}
 }
 async function loadReservations(){
-  const r=await fetch('/api/reservations?active=1');
-  const data=await r.json();
-  const rows=data.reservations||[];
-  document.getElementById('activeReservations').innerHTML=rows.length?rows.map(x=>`
-    <div class="m-res"><strong>${esc(x.item_name)}</strong><span>${esc(x.reserved_by)} · ${x.qty_remaining||x.qty_reserved} unit(s)</span><span>${x.start_date} to ${x.end_date}</span><span>${esc(x.notes||'')}</span></div>
-  `).join(''):'<div class="m-empty">No active reservations.</div>';
+  try{
+    const data=await fetchJSON('/api/reservations?active=1');
+    const rows=data.reservations||[];
+    document.getElementById('activeReservations').innerHTML=rows.length?rows.map(x=>`
+      <div class="m-res"><strong>${esc(x.item_name)}</strong><span>${esc(x.reserved_by)} - ${x.qty_remaining||x.qty_reserved} unit(s)</span><span>${x.start_date} to ${x.end_date}</span><span>${esc(x.notes||'')}</span></div>
+    `).join(''):'<div class="m-empty">No active reservations.</div>';
+  }catch(e){
+    document.getElementById('activeReservations').innerHTML=`<div class="m-empty">${esc(e.message||'Reservations could not load.')}</div>`;
+  }
 }
 function fillProductName(){
   const opt=document.getElementById('addProduct').selectedOptions[0];
@@ -273,11 +328,29 @@ function fillProductName(){
 async function addItem(){
   const productId=document.getElementById('addProduct').value||null;
   const qtyVal=document.getElementById('addQty').value;
-  const body={name:document.getElementById('addName').value,product_id:productId,category_id:document.getElementById('addCategory').value||null,serial:document.getElementById('addSerial').value,sku:document.getElementById('addSku').value,shelf:document.getElementById('addShelf').value,qty:qtyVal?Number(qtyVal):null,condition:'Used'};
-  const data=await postJSON('/api/item/add',body);
-  if(!data.ok){toastMsg(data.msg||'Add failed','error');return;}
-  toastMsg('Item added','success');document.getElementById('mQuery').value='#'+data.id;lookupInput();
+  const name=document.getElementById('addName').value.trim();
+  if(!name){toastMsg('Item name is required','error');return;}
+  const body={name,product_id:productId,category_id:document.getElementById('addCategory').value||null,serial:document.getElementById('addSerial').value,sku:document.getElementById('addSku').value,shelf:document.getElementById('addShelf').value,qty:qtyVal?Number(qtyVal):null,condition:'Used'};
+  try{
+    const data=await postJSON('/api/item/add',body);
+    if(!data.ok){toastMsg(data.msg||'Add failed','error');return;}
+    toastMsg('Item added','success');document.getElementById('mQuery').value='#'+data.id;lookupInput();
+  }catch(e){toastMsg(e.message||'Add failed','error');}
 }
+function dismissInstallPrompt(){localStorage.setItem('countdepot-install-dismissed','1');document.getElementById('installPrompt').hidden=true;}
+window.addEventListener('beforeinstallprompt',e=>{
+  if(localStorage.getItem('countdepot-install-dismissed'))return;
+  e.preventDefault();
+  deferredInstallPrompt=e;
+  document.getElementById('installPrompt').hidden=false;
+});
+document.getElementById('installBtn').addEventListener('click',async()=>{
+  if(!deferredInstallPrompt)return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt=null;
+  dismissInstallPrompt();
+});
 document.getElementById('resFrom').value=today();
 document.getElementById('resTo').value=today();
 if(new URLSearchParams(location.search).get('action')==='add')setTab('add');

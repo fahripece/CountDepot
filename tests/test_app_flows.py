@@ -1663,6 +1663,28 @@ def test_mobile_app_assets_are_public_on_bare_domain(app):
     assert "image/svg" in icon.headers["Content-Type"]
 
 
+def test_mobile_page_is_scanner_first_and_installable(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/mobile",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Scan Item Barcode" in body
+    assert "Use this like an app" in body
+    assert "beforeinstallprompt" in body
+    assert "scanAddSerial" in body
+    assert "Sign in or permission required" in body
+
+
 def test_demo_request_email_goes_to_platform_admin(app, monkeypatch):
     sent = {}
 
