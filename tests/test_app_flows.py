@@ -1692,6 +1692,17 @@ def test_google_analytics_tag_is_present_once_on_public_and_app_pages(app, tenan
     assert mobile.get_data(as_text=True).count(tag_src) == 1
 
 
+def test_content_security_policy_allows_google_analytics(app):
+    response = app.test_client().get("/", base_url="http://countdepot.com")
+    csp = response.headers["Content-Security-Policy"]
+
+    assert "https://www.googletagmanager.com" in csp
+    assert "https://www.google-analytics.com" in csp
+    assert "https://analytics.google.com" in csp
+    assert "https://region1.google-analytics.com" in csp
+    assert "https://stats.g.doubleclick.net" in csp
+
+
 def test_public_sitemap_and_robots_include_seo_pages(app):
     from app.seo_pages import seo_slugs
 
