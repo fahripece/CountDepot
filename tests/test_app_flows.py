@@ -1661,6 +1661,37 @@ def test_public_seo_pages_render_on_bare_domain(app):
         assert "Start free trial" in body
 
 
+def test_google_analytics_tag_is_present_once_on_public_and_app_pages(app, tenant):
+    client = app.test_client()
+    tag_src = "https://www.googletagmanager.com/gtag/js?id=G-Z7G78GLGDQ"
+
+    landing = client.get("/", base_url="http://countdepot.com")
+    assert landing.status_code == 200
+    assert landing.get_data(as_text=True).count(tag_src) == 1
+
+    seo = client.get("/inventory-management-for-repair-shops", base_url="http://countdepot.com")
+    assert seo.status_code == 200
+    assert seo.get_data(as_text=True).count(tag_src) == 1
+
+    signup = client.get("/signup", base_url="http://countdepot.com")
+    assert signup.status_code == 200
+    assert signup.get_data(as_text=True).count(tag_src) == 1
+
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+    with app.test_request_context(
+        "/mobile",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        mobile = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    assert mobile.status_code == 200
+    assert mobile.get_data(as_text=True).count(tag_src) == 1
+
+
 def test_public_sitemap_and_robots_include_seo_pages(app):
     from app.seo_pages import seo_slugs
 
