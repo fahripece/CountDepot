@@ -1646,6 +1646,27 @@ def test_public_demo_request_skips_csrf_and_bare_domain_landing(app):
     assert tuple(row) == ("Fahri Pece", "DSSIT", "fpece@dssitny.com", "1-10 people")
 
 
+def test_homepage_has_core_seo_meta_tags(app):
+    response = app.test_client().get("/", base_url="http://countdepot.com")
+    body = response.get_data(as_text=True)
+    title = "CountDepot - Inventory Management for Any Industry"
+    description = (
+        "Track assets, scan barcodes, and generate financial reports. "
+        "Inventory management that adapts to your industry. "
+        "Free tier available, no credit card required."
+    )
+
+    assert response.status_code == 200
+    assert f"<title>{title}</title>" in body
+    assert body.count("<title>") == 1
+    assert f'<meta name="description" content="{description}">' in body
+    assert '<link rel="canonical" href="https://countdepot.com/">' in body
+    assert f'<meta property="og:title" content="{title}">' in body
+    assert f'<meta property="og:description" content="{description}">' in body
+    assert '<meta property="og:url" content="https://countdepot.com/">' in body
+    assert f'<meta name="twitter:title" content="{title}">' in body
+
+
 def test_public_seo_pages_render_on_bare_domain(app):
     from app.seo_pages import SEO_PAGES
 
