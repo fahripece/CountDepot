@@ -88,13 +88,14 @@ def service_worker():
 
 @bp.route("/robots.txt")
 def robots_txt():
-    body = "User-agent: *\nAllow: /\nSitemap: " + request.url_root.rstrip("/") + "/sitemap.xml\n"
+    body = "User-agent: *\nAllow: /\nSitemap: " + request.url_root.rstrip("/") + "/sitemap\n"
     response = make_response(body)
     response.headers["Content-Type"] = "text/plain; charset=utf-8"
     return response
 
 
 @bp.route("/sitemap.xml")
+@bp.route("/sitemap")
 def sitemap_xml():
     base = request.url_root.rstrip("/")
     urls = [base + "/"] + [base + "/" + slug for slug in seo_slugs()]

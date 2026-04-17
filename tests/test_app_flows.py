@@ -1704,9 +1704,13 @@ def test_public_sitemap_and_robots_include_seo_pages(app):
     for slug in seo_slugs():
         assert f"http://countdepot.com/{slug}" in sitemap_body
 
+    sitemap_alt = client.get("/sitemap", base_url="http://countdepot.com")
+    assert sitemap_alt.status_code == 200
+    assert "application/xml" in sitemap_alt.headers["Content-Type"]
+
     robots = client.get("/robots.txt", base_url="http://countdepot.com")
     assert robots.status_code == 200
-    assert "Sitemap: http://countdepot.com/sitemap.xml" in robots.get_data(as_text=True)
+    assert "Sitemap: http://countdepot.com/sitemap" in robots.get_data(as_text=True)
 
 
 def test_mobile_app_assets_are_public_on_bare_domain(app):

@@ -118,6 +118,7 @@ def create_app():
                 or request.path == "/sw.js"
                 or request.path == "/robots.txt"
                 or request.path == "/sitemap.xml"
+                or request.path == "/sitemap"
                 or seo_page_for_slug(path_slug)
                 or request.path.startswith("/static/")
                 or request.path.startswith("/signup")
