@@ -301,7 +301,24 @@ function connectorCard(c){
           <button class="btn btn-primary btn-sm" onclick="saveConnector('${esc(c.key)}')">Save Connector</button>
           <button class="btn btn-secondary btn-sm" onclick="toggleConnectorForm('${esc(c.key)}')">Cancel</button>
         </div>
+        ${deepConnectorActions(c)}
         <div class="connector-result" id="connector-result-${esc(c.key)}"></div>
+      </div>
+    </div>
+  `;
+}
+
+function deepConnectorActions(c){
+  if(c.key !== 'woocommerce') return '';
+  return `
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e3de">
+      <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Native WooCommerce Actions</div>
+      <div class="connector-actions" style="margin-top:0">
+        <button class="btn btn-secondary btn-sm" onclick="testWooCommerce()">Test Native Connection</button>
+        <button class="btn btn-primary btn-sm" onclick="syncWooCommerceOrders()">Sync Orders</button>
+      </div>
+      <div style="font-size:11.5px;color:#64748b;margin-top:8px;line-height:1.5">
+        Listing individual items to WooCommerce is available through the item action API and can be wired into the item details UI next.
       </div>
     </div>
   `;
@@ -350,6 +367,22 @@ async function testConnector(key){
   if(form && form.style.display !== 'block') form.style.display = 'block';
   const res = await apiPost(`/api/integrations/catalog/${key}/test`, {});
   showConnectorResult(key, !!res.ok, res.msg || (res.ok ? 'Connector is configured.' : 'Connector is missing required fields.'));
+}
+
+async function testWooCommerce(){
+  const res = await apiPost('/api/integrations/woocommerce/test', {});
+  showConnectorResult('woocommerce', !!res.ok, res.msg || (res.ok ? 'WooCommerce connected.' : 'WooCommerce connection failed.'));
+}
+
+async function syncWooCommerceOrders(){
+  const days = parseInt(prompt('Sync WooCommerce orders from the last how many days?', '30') || '30', 10);
+  if(!days) return;
+  const res = await apiPost('/api/integrations/woocommerce/sync-orders', {days_back: days});
+  if(res.ok){
+    showConnectorResult('woocommerce', true, `Synced ${res.synced.length} item(s) from ${res.orders_seen} order(s). ${res.skipped || 0} line(s) skipped.`);
+  } else {
+    showConnectorResult('woocommerce', false, res.msg || 'WooCommerce order sync failed.');
+  }
 }
 
 async function loadAmzStatus(){

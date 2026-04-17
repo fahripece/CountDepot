@@ -182,6 +182,20 @@ def run_migrations_only():
                 location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
                 PRIMARY KEY (user_id, location_id)
             );
+            CREATE TABLE IF NOT EXISTS integration_refs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider    TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id   INTEGER NOT NULL,
+                remote_id   TEXT,
+                remote_url  TEXT,
+                status      TEXT NOT NULL DEFAULT 'synced',
+                detail      TEXT,
+                synced_at   TEXT NOT NULL,
+                UNIQUE(provider, entity_type, entity_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_integration_refs_provider
+                ON integration_refs(provider, entity_type, entity_id);
         """)
         _run_data_repairs(db)
         db.commit()
@@ -575,6 +589,20 @@ def _init_db_conn(db):
             synced_at   TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_acct_sync ON accounting_sync_log(provider, entity_type, entity_id);
+        CREATE TABLE IF NOT EXISTS integration_refs (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider    TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id   INTEGER NOT NULL,
+            remote_id   TEXT,
+            remote_url  TEXT,
+            status      TEXT NOT NULL DEFAULT 'synced',
+            detail      TEXT,
+            synced_at   TEXT NOT NULL,
+            UNIQUE(provider, entity_type, entity_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_integration_refs_provider
+            ON integration_refs(provider, entity_type, entity_id);
         CREATE TABLE IF NOT EXISTS webhooks (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             url        TEXT NOT NULL,

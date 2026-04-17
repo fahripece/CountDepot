@@ -173,6 +173,7 @@ CATALOG = [
                     {"key": "account_sid", "label": "Account SID", "type": "text", "required": True},
                     {"key": "auth_token", "label": "Auth Token", "type": "password", "required": True},
                     {"key": "from_number", "label": "From Number", "type": "text", "required": True},
+                    {"key": "alert_to_number", "label": "Alert To Number", "type": "text", "required": True},
                 ],
             },
         ],
@@ -260,6 +261,8 @@ def save_connector(connector_key, enabled=False, fields=None, notes=""):
         "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
         [_settings_key(connector_key), json.dumps(payload, sort_keys=True)],
     )
+    if connector_key in ("zapier", "make") and payload["enabled"] and saved_fields.get("webhook_url"):
+        _upsert_automation_webhook(connector_key, definition["name"], saved_fields["webhook_url"])
     return payload
 
 
@@ -278,3 +281,34 @@ def connector_status(connector_key):
         "enabled": bool(config["enabled"] and not missing),
         "missing_fields": missing,
     }
+
+
+def connector_config(connector_key, include_secrets=False):
+    definition = connector_definition(connector_key)
+    if not definition:
+        return None
+    config = _load_config(connector_key)
+    if not include_secrets:
+        fields = {}
+        for field in definition["fields"]:
+            value = config["fields"].get(field["key"], "")
+            fields[field["key"]] = _masked_value(value) if field.get("type") == "password" else value
+        config = dict(config, fields=fields)
+    return config
+
+
+def _upsert_automation_webhook(connector_key, connector_name, url):
+    now = __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    events = "item.added,item.updated,item.deleted,item.checked_out,item.checked_in,item.sold,item.retired,low_stock,po.created,po.approved,po.rejected,po.received,warranty.expiring"
+    secret = f"{connector_key}-connector"
+    row = query("SELECT id FROM webhooks WHERE secret=?", [secret], one=True)
+    if row:
+        execute(
+            "UPDATE webhooks SET url=?, events=?, enabled=1 WHERE id=?",
+            [url, events, row["id"]],
+        )
+    else:
+        execute(
+            "INSERT INTO webhooks (url,events,secret,enabled,created_by,created_at) VALUES (?,?,?,?,?,?)",
+            [url, events, secret, 1, f"{connector_name} connector", now],
+        )

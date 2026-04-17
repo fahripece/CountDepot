@@ -29,6 +29,9 @@ from app.blueprints.api import (
     api_integrations_catalog,
     api_integrations_catalog_save,
     api_integrations_catalog_test,
+    api_woocommerce_test,
+    api_item_woocommerce_list,
+    api_woocommerce_sync_orders,
     api_set_user_locations,
 )
 
@@ -1856,6 +1859,8 @@ def test_landing_page_promotes_available_and_planned_integrations(app):
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
+    assert '<div class="nav-links">\n    <a href="#features">Features</a>\n    <a href="#how">How it works</a>\n    <a href="#pricing">Pricing</a>' in body
+    assert '<div class="nav-actions">\n    <a href="#signin" class="nav-link-signin">Sign in</a>\n    <a href="/signup" class="nav-cta">Start free trial</a>' in body
     assert 'id="integrations"' in body
     assert "Available now" in body
     assert "Expanded connector catalog" in body
@@ -1922,6 +1927,178 @@ def test_admin_can_configure_expanded_integration_catalog(app, tenant):
 
     assert tested.status_code == 200
     assert tested.get_json()["ok"] is True
+
+
+def test_zapier_connector_creates_real_outbound_webhook(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/api/integrations/catalog/zapier",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "enabled": True,
+            "fields": {"webhook_url": "https://hooks.zapier.com/hooks/catch/123/abc"},
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        saved = _as_response(app, app.preprocess_request() or api_integrations_catalog_save("zapier"))
+
+    assert saved.status_code == 200
+    assert saved.get_json()["enabled"] is True
+
+    db = sqlite3.connect(tenant["db_path"])
+    row = db.execute(
+        "SELECT url, events, enabled FROM webhooks WHERE secret='zapier-connector'"
+    ).fetchone()
+    db.close()
+    assert row is not None
+    assert row[0] == "https://hooks.zapier.com/hooks/catch/123/abc"
+    assert "item.added" in row[1]
+    assert row[2] == 1
+
+
+def test_twilio_connector_sends_sms_from_notification_pipeline(app, tenant, monkeypatch):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/api/integrations/catalog/twilio",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "enabled": True,
+            "fields": {
+                "account_sid": "AC123",
+                "auth_token": "secret",
+                "from_number": "+15550000001",
+                "alert_to_number": "+15550000002",
+            },
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        saved = _as_response(app, app.preprocess_request() or api_integrations_catalog_save("twilio"))
+
+    assert saved.status_code == 200
+    calls = []
+
+    def fake_sms(account_sid, auth_token, from_number, to_number, body):
+        calls.append((account_sid, auth_token, from_number, to_number, body))
+        return {"sid": "SM123"}
+
+    monkeypatch.setattr("app.messenger.send_twilio_sms", fake_sms)
+    with app.test_request_context("/", base_url=f"http://{tenant['host']}"):
+        session.update(saved_session)
+        app.preprocess_request()
+        from app.messenger import notify
+        notify("low_stock", "Low Stock: Filters", "Only 2 available", "/inventory")
+
+    assert calls == [("AC123", "secret", "+15550000001", "+15550000002", "Low Stock: Filters\nOnly 2 available\n/inventory")]
+
+
+def test_woocommerce_deep_connector_lists_item_and_syncs_order(app, tenant, monkeypatch):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/api/integrations/catalog/woocommerce",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "enabled": True,
+            "fields": {
+                "store_url": "https://store.example.com",
+                "consumer_key": "ck_test",
+                "consumer_secret": "cs_test",
+            },
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        saved = _as_response(app, app.preprocess_request() or api_integrations_catalog_save("woocommerce"))
+
+    assert saved.status_code == 200
+
+    db = sqlite3.connect(tenant["db_path"])
+    item_id = db.execute(
+        "INSERT INTO items (name,sku,sale_price,qty,active,created_at) VALUES (?,?,?,?,1,datetime('now'))",
+        ["Woo Widget", "WOO-001", 19.99, 3],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    def fake_request(method, path, payload=None, params=None):
+        if method == "GET" and path == "products":
+            return [{"id": 1}]
+        if method == "POST" and path == "products":
+            assert payload["sku"] == "WOO-001"
+            assert payload["regular_price"] == "19.99"
+            return {"id": 222, "permalink": "https://store.example.com/product/woo-widget"}
+        if method == "GET" and path == "orders":
+            return [{
+                "id": 9001,
+                "total": "19.99",
+                "billing": {"first_name": "Jane", "last_name": "Buyer", "email": "jane@example.com"},
+                "line_items": [{"sku": "WOO-001", "product_id": 222, "total": "19.99"}],
+            }]
+        raise AssertionError((method, path))
+
+    monkeypatch.setattr("app.woocommerce_integration._request", fake_request)
+
+    with app.test_request_context(
+        "/api/integrations/woocommerce/test",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        tested = _as_response(app, app.preprocess_request() or api_woocommerce_test())
+    assert tested.status_code == 200
+
+    with app.test_request_context(
+        "/api/item/woocommerce/list",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"item_id": item_id, "price": 19.99, "quantity": 3},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        listed = _as_response(app, app.preprocess_request() or api_item_woocommerce_list())
+    assert listed.status_code == 200
+    assert listed.get_json()["remote_id"] == "222"
+
+    with app.test_request_context(
+        "/api/integrations/woocommerce/sync-orders",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"days_back": 30},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        synced = _as_response(app, app.preprocess_request() or api_woocommerce_sync_orders())
+    assert synced.status_code == 200
+    assert len(synced.get_json()["synced"]) == 1
+
+    db = sqlite3.connect(tenant["db_path"])
+    sold = db.execute("SELECT sold, sold_to FROM items WHERE id=?", [item_id]).fetchone()
+    ref = db.execute(
+        "SELECT remote_id, status FROM integration_refs WHERE provider='woocommerce' AND entity_id=?",
+        [item_id],
+    ).fetchone()
+    db.close()
+    assert sold[0] == 1
+    assert "WooCommerce #9001" in sold[1]
+    assert ref == ("222", "sold")
 
 
 def test_content_security_policy_allows_google_analytics(app):

@@ -104,6 +104,7 @@ nav{
   text-decoration:none;transition:color .2s;
 }
 .nav-links a:hover{color:var(--text)}
+.nav-actions{display:flex;align-items:center;gap:12px}
 .nav-cta{
   background:var(--blue);color:#fff;
   padding:10px 22px;border-radius:999px;
@@ -734,6 +735,10 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   /* Nav */
   nav{padding:16px 20px}
   .nav-links{display:none}
+  .nav-actions{display:flex;gap:8px}
+  .nav-link-signin{padding:8px 12px;font-size:13px}
+  .nav-cta{padding:9px 13px;font-size:13px}
+  .nav-logo{font-size:20px}
 
   /* Global overflow guard */
   *{max-width:100%;box-sizing:border-box}
@@ -805,8 +810,9 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   <div class="nav-links">
     <a href="#features">Features</a>
     <a href="#how">How it works</a>
-    <a href="#integrations">Integrations</a>
     <a href="#pricing">Pricing</a>
+  </div>
+  <div class="nav-actions">
     <a href="#signin" class="nav-link-signin">Sign in</a>
     <a href="/signup" class="nav-cta">Start free trial</a>
   </div>
@@ -1109,6 +1115,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
             <span class="integration-chip">Amazon Business</span>
             <span class="integration-chip">eBay</span>
             <span class="integration-chip">Shopify</span>
+            <span class="integration-chip">WooCommerce</span>
             <span class="integration-chip">QuickBooks Online</span>
             <span class="integration-chip">Xero</span>
             <span class="integration-chip">Slack alerts</span>
@@ -1127,7 +1134,6 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
             <span class="integration-status integration-status-roadmap">Available categories</span>
           </div>
           <div class="integration-chips">
-            <span class="integration-chip integration-chip-muted">WooCommerce</span>
             <span class="integration-chip integration-chip-muted">Etsy</span>
             <span class="integration-chip integration-chip-muted">Amazon Seller</span>
             <span class="integration-chip integration-chip-muted">Shipping carriers</span>

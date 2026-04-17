@@ -13,6 +13,7 @@ Usage:
 import json
 import urllib.request
 import urllib.error
+import urllib.parse
 from datetime import datetime
 
 from app.db import query
@@ -139,6 +140,33 @@ def _post_webhook(url, payload):
         raise RuntimeError(f"Webhook failed: {e}")
 
 
+def send_twilio_sms(account_sid, auth_token, from_number, to_number, body):
+    """Send an SMS through Twilio's Messages API."""
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
+    data = urllib.parse.urlencode({
+        "From": from_number,
+        "To": to_number,
+        "Body": body[:1500],
+    }).encode()
+    token = __import__("base64").b64encode(f"{account_sid}:{auth_token}".encode()).decode()
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Authorization": f"Basic {token}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return json.loads(resp.read().decode() or "{}")
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Twilio SMS failed: {e.code}: {e.read().decode()[:200]}")
+    except Exception as e:
+        raise RuntimeError(f"Twilio SMS failed: {e}")
+
+
 def notify(event_type, title, body=None, link=None):
     """
     Send a notification to all configured channels for this event type.
@@ -170,3 +198,24 @@ def notify(event_type, title, body=None, link=None):
             send_teams(teams_url, event_type, title, body, link)
         except Exception:
             pass
+
+    try:
+        from app.integration_catalog import connector_config, connector_status
+        status = connector_status("twilio")
+        config = connector_config("twilio", include_secrets=True)
+        fields = (config or {}).get("fields", {})
+        if status.get("enabled"):
+            text = title
+            if body:
+                text += f"\n{body}"
+            if link:
+                text += f"\n{link}"
+            send_twilio_sms(
+                fields["account_sid"],
+                fields["auth_token"],
+                fields["from_number"],
+                fields["alert_to_number"],
+                text,
+            )
+    except Exception:
+        pass

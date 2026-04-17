@@ -85,6 +85,63 @@ def api_integrations_catalog_test(connector_key):
     })
 
 
+@bp.route("/api/integrations/woocommerce/test", methods=["POST"])
+@login_required
+@admin_required
+def api_woocommerce_test():
+    try:
+        from app.woocommerce_integration import test_connection
+        test_connection()
+        return jsonify({"ok": True, "msg": "WooCommerce connection succeeded."})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 400
+
+
+@bp.route("/api/item/woocommerce/list", methods=["POST"])
+@login_required
+@perm_required("sell_items")
+def api_item_woocommerce_list():
+    d = request.json or {}
+    try:
+        from app.woocommerce_integration import list_item
+        result = list_item(
+            int(d.get("item_id") or 0),
+            price=d.get("price"),
+            quantity=int(d.get("quantity") or 1),
+            description=d.get("description"),
+        )
+        log_action("WOOCOMMERCE_LIST", int(d.get("item_id") or 0),
+                   detail=f"Listed on WooCommerce | Product ID: {result['remote_id']}")
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 400
+
+
+@bp.route("/api/integrations/woocommerce/sync-orders", methods=["POST"])
+@login_required
+@admin_required
+def api_woocommerce_sync_orders():
+    d = request.json or {}
+    try:
+        from app.woocommerce_integration import sync_orders
+        result = sync_orders(days_back=int(d.get("days_back") or 30))
+        for synced in result["synced"]:
+            try:
+                from app.webhooks import fire as _wh
+                _wh("item.sold", {
+                    "id": synced["item_id"],
+                    "name": synced["name"],
+                    "source": "woocommerce",
+                    "order_id": synced["order_id"],
+                })
+            except Exception:
+                pass
+        log_action("WOOCOMMERCE_SYNC", detail=f"Synced {len(result['synced'])} item(s) from WooCommerce")
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 400
+
+
 def _tenant_invite_url(slug, token):
     from config import Config
     return f"https://{slug}.{Config.APP_DOMAIN}/reset-password/{token}"
