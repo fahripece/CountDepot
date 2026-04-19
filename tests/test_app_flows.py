@@ -5,9 +5,9 @@ import sqlite3
 from flask import session
 
 from config import Config
-from app.helpers import PERM_KEYS, hash_pw
+from app.helpers import PERM_KEYS, hash_pw, verify_pw
 from app.blueprints.auth import login_page
-from app.blueprints.main import admin_page, categories_page, integrations_page, inventory, products_page
+from app.blueprints.main import admin_page, categories_page, docs_page, integrations_page, inventory, products_page
 from app.blueprints.api import (
     api_add_reservation,
     api_cat_add,
@@ -29,6 +29,13 @@ from app.blueprints.api import (
     api_integrations_catalog,
     api_integrations_catalog_save,
     api_integrations_catalog_test,
+    api_doc_categories,
+    api_doc_category_add,
+    api_docs_list,
+    api_doc_get,
+    api_doc_add,
+    api_doc_update,
+    api_doc_delete,
     api_woocommerce_test,
     api_item_woocommerce_list,
     api_woocommerce_sync_orders,
@@ -94,6 +101,10 @@ def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
     assert "Start with categories" in body
     assert "Create products" in body
     assert "Use sites and locations" in body
+    assert 'id="introTourSpotlight"' in body
+    assert 'data-target="categories"' in body
+    assert 'data-tour="categories"' in body
+    assert "positionIntroTourSpotlight" in body
 
     with app.test_request_context(
         "/api/user/intro-tour-complete",
@@ -582,6 +593,51 @@ def test_admin_can_resend_user_invite(app, tenant, monkeypatch):
     assert sent["to"] == "resend@example.com"
     assert sent["slug"] == tenant["slug"]
     assert sent["token"]
+
+
+def test_password_reset_token_post_does_not_require_existing_csrf_session(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    user_id = db.execute(
+        "SELECT id FROM users WHERE email=?",
+        [tenant["email"]],
+    ).fetchone()["id"]
+    token = "reset-no-csrf-session-token"
+    db.execute(
+        "INSERT INTO password_reset_tokens (user_id,token,expires_at,used) "
+        "VALUES (?,?,datetime('now','+1 hour'),0)",
+        [user_id, token],
+    )
+    db.commit()
+    db.close()
+
+    client = app.test_client()
+    response = client.post(
+        f"/reset-password/{token}",
+        base_url=f"http://{tenant['host']}",
+        data={
+            "new_password": "NewPassword1!",
+            "confirm_password": "NewPassword1!",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Password updated" in response.get_data(as_text=True)
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    row = db.execute(
+        "SELECT u.password, u.must_change_password, u.email_verified, t.used "
+        "FROM users u JOIN password_reset_tokens t ON t.user_id=u.id "
+        "WHERE t.token=?",
+        [token],
+    ).fetchone()
+    db.close()
+
+    assert verify_pw("NewPassword1!", row["password"])
+    assert row["must_change_password"] == 0
+    assert row["email_verified"] == 1
+    assert row["used"] == 1
 
 
 def test_required_category_field_change_marks_existing_items_incomplete(app, tenant):
@@ -1886,6 +1942,7 @@ def test_landing_page_promotes_available_and_planned_integrations(app):
     assert "Amazon Business" in body
     assert "QuickBooks Online" in body
     assert "Shopify" in body
+    assert "SOPs &amp; Team Docs" in body
     assert "WooCommerce" in body
     assert "Avalara tax" in body
     assert "Grainger cXML" in body
@@ -1966,6 +2023,176 @@ def test_integrations_page_uses_single_page_scroll_layout(app, tenant):
     assert 'class="integrations-page"' in body
     assert "integrations-main-scroll" in body
     assert "flex:1;overflow-y:auto;padding:20px 24px" not in body
+
+
+def test_docs_page_and_api_support_permissioned_sops(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/docs",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        page = _as_response(app, app.preprocess_request() or docs_page())
+
+    body = page.get_data(as_text=True)
+    assert page.status_code == 200
+    assert "SOPs &amp; Docs" in body
+    assert "New SOP" in body
+
+    with app.test_request_context(
+        "/api/docs/categories",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        categories = _as_response(app, app.preprocess_request() or api_doc_categories())
+
+    category_data = categories.get_json()
+    assert categories.status_code == 200
+    assert category_data["ok"] is True
+    category_names = {c["name"] for c in category_data["categories"]}
+    assert {"Receiving", "Check In / Check Out", "Safety"} <= category_names
+    receiving_id = next(c["id"] for c in category_data["categories"] if c["name"] == "Receiving")
+
+    with app.test_request_context(
+        "/api/docs/categories",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"name": "Field Work", "description": "Field procedures"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        new_category = _as_response(app, app.preprocess_request() or api_doc_category_add())
+
+    assert new_category.status_code == 200
+    assert new_category.get_json()["ok"] is True
+
+    with app.test_request_context(
+        "/api/docs",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "category_id": receiving_id,
+            "title": "Receiving Serialized Equipment",
+            "body": "1. Verify PO\n2. Inspect item\n3. Scan serial\n4. Apply label",
+            "status": "published",
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        created = _as_response(app, app.preprocess_request() or api_doc_add())
+
+    assert created.status_code == 200
+    created_data = created.get_json()
+    assert created_data["ok"] is True
+    doc_id = created_data["doc"]["id"]
+
+    with app.test_request_context(
+        "/api/docs",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+        query_string={"q": "serialized"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        listed = _as_response(app, app.preprocess_request() or api_docs_list())
+
+    assert listed.status_code == 200
+    assert any(d["id"] == doc_id for d in listed.get_json()["docs"])
+
+    with app.test_request_context(
+        f"/api/docs/{doc_id}",
+        base_url=f"http://{tenant['host']}",
+        method="PUT",
+        json={
+            "category_id": receiving_id,
+            "title": "Receiving Serialized Equipment v2",
+            "body": "Updated receiving steps",
+            "status": "draft",
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        updated = _as_response(app, app.preprocess_request() or api_doc_update(doc_id))
+
+    assert updated.status_code == 200
+    assert updated.get_json()["doc"]["status"] == "draft"
+
+    with app.test_request_context(
+        f"/api/docs/{doc_id}",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        fetched = _as_response(app, app.preprocess_request() or api_doc_get(doc_id))
+
+    assert fetched.status_code == 200
+    assert fetched.get_json()["doc"]["title"] == "Receiving Serialized Equipment v2"
+
+    with app.test_request_context(
+        f"/api/docs/{doc_id}",
+        base_url=f"http://{tenant['host']}",
+        method="DELETE",
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        deleted = _as_response(app, app.preprocess_request() or api_doc_delete(doc_id))
+
+    assert deleted.status_code == 200
+    assert deleted.get_json()["ok"] is True
+
+
+def test_docs_view_only_permission_blocks_create_and_delete(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,1,0)",
+        ["docs.viewer@example.com", hash_pw("Password1!"), "worker", "view_docs", "docs.viewer@example.com"],
+    )
+    db.commit()
+    db.close()
+
+    login_response, worker_session = _login(app, tenant, email="docs.viewer@example.com", password="Password1!")
+    assert login_response.status_code == 302
+    assert worker_session["permissions"] == "view_docs"
+
+    with app.test_request_context(
+        "/docs",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(worker_session)
+        session["_csrf_token"] = "test-csrf-token"
+        page = _as_response(app, app.preprocess_request() or docs_page())
+
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert "SOPs &amp; Docs" in html
+    assert 'onclick="openDocModal()">New SOP' not in html
+
+    with app.test_request_context(
+        "/api/docs",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"title": "Blocked", "body": "Should not save"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(worker_session)
+        session["_csrf_token"] = "test-csrf-token"
+        blocked = _as_response(app, app.preprocess_request() or api_doc_add())
+
+    assert blocked.status_code == 403
+    assert blocked.get_json()["msg"] == "Permission denied: write_docs"
 
 
 def test_zapier_connector_creates_real_outbound_webhook(app, tenant):
@@ -2356,6 +2583,7 @@ def test_core_authenticated_pages_render(app, tenant):
         "/integrations/accounting",
         "/integrations/ebay",
         "/integrations/shopify",
+        "/docs",
         "/procurement",
         "/procurement/catalog",
         "/procurement/analytics",

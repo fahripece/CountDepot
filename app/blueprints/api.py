@@ -34,6 +34,185 @@ def api_user_intro_tour_complete():
     return jsonify({"ok": True})
 
 
+DEFAULT_DOC_CATEGORIES = [
+    ("Receiving", "How inventory is received, labeled, and staged."),
+    ("Check In / Check Out", "How assets move in and out of service."),
+    ("Reservations", "Rules for holding items for jobs or clients."),
+    ("Safety", "Safety procedures, inspections, and escalation steps."),
+    ("Training", "Onboarding steps and common team workflows."),
+]
+
+
+def _ensure_doc_categories():
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    username = session.get("username") or "system"
+    for idx, (name, description) in enumerate(DEFAULT_DOC_CATEGORIES, start=1):
+        execute(
+            "INSERT OR IGNORE INTO doc_categories (name,description,sort_order,created_by,created_at) "
+            "VALUES (?,?,?,?,?)",
+            [name, description, idx, username, now],
+        )
+
+
+def _doc_row(doc_id):
+    return query("""
+        SELECT d.*, c.name as category_name
+        FROM docs d
+        LEFT JOIN doc_categories c ON c.id=d.category_id
+        WHERE d.id=? AND d.active=1
+    """, [doc_id], one=True)
+
+
+@bp.route("/api/docs/categories")
+@login_required
+@perm_required("view_docs")
+def api_doc_categories():
+    _ensure_doc_categories()
+    rows = query("""
+        SELECT c.*,
+               COALESCE(SUM(CASE WHEN d.active=1 THEN 1 ELSE 0 END), 0) as doc_count
+        FROM doc_categories c
+        LEFT JOIN docs d ON d.category_id=c.id
+        GROUP BY c.id
+        ORDER BY c.sort_order, c.name
+    """)
+    return jsonify({"ok": True, "categories": [dict(r) for r in rows]})
+
+
+@bp.route("/api/docs/categories", methods=["POST"])
+@login_required
+@perm_required("write_docs")
+def api_doc_category_add():
+    d = request.get_json(silent=True) or {}
+    name = (d.get("name") or "").strip()[:80]
+    description = (d.get("description") or "").strip()[:240]
+    if not name:
+        return jsonify({"ok": False, "msg": "Category name required"}), 400
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        category_id = execute(
+            "INSERT INTO doc_categories (name,description,sort_order,created_by,created_at) VALUES (?,?,?,?,?)",
+            [name, description, 100, session.get("username"), now],
+        )
+    except Exception:
+        return jsonify({"ok": False, "msg": "Category already exists"}), 400
+    log_action("DOC_CATEGORY_ADD", detail=f"Added docs category: {name}")
+    return jsonify({"ok": True, "id": category_id, "name": name, "description": description})
+
+
+@bp.route("/api/docs")
+@login_required
+@perm_required("view_docs")
+def api_docs_list():
+    _ensure_doc_categories()
+    category_id = request.args.get("category_id")
+    search = (request.args.get("q") or "").strip()
+    args = []
+    sql = """
+        SELECT d.id, d.category_id, d.title, d.body, d.status, d.created_by, d.updated_by,
+               d.created_at, d.updated_at, c.name as category_name
+        FROM docs d
+        LEFT JOIN doc_categories c ON c.id=d.category_id
+        WHERE d.active=1
+    """
+    if category_id:
+        sql += " AND d.category_id=?"
+        args.append(category_id)
+    if search:
+        like = f"%{search}%"
+        sql += " AND (d.title LIKE ? OR d.body LIKE ? OR c.name LIKE ?)"
+        args += [like, like, like]
+    sql += " ORDER BY c.sort_order, c.name, d.title"
+    docs = []
+    for row in query(sql, args):
+        item = dict(row)
+        item["preview"] = (item.get("body") or "").replace("\n", " ")[:180]
+        docs.append(item)
+    return jsonify({"ok": True, "docs": docs})
+
+
+@bp.route("/api/docs/<int:doc_id>")
+@login_required
+@perm_required("view_docs")
+def api_doc_get(doc_id):
+    row = _doc_row(doc_id)
+    if not row:
+        return jsonify({"ok": False, "msg": "Doc not found"}), 404
+    return jsonify({"ok": True, "doc": dict(row)})
+
+
+@bp.route("/api/docs", methods=["POST"])
+@login_required
+@perm_required("write_docs")
+def api_doc_add():
+    d = request.get_json(silent=True) or {}
+    title = (d.get("title") or "").strip()[:160]
+    body = (d.get("body") or "").strip()
+    status = (d.get("status") or "published").strip().lower()
+    category_id = d.get("category_id") or None
+    if status not in {"draft", "published"}:
+        status = "published"
+    if not title:
+        return jsonify({"ok": False, "msg": "Title required"}), 400
+    if not body:
+        return jsonify({"ok": False, "msg": "Document body required"}), 400
+    if category_id and not query("SELECT id FROM doc_categories WHERE id=?", [category_id], one=True):
+        return jsonify({"ok": False, "msg": "Category not found"}), 400
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    username = session.get("username")
+    doc_id = execute(
+        "INSERT INTO docs (category_id,title,body,status,created_by,updated_by,created_at,updated_at,active) "
+        "VALUES (?,?,?,?,?,?,?,?,1)",
+        [category_id, title, body, status, username, username, now, now],
+    )
+    log_action("DOC_ADD", detail=f"Added doc: {title}")
+    return jsonify({"ok": True, "doc": dict(_doc_row(doc_id))})
+
+
+@bp.route("/api/docs/<int:doc_id>", methods=["PUT"])
+@login_required
+@perm_required("write_docs")
+def api_doc_update(doc_id):
+    existing = _doc_row(doc_id)
+    if not existing:
+        return jsonify({"ok": False, "msg": "Doc not found"}), 404
+    d = request.get_json(silent=True) or {}
+    title = (d.get("title") or "").strip()[:160]
+    body = (d.get("body") or "").strip()
+    status = (d.get("status") or "published").strip().lower()
+    category_id = d.get("category_id") or None
+    if status not in {"draft", "published"}:
+        status = "published"
+    if not title:
+        return jsonify({"ok": False, "msg": "Title required"}), 400
+    if not body:
+        return jsonify({"ok": False, "msg": "Document body required"}), 400
+    if category_id and not query("SELECT id FROM doc_categories WHERE id=?", [category_id], one=True):
+        return jsonify({"ok": False, "msg": "Category not found"}), 400
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    execute(
+        "UPDATE docs SET category_id=?, title=?, body=?, status=?, updated_by=?, updated_at=? WHERE id=?",
+        [category_id, title, body, status, session.get("username"), now, doc_id],
+    )
+    log_action("DOC_UPDATE", detail=f"Updated doc: {title}")
+    return jsonify({"ok": True, "doc": dict(_doc_row(doc_id))})
+
+
+@bp.route("/api/docs/<int:doc_id>", methods=["DELETE"])
+@login_required
+@perm_required("delete_docs")
+def api_doc_delete(doc_id):
+    existing = _doc_row(doc_id)
+    if not existing:
+        return jsonify({"ok": False, "msg": "Doc not found"}), 404
+    execute(
+        "UPDATE docs SET active=0, updated_by=?, updated_at=? WHERE id=?",
+        [session.get("username"), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), doc_id],
+    )
+    log_action("DOC_DELETE", detail=f"Deleted doc: {existing['title']}")
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/integrations/catalog")
 @login_required
 @admin_required

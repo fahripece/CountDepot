@@ -101,6 +101,7 @@ def create_app():
                        or request.path == "/api/demo-request"
                        or request.path == "/_cross-login"
                        or request.path == "/_cross-forgot-password"
+                       or request.path.startswith("/reset-password/")
                        or bool(auth_header.startswith("Bearer sk_live_")))
         if (request.method in ("POST", "PUT", "PATCH", "DELETE") and not csrf_exempt):
             token = (request.form.get("csrf_token")

@@ -196,6 +196,28 @@ def run_migrations_only():
             );
             CREATE INDEX IF NOT EXISTS idx_integration_refs_provider
                 ON integration_refs(provider, entity_type, entity_id);
+            CREATE TABLE IF NOT EXISTS doc_categories (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT UNIQUE NOT NULL,
+                description TEXT,
+                sort_order  INTEGER NOT NULL DEFAULT 0,
+                created_by  TEXT,
+                created_at  TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS docs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_id INTEGER REFERENCES doc_categories(id),
+                title       TEXT NOT NULL,
+                body        TEXT NOT NULL,
+                status      TEXT NOT NULL DEFAULT 'published',
+                created_by  TEXT,
+                updated_by  TEXT,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT NOT NULL,
+                active      INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE INDEX IF NOT EXISTS idx_docs_category ON docs(category_id, active, title);
+            CREATE INDEX IF NOT EXISTS idx_docs_status ON docs(status, active);
         """)
         _run_data_repairs(db)
         db.commit()
@@ -603,6 +625,28 @@ def _init_db_conn(db):
         );
         CREATE INDEX IF NOT EXISTS idx_integration_refs_provider
             ON integration_refs(provider, entity_type, entity_id);
+        CREATE TABLE IF NOT EXISTS doc_categories (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT UNIQUE NOT NULL,
+            description TEXT,
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            created_by  TEXT,
+            created_at  TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS docs (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_id INTEGER REFERENCES doc_categories(id),
+            title       TEXT NOT NULL,
+            body        TEXT NOT NULL,
+            status      TEXT NOT NULL DEFAULT 'published',
+            created_by  TEXT,
+            updated_by  TEXT,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            active      INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS idx_docs_category ON docs(category_id, active, title);
+        CREATE INDEX IF NOT EXISTS idx_docs_status ON docs(status, active);
         CREATE TABLE IF NOT EXISTS webhooks (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             url        TEXT NOT NULL,

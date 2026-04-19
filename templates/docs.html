@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+{% block title %}SOPs & Docs{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <div class="topbar-title">SOPs & Docs</div>
+    <div class="text-muted text-sm">Store receiving steps, checkout rules, safety notes, and team procedures next to inventory.</div>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+    {% if can_write_docs %}
+    <button class="btn btn-secondary" onclick="openCategoryModal()">New Category</button>
+    <button class="btn btn-primary" onclick="openDocModal()">New SOP</button>
+    {% endif %}
+  </div>
+</div>
+
+<main class="docs-page">
+  <section class="docs-shell">
+    <aside class="docs-cats card">
+      <div class="docs-panel-head">
+        <div>
+          <h3>Categories</h3>
+          <p>Group procedures by workflow.</p>
+        </div>
+      </div>
+      <div id="docCategories" class="docs-cat-list"></div>
+    </aside>
+
+    <section class="docs-list card">
+      <div class="docs-toolbar">
+        <div>
+          <h3 id="docsListTitle">All SOPs</h3>
+          <p id="docsListSub">Search or select a category.</p>
+        </div>
+        <input id="docsSearch" class="input" placeholder="Search SOPs, policies, steps..." oninput="loadDocs()" style="max-width:320px">
+      </div>
+      <div id="docsList" class="docs-list-grid"></div>
+    </section>
+
+    <section class="docs-detail card">
+      <div id="docEmpty" class="docs-empty">
+        <div class="docs-empty-icon">DOC</div>
+        <h3>Select an SOP</h3>
+        <p>Use this area for repeatable procedures your team needs while handling inventory.</p>
+      </div>
+      <div id="docDetail" style="display:none">
+        <div class="docs-detail-head">
+          <div>
+            <div id="docDetailCategory" class="badge">Uncategorized</div>
+            <h2 id="docDetailTitle"></h2>
+            <p id="docDetailMeta" class="text-muted text-sm"></p>
+          </div>
+          <div class="docs-detail-actions">
+            {% if can_write_docs %}<button class="btn btn-secondary" onclick="editCurrentDoc()">Edit</button>{% endif %}
+            {% if can_delete_docs %}<button class="btn btn-danger" onclick="deleteCurrentDoc()">Delete</button>{% endif %}
+          </div>
+        </div>
+        <div id="docDetailBody" class="docs-body"></div>
+      </div>
+    </section>
+  </section>
+</main>
+
+{% if can_write_docs %}
+<div class="modal" id="docModal">
+  <div class="modal-content" style="width:min(760px,calc(100vw - 32px));max-height:92vh;overflow:auto">
+    <button class="modal-close" onclick="closeModal('docModal')">&times;</button>
+    <h2 id="docModalTitle" style="margin-bottom:4px">New SOP</h2>
+    <p class="text-muted text-sm" style="margin-bottom:18px">Keep it practical: purpose, when to use it, required steps, and escalation notes.</p>
+    <input type="hidden" id="docId">
+    <div class="grid-2" style="gap:12px">
+      <div>
+        <label class="label">Category</label>
+        <select id="docCategory" class="select"></select>
+      </div>
+      <div>
+        <label class="label">Status</label>
+        <select id="docStatus" class="select">
+          <option value="published">Published</option>
+          <option value="draft">Draft</option>
+        </select>
+      </div>
+    </div>
+    <label class="label" style="margin-top:12px">Title</label>
+    <input id="docTitle" class="input" placeholder="Example: Receiving serialized equipment">
+    <label class="label" style="margin-top:12px">Procedure</label>
+    <textarea id="docBody" class="textarea" rows="14" placeholder="1. Verify the purchase order&#10;2. Inspect the item&#10;3. Scan or enter the serial number&#10;4. Apply label&#10;5. Put away in the correct site/shelf"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn btn-secondary" onclick="closeModal('docModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveDoc()">Save SOP</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="docCategoryModal">
+  <div class="modal-content" style="width:min(480px,calc(100vw - 32px))">
+    <button class="modal-close" onclick="closeModal('docCategoryModal')">&times;</button>
+    <h2 style="margin-bottom:4px">New SOP Category</h2>
+    <p class="text-muted text-sm" style="margin-bottom:18px">Use workflow names like Receiving, Safety, or Field Work.</p>
+    <label class="label">Name</label>
+    <input id="newDocCategoryName" class="input" placeholder="Field Work">
+    <label class="label" style="margin-top:12px">Description</label>
+    <textarea id="newDocCategoryDescription" class="textarea" rows="4" placeholder="Procedures used by field workers."></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn btn-secondary" onclick="closeModal('docCategoryModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveDocCategory()">Create Category</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<style>
+.docs-page{flex:1;overflow:auto;padding:20px 24px 32px;background:linear-gradient(180deg,#f8fafc 0,#eef2ff 100%)}
+.docs-shell{display:grid;grid-template-columns:260px minmax(280px,.8fr) minmax(360px,1.15fr);gap:16px;max-width:1500px;margin:0 auto}
+.docs-cats,.docs-list,.docs-detail{padding:18px;min-height:calc(100vh - 130px)}
+.docs-panel-head h3,.docs-toolbar h3{font-size:16px;margin:0 0 4px}
+.docs-panel-head p,.docs-toolbar p,.docs-empty p{margin:0;color:var(--muted);font-size:13px;line-height:1.55}
+.docs-cat-list{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.docs-cat-btn{border:1px solid var(--border);background:#fff;border-radius:14px;padding:11px 12px;text-align:left;cursor:pointer;transition:.16s;display:flex;align-items:center;gap:10px}
+.docs-cat-btn:hover,.docs-cat-btn.active{border-color:rgba(100,66,214,.35);background:#f5f3ff;transform:translateY(-1px)}
+.docs-cat-count{margin-left:auto;background:#eef2ff;color:#4338ca;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:800}
+.docs-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.docs-list-grid{display:flex;flex-direction:column;gap:10px}
+.docs-row{border:1px solid var(--border);background:#fff;border-radius:16px;padding:14px;cursor:pointer;transition:.16s}
+.docs-row:hover,.docs-row.active{border-color:rgba(100,66,214,.35);box-shadow:0 12px 28px rgba(15,23,42,.08);transform:translateY(-1px)}
+.docs-row h4{margin:0 0 6px;font-size:14px}
+.docs-row p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.docs-detail{background:rgba(255,255,255,.94)}
+.docs-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:18px}
+.docs-detail-head h2{font-size:24px;line-height:1.15;margin:10px 0 6px;letter-spacing:-.5px}
+.docs-detail-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.docs-body{white-space:pre-wrap;line-height:1.75;color:#1f2937;font-size:14px}
+.docs-empty{min-height:420px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:var(--muted);gap:10px}
+.docs-empty-icon{width:58px;height:58px;border-radius:18px;background:#f5f3ff;color:#6442d6;border:1px solid #ddd6fe;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;letter-spacing:.5px}
+.badge{display:inline-flex;align-items:center;border-radius:999px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;padding:4px 10px;font-size:12px;font-weight:800}
+@media(max-width:1180px){.docs-shell{grid-template-columns:220px minmax(0,1fr)}.docs-detail{grid-column:1 / -1;min-height:auto}.docs-cats,.docs-list,.docs-detail{min-height:auto}}
+@media(max-width:760px){.docs-page{padding:14px}.docs-shell{grid-template-columns:1fr}.docs-toolbar,.docs-detail-head{flex-direction:column}.docs-toolbar .input{max-width:none}.docs-detail-actions{justify-content:flex-start}}
+</style>
+
+<script>
+const CAN_WRITE_DOCS={{ 'true' if can_write_docs else 'false' }};
+let docCategories=[];
+let docs=[];
+let activeCategory='';
+let currentDoc=null;
+
+function esc(v){
+  return String(v ?? '').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+async function loadDocCategories(){
+  const data=await fetch('/api/docs/categories').then(r=>r.json());
+  if(!data.ok)throw new Error(data.msg||'Could not load categories');
+  docCategories=data.categories||[];
+  renderDocCategories();
+  fillDocCategorySelect();
+}
+
+function renderDocCategories(){
+  const box=document.getElementById('docCategories');
+  const allCount=docCategories.reduce((sum,c)=>sum+(Number(c.doc_count)||0),0);
+  box.innerHTML=`
+    <button class="docs-cat-btn ${activeCategory===''?'active':''}" onclick="selectDocCategory('','All SOPs')">
+      <strong>All SOPs</strong><span class="docs-cat-count">${allCount}</span>
+    </button>
+    ${docCategories.map(c=>`
+      <button class="docs-cat-btn ${String(activeCategory)===String(c.id)?'active':''}" onclick="selectDocCategory('${c.id}')">
+        <span>${esc(c.name)}</span><span class="docs-cat-count">${Number(c.doc_count)||0}</span>
+      </button>
+    `).join('')}`;
+}
+
+function selectDocCategory(id){
+  activeCategory=id;
+  const cat=docCategories.find(c=>String(c.id)===String(id));
+  const name=cat?cat.name:'All SOPs';
+  document.getElementById('docsListTitle').textContent=name||'All SOPs';
+  loadDocs();
+  renderDocCategories();
+}
+
+function fillDocCategorySelect(){
+  const sel=document.getElementById('docCategory');
+  if(!sel)return;
+  sel.innerHTML='<option value="">Uncategorized</option>'+docCategories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+}
+
+async function loadDocs(){
+  const q=document.getElementById('docsSearch').value.trim();
+  const params=new URLSearchParams();
+  if(activeCategory)params.set('category_id',activeCategory);
+  if(q)params.set('q',q);
+  const data=await fetch('/api/docs?'+params.toString()).then(r=>r.json());
+  if(!data.ok)throw new Error(data.msg||'Could not load docs');
+  docs=data.docs||[];
+  renderDocs();
+}
+
+function renderDocs(){
+  const box=document.getElementById('docsList');
+  if(!docs.length){
+    box.innerHTML='<div class="docs-empty" style="min-height:260px"><h3>No SOPs yet</h3><p>Create one for receiving, checkout, reservations, safety, or training.</p></div>';
+    return;
+  }
+  box.innerHTML=docs.map(d=>`
+    <article class="docs-row ${currentDoc&&currentDoc.id===d.id?'active':''}" onclick="selectDoc(${d.id})">
+      <div style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+        <h4>${esc(d.title)}</h4>
+        ${d.status==='draft'?'<span class="badge">Draft</span>':''}
+      </div>
+      <p><strong>${esc(d.category_name||'Uncategorized')}</strong> · Updated ${esc(d.updated_at||'')}</p>
+      <p>${esc(d.preview||'')}</p>
+    </article>
+  `).join('');
+}
+
+async function selectDoc(id){
+  const data=await fetch('/api/docs/'+id).then(r=>r.json());
+  if(!data.ok){alert(data.msg||'Could not load doc');return}
+  currentDoc=data.doc;
+  document.getElementById('docEmpty').style.display='none';
+  document.getElementById('docDetail').style.display='';
+  document.getElementById('docDetailCategory').textContent=currentDoc.category_name||'Uncategorized';
+  document.getElementById('docDetailTitle').textContent=currentDoc.title;
+  document.getElementById('docDetailMeta').textContent=`${currentDoc.status} · Updated ${currentDoc.updated_at||''} by ${currentDoc.updated_by||currentDoc.created_by||'team'}`;
+  document.getElementById('docDetailBody').textContent=currentDoc.body||'';
+  renderDocs();
+}
+
+function openDocModal(){
+  currentDoc=null;
+  document.getElementById('docModalTitle').textContent='New SOP';
+  document.getElementById('docId').value='';
+  document.getElementById('docCategory').value=activeCategory||'';
+  document.getElementById('docStatus').value='published';
+  document.getElementById('docTitle').value='';
+  document.getElementById('docBody').value='';
+  openModal('docModal');
+}
+
+function editCurrentDoc(){
+  if(!currentDoc)return;
+  document.getElementById('docModalTitle').textContent='Edit SOP';
+  document.getElementById('docId').value=currentDoc.id;
+  document.getElementById('docCategory').value=currentDoc.category_id||'';
+  document.getElementById('docStatus').value=currentDoc.status||'published';
+  document.getElementById('docTitle').value=currentDoc.title||'';
+  document.getElementById('docBody').value=currentDoc.body||'';
+  openModal('docModal');
+}
+
+async function saveDoc(){
+  const id=document.getElementById('docId').value;
+  const payload={
+    category_id:document.getElementById('docCategory').value||null,
+    status:document.getElementById('docStatus').value,
+    title:document.getElementById('docTitle').value,
+    body:document.getElementById('docBody').value
+  };
+  const res=await fetch(id?'/api/docs/'+id:'/api/docs',{
+    method:id?'PUT':'POST',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body:JSON.stringify(payload)
+  });
+  const data=await res.json();
+  if(!data.ok){alert(data.msg||'Could not save SOP');return}
+  closeModal('docModal');
+  await loadDocCategories();
+  await loadDocs();
+  if(data.doc)selectDoc(data.doc.id);
+}
+
+function openCategoryModal(){
+  document.getElementById('newDocCategoryName').value='';
+  document.getElementById('newDocCategoryDescription').value='';
+  openModal('docCategoryModal');
+}
+
+async function saveDocCategory(){
+  const data=await api('/api/docs/categories',{
+    name:document.getElementById('newDocCategoryName').value,
+    description:document.getElementById('newDocCategoryDescription').value
+  });
+  if(!data.ok){alert(data.msg||'Could not create category');return}
+  closeModal('docCategoryModal');
+  await loadDocCategories();
+}
+
+async function deleteCurrentDoc(){
+  if(!currentDoc)return;
+  if(!confirm(`Delete "${currentDoc.title}"?`))return;
+  const res=await fetch('/api/docs/'+currentDoc.id,{method:'DELETE',headers:{'X-CSRF-Token':_csrfToken}});
+  const data=await res.json();
+  if(!data.ok){alert(data.msg||'Could not delete SOP');return}
+  currentDoc=null;
+  document.getElementById('docDetail').style.display='none';
+  document.getElementById('docEmpty').style.display='';
+  await loadDocCategories();
+  await loadDocs();
+}
+
+(async function initDocs(){
+  try{
+    await loadDocCategories();
+    await loadDocs();
+  }catch(e){
+    document.getElementById('docsList').innerHTML='<div class="docs-empty" style="min-height:260px"><h3>Docs could not load</h3><p>Refresh the page or check your permissions.</p></div>';
+  }
+})();
+</script>
+{% endblock %}

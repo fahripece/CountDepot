@@ -132,6 +132,18 @@ def webhooks_page():
     return render_template("webhooks.html")
 
 
+@bp.route("/docs")
+@login_required
+@perm_required("view_docs")
+def docs_page():
+    user_perms = set((session.get("permissions") or "").split(","))
+    return render_template(
+        "docs.html",
+        can_write_docs=session.get("role") == "admin" or "write_docs" in user_perms,
+        can_delete_docs=session.get("role") == "admin" or "delete_docs" in user_perms,
+    )
+
+
 @bp.route("/api/demo-request", methods=["POST"])
 def api_demo_request():
     """Public endpoint — store a demo request and optionally email the team."""

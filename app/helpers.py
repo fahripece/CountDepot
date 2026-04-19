@@ -186,14 +186,18 @@ ALL_PERMISSIONS = [
     ("sell_items",       "Mark as Sold",       "Mark items as sold and record sale price"),
     ("delete_items",     "Delete Items",       "Permanently delete items"),
     ("import_export",    "Import / Export",    "Import Excel files and export CSV/Excel"),
+    ("view_docs",        "View Docs / SOPs",   "Read company procedures and shared documents"),
+    ("write_docs",       "Create / Edit Docs", "Create and update company procedures"),
+    ("delete_docs",      "Delete Docs",        "Remove company procedures"),
 ]
 PERM_KEYS            = [p[0] for p in ALL_PERMISSIONS]
 ADMIN_DEFAULT_PERMS  = set(PERM_KEYS)
 WORKER_DEFAULT_PERMS = {
     "view_inventory", "view_dashboard", "view_audit",
     "checkout_checkin", "write_items", "qty_adjust", "sell_items",
+    "view_docs",
 }
-VIEWER_DEFAULT_PERMS = {"view_inventory"}
+VIEWER_DEFAULT_PERMS = {"view_inventory", "view_docs"}
 
 def get_user_perms(user_id=None, role=None, perm_str=None):
     if role == "admin":

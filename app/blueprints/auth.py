@@ -300,6 +300,20 @@ def reset_password(token):
         return render_template("reset_password.html", invalid=True, token=token)
     error = None
     if request.method == "POST":
+        ip = request.remote_addr or "unknown"
+        allowed, reset_in = check_rate_limit(
+            ip,
+            f"reset-password:{token[:16]}",
+            max_attempts=8,
+            window=900,
+        )
+        if not allowed:
+            return render_template(
+                "reset_password.html",
+                token=token,
+                error=f"Too many reset attempts. Try again in {reset_in // 60 + 1} minutes.",
+                invalid=False,
+            ), 429
         new_pw  = request.form.get("new_password", "")
         confirm = request.form.get("confirm_password", "")
         current = query("SELECT password FROM users WHERE id=?", [row["user_id"]], one=True)
@@ -310,6 +324,10 @@ def reset_password(token):
             execute("UPDATE users SET password=?, must_change_password=0, email_verified=1 WHERE id=?",
                     [hash_pw(new_pw), row["user_id"]])
             execute("UPDATE password_reset_tokens SET used=1 WHERE id=?", [row["id"]])
+            user = query("SELECT username FROM users WHERE id=?", [row["user_id"]], one=True)
+            log_auth_event("PW_RESET", username=user["username"] if user else "",
+                           ip=ip, tenant=getattr(g, "tenant_slug", ""),
+                           detail="password reset completed")
             return render_template("reset_password.html", success=True, token=token)
     return render_template("reset_password.html", token=token, error=error, invalid=False)
 
