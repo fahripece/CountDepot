@@ -2462,10 +2462,18 @@ def test_mobile_page_is_scanner_first_and_installable(app, tenant):
     assert "Scanner startup failed:" in body
     assert "BarcodeDetector" in body
     assert "ZXingBrowser" in body
+    assert "frameRate:{ideal:30,max:60}" in body
+    assert "focusMode:'continuous'" in body
+    assert "Fill the blue box with the barcode" in body
+    assert "_toggleTorch" in body
+    assert "_refocusCamera" in body
     assert "Camera requires HTTPS" in body
     assert "navigator.serviceWorker.register('/sw.js')" not in body
     assert ".unregister()" in body
     assert "scanAddSerial" in body
+    assert "scanAddField('addSerial')" in body
+    assert "scanAddField('addSku')" in body
+    assert 'id="addSku" placeholder="Scan or type SKU"' in body
     assert "Sign in or permission required" in body
 
 
@@ -2487,6 +2495,28 @@ def test_checkout_page_has_camera_scan_button(app, tenant):
     assert "scanCheckoutWithCamera" in body
     assert "openCameraScanner" in body
     assert "Camera</button>" in body
+
+
+def test_add_item_identifier_fields_have_camera_scan_buttons(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/add-item",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "scanIdentifierField('fi-serial')" in body
+    assert "scanIdentifierField('fi-sku')" in body
+    assert "openCameraScanner(code=>" in body
+    assert 'placeholder="Scan or type serial number"' in body
+    assert 'placeholder="Scan or type supplier part number"' in body
 
 
 def test_demo_request_email_goes_to_platform_admin(app, monkeypatch):

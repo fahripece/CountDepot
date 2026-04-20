@@ -91,11 +91,17 @@
           <div class="field-row">
             <div class="field" id="fi-serial-wrap" style="display:none">
               <label class="label">Serial Number <span style="color:#b91c1c">*</span></label>
-              <input class="input mono" id="fi-serial" placeholder="e.g. SN123456" oninput="this.style.borderColor=''">
+              <div class="scan-input-row">
+                <input class="input mono" id="fi-serial" placeholder="Scan or type serial number" oninput="this.style.borderColor=''" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <button type="button" class="btn btn-secondary btn-sm scan-field-btn" onclick="scanIdentifierField('fi-serial')">Scan</button>
+              </div>
             </div>
             <div class="field" id="fi-vendor-sku-wrap" style="display:none">
               <label class="label">Vendor SKU <span style="color:#b91c1c">*</span></label>
-              <input class="input mono" id="fi-sku" name="countdepot-vendor-sku" placeholder="Supplier part number" oninput="this.style.borderColor=''" autocomplete="new-password" autocapitalize="off" spellcheck="false">
+              <div class="scan-input-row">
+                <input class="input mono" id="fi-sku" name="countdepot-vendor-sku" placeholder="Scan or type supplier part number" oninput="this.style.borderColor=''" autocomplete="new-password" autocapitalize="off" spellcheck="false">
+                <button type="button" class="btn btn-secondary btn-sm scan-field-btn" onclick="scanIdentifierField('fi-sku')">Scan</button>
+              </div>
             </div>
             <div class="field" id="fi-internal-sku-note" style="display:none">
               <label class="label">Internal SKU</label>
@@ -246,6 +252,9 @@
 
 <style>
 .section-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#64748b;padding:10px 0 8px;border-bottom:1px solid #f0efec;margin-bottom:14px;margin-top:4px}
+.scan-input-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.scan-field-btn{height:38px;white-space:nowrap}
+@media(max-width:640px){.scan-input-row{grid-template-columns:1fr}.scan-field-btn{height:42px;width:100%}}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 
@@ -262,6 +271,17 @@ function scrubBadVendorSkuExample(){
 }
 scrubBadVendorSkuExample();
 window.addEventListener('pageshow', scrubBadVendorSkuExample);
+
+function scanIdentifierField(fieldId){
+  if(typeof openCameraScanner!=='function'){toast('Camera scanner is not available on this page','warn');return;}
+  openCameraScanner(code=>{
+    const el=document.getElementById(fieldId);
+    if(!el)return;
+    el.value=code;
+    el.style.borderColor='';
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+}
 
 function onProductChange(){
   scrubBadVendorSkuExample();

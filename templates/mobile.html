@@ -70,8 +70,8 @@
     </label>
     <label>Item name<input id="addName" placeholder="Item name"></label>
     <div class="m-grid">
-      <label>Serial #<span class="m-inline-scan"><input id="addSerial" placeholder="Scan or type serial" autocapitalize="none"><button type="button" onclick="scanAddSerial()">Scan</button></span></label>
-      <label>Vendor SKU<input id="addSku" placeholder="Optional"></label>
+      <label>Serial #<span class="m-inline-scan"><input id="addSerial" placeholder="Scan or type serial" autocapitalize="none" autocomplete="off"><button type="button" onclick="scanAddField('addSerial')">Scan</button></span></label>
+      <label>Vendor SKU<span class="m-inline-scan"><input id="addSku" placeholder="Scan or type SKU" autocapitalize="none" autocomplete="off"><button type="button" onclick="scanAddField('addSku')">Scan</button></span></label>
       <label>Shelf / bin<input id="addShelf" placeholder="A-12"></label>
       <label>Quantity<input id="addQty" type="number" min="1" inputmode="numeric" placeholder="Single if blank"></label>
     </div>
@@ -195,7 +195,8 @@ function resetLookup(){
   document.getElementById('mQuery').focus();
 }
 function scanWithCamera(){openCameraScanner(code=>{document.getElementById('mQuery').value=code;lookupInput();});}
-function scanAddSerial(){openCameraScanner(code=>{document.getElementById('addSerial').value=code;});}
+function scanAddField(fieldId){openCameraScanner(code=>{const el=document.getElementById(fieldId);if(el){el.value=code;el.dispatchEvent(new Event('input',{bubbles:true}));}});}
+function scanAddSerial(){scanAddField('addSerial');}
 async function lookupInput(){
   const q=document.getElementById('mQuery').value.trim();
   if(!q){toastMsg('Scan or type something first','error');return;}
