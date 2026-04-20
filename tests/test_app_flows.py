@@ -2459,6 +2459,8 @@ def test_mobile_page_is_scanner_first_and_installable(app, tenant):
     assert "installPrompt" not in body
     assert "Html5Qrcode" in body
     assert "html5-qrcode@2.3.8" in body
+    assert "@zxing/library@0.21.3" in body
+    assert "ZXing library camera scanner failed" in body
     assert "BarcodeDetector" in body
     assert "ZXingBrowser" in body
     assert "Camera requires HTTPS" in body

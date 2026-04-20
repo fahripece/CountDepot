@@ -859,7 +859,7 @@ function _cameraErrorMessage(err){
 }
 async function _loadZxing(){
   if(window.ZXingBrowser||window.ZXing)return window.ZXingBrowser||window.ZXing;
-  await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://unpkg.com/@zxing/browser@latest';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+  await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   return window.ZXingBrowser||window.ZXing;
 }
 async function _loadHtml5Qrcode(){
@@ -941,6 +941,32 @@ async function _startZxingDetector(video,status,deviceId){
   _camReader=controls||reader;
   await _populateCameraDevices();
 }
+async function _startZxingCamera(status,deviceId){
+  const ZX=await _loadZxing();
+  if(!ZX||!ZX.BrowserMultiFormatReader)throw new Error('ZXing camera reader could not load.');
+  const nativeVideo=document.getElementById('camScanVideo');
+  const html5Reader=document.getElementById('camHtml5Reader');
+  if(html5Reader){html5Reader.style.display='none';html5Reader.innerHTML='';}
+  if(nativeVideo)nativeVideo.style.display='block';
+  const devices=ZX.BrowserCodeReader&&ZX.BrowserCodeReader.listVideoInputDevices
+    ? await ZX.BrowserCodeReader.listVideoInputDevices()
+    : [];
+  const sel=document.getElementById('camDeviceSelect');
+  sel.innerHTML='';
+  devices.forEach((d,i)=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||`Camera ${i+1}`;sel.appendChild(o);});
+  sel.style.display=devices.length>1?'block':'none';
+  const preferred=deviceId||_camLastDeviceId||(devices.find(d=>/back|rear|environment/i.test(d.label||''))||devices[0]||{}).deviceId||undefined;
+  if(preferred){_camLastDeviceId=preferred;sel.value=preferred;}
+  _camReader=new ZX.BrowserMultiFormatReader();
+  status.textContent='Point camera at barcode...';status.style.color='#15803d';
+  const startResult=_camReader.decodeFromVideoDevice(preferred||null,nativeVideo,(result)=>{
+    if(result&&typeof result.getText==='function')_deliverCameraCode(result.getText());
+  });
+  if(startResult&&typeof startResult.catch==='function')startResult.catch(err=>{
+    status.textContent='Scanner failed to start: '+(err&&err.message?err.message:'unknown error');
+    status.style.color='#b91c1c';
+  });
+}
 async function _startCamera(){
   const status=document.getElementById('camScanStatus');
   status.textContent='Starting camera…';status.style.color='#94a3b8';
@@ -951,6 +977,12 @@ async function _startCamera(){
   const html5Reader=document.getElementById('camHtml5Reader');
   if(nativeVideo)nativeVideo.style.display='block';
   if(html5Reader){html5Reader.style.display='none';html5Reader.innerHTML='';}
+  try{
+    await _startZxingCamera(status,_camLastDeviceId);
+    return;
+  }catch(err){
+    console.warn('ZXing library camera scanner failed; trying html5-qrcode.',err);
+  }
   try{
     await _startHtml5Scanner(status,_camLastDeviceId);
     return;
@@ -989,6 +1021,13 @@ async function _switchCamera(){
   const deviceId=sel.value;
   _stopCamera();
   const status=document.getElementById('camScanStatus');
+  try{
+    _camLastDeviceId=deviceId;
+    await _startZxingCamera(status,deviceId);
+    return;
+  }catch(e){
+    console.warn('ZXing library camera scanner failed after camera switch; trying html5-qrcode.',e);
+  }
   try{
     _camLastDeviceId=deviceId;
     await _startHtml5Scanner(status,deviceId);
