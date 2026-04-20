@@ -471,11 +471,14 @@ function accountingSyncBtns(){
     btns+=`<button class="btn btn-secondary btn-sm" onclick="syncToAccounting('quickbooks')" style="color:#2CA01C">↑ QB</button>`;
   if(_acctStatus.xero&&_acctStatus.xero.connected)
     btns+=`<button class="btn btn-secondary btn-sm" onclick="syncToAccounting('xero')" style="color:#13B5EA">↑ Xero</button>`;
+  if(_acctStatus.zoho&&_acctStatus.zoho.connected)
+    btns+=`<button class="btn btn-secondary btn-sm" onclick="syncToAccounting('zoho')" style="color:#E42527">↑ Zoho</button>`;
   return btns;
 }
 async function syncToAccounting(provider){
   const r=await api(`/api/integrations/accounting/sync-po/${PO_ID}`,{provider});
-  if(r.ok) toast(`Synced to ${provider==='quickbooks'?'QuickBooks':'Xero'} (${r.remote_id})`);
+  const labels={quickbooks:'QuickBooks',xero:'Xero',zoho:'Zoho Books'};
+  if(r.ok) toast(`Synced to ${labels[provider]||'accounting'} (${r.remote_id})`);
   else toast(r.msg||'Sync failed','error');
 }
 function renderActionBar(){

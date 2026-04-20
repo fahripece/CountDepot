@@ -3,7 +3,7 @@
 {% block content %}
 <div class="topbar">
   <span class="topbar-title">Accounting Integrations</span>
-  <span class="topbar-sub">QuickBooks Online &amp; Xero</span>
+  <span class="topbar-sub">QuickBooks Online, Xero &amp; Zoho Books</span>
 </div>
 <div style="flex:1;overflow-y:auto;padding:20px 24px;max-width:720px">
   {% if flash_error %}
@@ -71,6 +71,61 @@
     </div>
   </div>
 
+  <!-- Zoho Books Card -->
+  <div class="card" style="background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:24px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+      <div style="width:40px;height:40px;background:#E42527;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px">Z</div>
+      <div>
+        <div style="font-size:15px;font-weight:600">Zoho Books</div>
+        <div id="zoho-status" style="font-size:12px;color:#94a3b8">Loadingâ€¦</div>
+      </div>
+      <div style="margin-left:auto" id="zoho-actions"></div>
+    </div>
+    <div id="zoho-config" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Client ID</label>
+          <input id="zoho-client-id" class="input" placeholder="Zoho OAuth Client ID">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Client Secret</label>
+          <input id="zoho-client-secret" class="input" type="password" placeholder="Client Secret">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Accounts URL</label>
+          <input id="zoho-accounts-url" class="input" placeholder="https://accounts.zoho.com">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Books API Base</label>
+          <input id="zoho-api-base" class="input" placeholder="https://www.zohoapis.com/books/v3">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Organization ID</label>
+          <input id="zoho-organization-id" class="input" placeholder="Auto-filled after OAuth, or paste manually">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Default Vendor ID</label>
+          <input id="zoho-vendor-id" class="input" placeholder="Required for PO sync">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Default Item ID</label>
+          <input id="zoho-item-id" class="input" placeholder="Use for inventory item POs">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Default Expense Account ID</label>
+          <input id="zoho-account-id" class="input" placeholder="Use for non-inventory lines">
+        </div>
+      </div>
+      <div style="font-size:12px;color:#64748b;line-height:1.5;margin-bottom:12px">
+        Zoho requires a Books organization ID plus a valid vendor and item/account mapping before CountDepot can push purchase orders.
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveZohoConfig()">Save &amp; Connect</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('zoho-config').style.display='none'">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Sync Log -->
   <div style="font-size:13px;font-weight:600;margin-bottom:10px;margin-top:4px">Recent Sync Activity</div>
   <div class="table-wrap" id="syncLogWrap">
@@ -84,28 +139,51 @@
 <script>
 const params=new URLSearchParams(location.search);
 if(params.get('connected')){
-  const p=params.get('connected')==='qb'?'QuickBooks':'Xero';
+  const connectedLabels={qb:'QuickBooks',xero:'Xero',zoho:'Zoho Books'};
+  const p=connectedLabels[params.get('connected')]||'Accounting provider';
   const b=document.getElementById('connectedBanner');
   b.textContent=`✓ ${p} connected successfully`;b.style.display='block';
 }
 
 async function loadStatus(){
   const d=await fetch('/api/integrations/accounting/status').then(r=>r.json());
+  window.accountingStatus=d;
   renderProvider('qb',d.quickbooks);
   renderProvider('xero',d.xero);
+  renderProvider('zoho',d.zoho);
   loadSyncLog();
 }
 
 function renderProvider(key,creds){
   const statusEl=document.getElementById(key+'-status');
   const actionsEl=document.getElementById(key+'-actions');
+  if(key==='zoho') fillZohoConfig(creds);
   if(creds.connected){
     statusEl.innerHTML='<span style="color:#15803d;font-weight:600">● Connected</span>';
-    actionsEl.innerHTML=`<button class="btn btn-secondary btn-sm" onclick="disconnectProvider('${key}')">Disconnect</button>`;
+    actionsEl.innerHTML=key==='zoho'
+      ? `<div style="display:flex;gap:8px"><button class="btn btn-secondary btn-sm" onclick="showConfig('${key}')">Settings</button><button class="btn btn-secondary btn-sm" onclick="disconnectProvider('${key}')">Disconnect</button></div>`
+      : `<button class="btn btn-secondary btn-sm" onclick="disconnectProvider('${key}')">Disconnect</button>`;
   } else {
     statusEl.textContent='Not connected';
     actionsEl.innerHTML=`<button class="btn btn-primary btn-sm" onclick="showConfig('${key}')">Configure</button>`;
   }
+}
+
+function fillZohoConfig(creds){
+  const fields={
+    'zoho-client-id':'client_id',
+    'zoho-client-secret':'client_secret',
+    'zoho-accounts-url':'accounts_url',
+    'zoho-api-base':'api_base',
+    'zoho-organization-id':'organization_id',
+    'zoho-vendor-id':'vendor_id',
+    'zoho-item-id':'item_id',
+    'zoho-account-id':'account_id'
+  };
+  Object.entries(fields).forEach(([id,key])=>{
+    const el=document.getElementById(id);
+    if(el && creds && creds[key]) el.value=creds[key];
+  });
 }
 
 function showConfig(key){
@@ -133,11 +211,37 @@ async function saveXeroConfig(){
   else toast(r.msg,'error');
 }
 
+async function saveZohoConfig(){
+  const cid=document.getElementById('zoho-client-id').value.trim();
+  const sec=document.getElementById('zoho-client-secret').value.trim();
+  if(!cid||!sec){toast('Client ID and Secret are required','error');return;}
+  await api('/api/integrations/accounting/zoho/save',{
+    zoho_client_id:cid,
+    zoho_client_secret:sec,
+    zoho_accounts_url:document.getElementById('zoho-accounts-url').value.trim()||'https://accounts.zoho.com',
+    zoho_api_base:document.getElementById('zoho-api-base').value.trim()||'https://www.zohoapis.com/books/v3',
+    zoho_organization_id:document.getElementById('zoho-organization-id').value.trim(),
+    zoho_vendor_id:document.getElementById('zoho-vendor-id').value.trim(),
+    zoho_item_id:document.getElementById('zoho-item-id').value.trim(),
+    zoho_account_id:document.getElementById('zoho-account-id').value.trim()
+  });
+  if(window.accountingStatus?.zoho?.connected){
+    toast('Zoho settings saved');
+    loadStatus();
+    return;
+  }
+  const r=await fetch('/api/integrations/accounting/zoho/auth-url').then(r=>r.json());
+  if(r.ok) window.location=r.url;
+  else toast(r.msg,'error');
+}
+
 async function disconnectProvider(key){
-  if(!confirm(`Disconnect ${key==='qb'?'QuickBooks':'Xero'}?`)) return;
+  const providerLabels={qb:'QuickBooks',xero:'Xero',zoho:'Zoho Books'};
+  if(!confirm(`Disconnect ${providerLabels[key]||'accounting provider'}?`)) return;
   const disconnectRoutes = {
     qb: '/api/integrations/accounting/qb/disconnect',
-    xero: '/api/integrations/accounting/xero/disconnect'
+    xero: '/api/integrations/accounting/xero/disconnect',
+    zoho: '/api/integrations/accounting/zoho/disconnect'
   };
   const route = disconnectRoutes[key];
   if(!route){toast('Unknown accounting provider','error');return;}

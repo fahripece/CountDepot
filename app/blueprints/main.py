@@ -689,6 +689,48 @@ def xero_oauth_callback():
     return redirect(url_for("main.integrations_accounting") + "?connected=xero")
 
 
+@bp.route("/integrations/accounting/zoho/callback")
+@login_required
+@admin_required
+def zoho_oauth_callback():
+    """Zoho Books OAuth2 callback, token exchange, and organization selection."""
+    from app.accounting import (zoho_exchange_code, zoho_get_organizations, _get_setting, _set_setting)
+    code = request.args.get("code", "")
+    error = request.args.get("error", "")
+    accounts_server = request.args.get("accounts-server", "")
+    if accounts_server:
+        accounts_server = accounts_server.rstrip("/")
+        _set_setting("zoho_accounts_url", accounts_server)
+        if "accounts.zoho" in accounts_server and not _get_setting("zoho_api_base", ""):
+            suffix = accounts_server.split("accounts.zoho", 1)[1]
+            if suffix:
+                _set_setting("zoho_api_base", f"https://www.zohoapis{suffix}/books/v3")
+    if error or not code:
+        return render_template("integrations_accounting.html",
+                               flash_error=f"Zoho authorization failed: {error or 'No code received'}")
+    try:
+        redirect_uri = request.host_url.rstrip("/") + "/integrations/accounting/zoho/callback"
+        tokens = zoho_exchange_code(
+            _get_setting("zoho_client_id", ""),
+            _get_setting("zoho_client_secret", ""),
+            code, redirect_uri)
+        from datetime import timedelta
+        expiry = (_utc_now() + timedelta(seconds=int(tokens.get("expires_in", 3600)))).isoformat()
+        _set_setting("zoho_access_token", tokens["access_token"])
+        if tokens.get("refresh_token"):
+            _set_setting("zoho_refresh_token", tokens["refresh_token"])
+        _set_setting("zoho_token_expiry", expiry)
+        organizations = zoho_get_organizations(tokens["access_token"])
+        if organizations:
+            org = organizations[0]
+            _set_setting("zoho_organization_id", str(org.get("organization_id", "")))
+            _set_setting("zoho_organization_name", org.get("name") or org.get("organization_name") or "")
+    except Exception as e:
+        return render_template("integrations_accounting.html",
+                               flash_error=f"Zoho token exchange failed: {e}")
+    return redirect(url_for("main.integrations_accounting") + "?connected=zoho")
+
+
 # ── Procurement helpers ───────────────────────────────────────────────────────
 
 def _po_number():

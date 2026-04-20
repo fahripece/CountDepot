@@ -8062,11 +8062,12 @@ def api_procurement_set_budget():
 @login_required
 @admin_required
 def api_accounting_status():
-    from app.accounting import qb_get_credentials, xero_get_credentials
+    from app.accounting import qb_get_credentials, xero_get_credentials, zoho_get_credentials
     return jsonify({
         "ok":        True,
         "quickbooks": qb_get_credentials(),
         "xero":       xero_get_credentials(),
+        "zoho":       zoho_get_credentials(),
     })
 
 
@@ -8140,21 +8141,68 @@ def api_xero_disconnect():
     return jsonify({"ok": True})
 
 
+@bp.route("/api/integrations/accounting/zoho/save", methods=["POST"])
+@login_required
+@admin_required
+def api_zoho_save_credentials():
+    from app.accounting import _set_setting
+    d = request.json or {}
+    for key in (
+        "zoho_client_id",
+        "zoho_client_secret",
+        "zoho_accounts_url",
+        "zoho_api_base",
+        "zoho_organization_id",
+        "zoho_vendor_id",
+        "zoho_item_id",
+        "zoho_account_id",
+    ):
+        if key in d:
+            _set_setting(key, str(d[key]).strip())
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/integrations/accounting/zoho/auth-url")
+@login_required
+@admin_required
+def api_zoho_auth_url():
+    from app.accounting import zoho_auth_url, _get_setting
+    from flask import request as req
+    client_id = _get_setting("zoho_client_id", "")
+    if not client_id:
+        return jsonify({"ok": False, "msg": "Zoho client ID not configured"}), 400
+    redirect_uri = req.host_url.rstrip("/") + "/integrations/accounting/zoho/callback"
+    url = zoho_auth_url(client_id, redirect_uri)
+    return jsonify({"ok": True, "url": url})
+
+
+@bp.route("/api/integrations/accounting/zoho/disconnect", methods=["POST"])
+@login_required
+@admin_required
+def api_zoho_disconnect():
+    from app.accounting import zoho_disconnect
+    zoho_disconnect()
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/integrations/accounting/sync-po/<int:po_id>", methods=["POST"])
 @login_required
 @admin_required
 def api_accounting_sync_po(po_id):
     d        = request.json or {}
     provider = d.get("provider", "").lower()
-    if provider not in ("quickbooks", "xero"):
-        return jsonify({"ok": False, "msg": "provider must be quickbooks or xero"}), 400
+    if provider not in ("quickbooks", "xero", "zoho"):
+        return jsonify({"ok": False, "msg": "provider must be quickbooks, xero, or zoho"}), 400
     try:
         if provider == "quickbooks":
             from app.accounting import qb_sync_po
             remote_id = qb_sync_po(po_id)
-        else:
+        elif provider == "xero":
             from app.accounting import xero_sync_po
             remote_id = xero_sync_po(po_id)
+        else:
+            from app.accounting import zoho_sync_po
+            remote_id = zoho_sync_po(po_id)
         return jsonify({"ok": True, "remote_id": remote_id})
     except Exception as e:
         now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")

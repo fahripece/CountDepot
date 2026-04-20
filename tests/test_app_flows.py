@@ -2643,7 +2643,10 @@ def test_accounting_page_uses_existing_disconnect_routes(app, tenant):
     assert response.status_code == 200
     assert "/api/integrations/accounting/qb/disconnect" in body
     assert "/api/integrations/accounting/xero/disconnect" in body
+    assert "/api/integrations/accounting/zoho/disconnect" in body
     assert "/api/integrations/accounting/${key}/disconnect" not in body
+    assert "Zoho Books" in body
+    assert "zoho-vendor-id" in body
 
 
 def test_platform_dashboard_renders_owner_metrics(app):

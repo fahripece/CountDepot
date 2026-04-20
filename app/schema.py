@@ -139,6 +139,7 @@ MIGRATIONS = [
     # purchase_orders — accounting sync tracking
     ("purchase_orders", "qb_bill_id",   "TEXT"),
     ("purchase_orders", "xero_po_id",   "TEXT"),
+    ("purchase_orders", "zoho_po_id",   "TEXT"),
     ("purchase_orders", "synced_at",    "TEXT"),
 
     # users — per-user low stock alert opt-in
@@ -728,6 +729,7 @@ def _init_db_conn(db):
             rejection_reason TEXT,
             qb_bill_id    TEXT,
             xero_po_id    TEXT,
+            zoho_po_id    TEXT,
             synced_at     TEXT
         );
         CREATE TABLE IF NOT EXISTS po_lines (
