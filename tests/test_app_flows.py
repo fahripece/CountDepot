@@ -2042,6 +2042,10 @@ def test_docs_page_and_api_support_permissioned_sops(app, tenant):
     assert page.status_code == 200
     assert "SOPs &amp; Docs" in body
     assert "New SOP" in body
+    assert '<div class="overlay" id="docModal">' in body
+    assert '<div class="overlay" id="docCategoryModal">' in body
+    assert '<div class="modal" id="docModal">' not in body
+    assert '<div class="modal" id="docCategoryModal">' not in body
 
     with app.test_request_context(
         "/api/docs/categories",

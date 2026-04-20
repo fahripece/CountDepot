@@ -251,6 +251,11 @@ function esc(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+function safeExternalUrl(s){
+  const url = String(s || '');
+  return /^https:\/\//i.test(url) ? url : '#';
+}
+
 async function loadConnectorCatalog(){
   const wrap = document.getElementById('connector-catalog');
   if(!wrap) return;
@@ -488,7 +493,7 @@ async function priceCheck(){
   res.innerHTML='<div style="color:#94a3b8;font-size:13px">Searching Amazon…</div>';
   const d = await apiPost('/api/integrations/amazon/price-check', {queries:[q]});
   if(!d.ok){
-    res.innerHTML=`<div style="color:#b91c1c;font-size:13px">${d.msg}</div>`;
+    res.innerHTML=`<div style="color:#b91c1c;font-size:13px">${esc(d.msg || 'Price check failed.')}</div>`;
     return;
   }
   if(!d.results.length){
@@ -496,15 +501,15 @@ async function priceCheck(){
     return;
   }
   res.innerHTML = d.results.map(r => r.error
-    ? `<div style="color:#b91c1c;font-size:13px">Error: ${r.error}</div>`
+    ? `<div style="color:#b91c1c;font-size:13px">Error: ${esc(r.error)}</div>`
     : `<div style="background:#f8fafc;border:1px solid #e5e3de;border-radius:8px;padding:12px 14px;font-size:13px">
-        <div style="font-weight:600">${r.title||r.query}</div>
-        <div style="color:#64748b;font-size:11px;margin-top:3px">${r.brand||''} · ASIN: ${r.asin||'—'}</div>
+        <div style="font-weight:600">${esc(r.title||r.query)}</div>
+        <div style="color:#64748b;font-size:11px;margin-top:3px">${esc(r.brand||'')} · ASIN: ${esc(r.asin||'—')}</div>
         <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">
           <span style="font-size:18px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:#1d4ed8">
             ${r.price!=null?'$'+Number(r.price).toFixed(2):'Price unavailable'}
           </span>
-          ${r.asin?`<a href="${r.url}" target="_blank" class="btn btn-secondary btn-sm" style="font-size:11px">View on Amazon →</a>`:''}
+          ${r.asin?`<a href="${esc(safeExternalUrl(r.url))}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="font-size:11px">View on Amazon →</a>`:''}
         </div>
       </div>`
   ).join('');

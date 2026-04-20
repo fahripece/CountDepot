@@ -486,7 +486,7 @@ async function saveItem(){
     } else {
       // Show error — highlight serial field if it's a duplicate error
       const msg = res.msg || 'Error saving item';
-      document.getElementById('errMsg').innerHTML = msg;
+      document.getElementById('errMsg').textContent = msg;
       openModal('errModal');
       // If it's a serial/SKU dupe, highlight the field
       if(msg.toLowerCase().includes('serial')){
@@ -500,7 +500,7 @@ async function saveItem(){
       if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save Item';}
     }
   }catch(e){
-    document.getElementById('errMsg').innerHTML='Network error — please try again';
+    document.getElementById('errMsg').textContent='Network error — please try again';
     openModal('errModal');
     _savingItem=false;
     if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save Item';}

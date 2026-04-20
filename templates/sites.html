@@ -253,7 +253,8 @@ async function openMembers(locId){
     users=await r.json();
     if(!r.ok||users.ok===false) throw new Error(users.msg||'Server error '+r.status);
   }catch(e){
-    document.getElementById('members-list').innerHTML=`<div style="padding:16px;font-size:13px;color:#b91c1c;text-align:center">Failed to load users: ${e.message}</div>`;
+    const msg = String(e.message || 'Unknown error').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    document.getElementById('members-list').innerHTML=`<div style="padding:16px;font-size:13px;color:#b91c1c;text-align:center">Failed to load users: ${msg}</div>`;
     return;
   }
   renderMembersList(users);

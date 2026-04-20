@@ -62,8 +62,8 @@
 </main>
 
 {% if can_write_docs %}
-<div class="modal" id="docModal">
-  <div class="modal-content" style="width:min(760px,calc(100vw - 32px));max-height:92vh;overflow:auto">
+<div class="overlay" id="docModal">
+  <div class="modal" style="width:min(760px,calc(100vw - 32px));max-height:92vh;overflow:auto">
     <button class="modal-close" onclick="closeModal('docModal')">&times;</button>
     <h2 id="docModalTitle" style="margin-bottom:4px">New SOP</h2>
     <p class="text-muted text-sm" style="margin-bottom:18px">Keep it practical: purpose, when to use it, required steps, and escalation notes.</p>
@@ -92,8 +92,8 @@
   </div>
 </div>
 
-<div class="modal" id="docCategoryModal">
-  <div class="modal-content" style="width:min(480px,calc(100vw - 32px))">
+<div class="overlay" id="docCategoryModal">
+  <div class="modal" style="width:min(480px,calc(100vw - 32px))">
     <button class="modal-close" onclick="closeModal('docCategoryModal')">&times;</button>
     <h2 style="margin-bottom:4px">New SOP Category</h2>
     <p class="text-muted text-sm" style="margin-bottom:18px">Use workflow names like Receiving, Safety, or Field Work.</p>
@@ -228,6 +228,7 @@ async function selectDoc(id){
 }
 
 function openDocModal(){
+  closeModal('docCategoryModal');
   currentDoc=null;
   document.getElementById('docModalTitle').textContent='New SOP';
   document.getElementById('docId').value='';
@@ -240,6 +241,7 @@ function openDocModal(){
 
 function editCurrentDoc(){
   if(!currentDoc)return;
+  closeModal('docCategoryModal');
   document.getElementById('docModalTitle').textContent='Edit SOP';
   document.getElementById('docId').value=currentDoc.id;
   document.getElementById('docCategory').value=currentDoc.category_id||'';
@@ -271,6 +273,7 @@ async function saveDoc(){
 }
 
 function openCategoryModal(){
+  closeModal('docModal');
   document.getElementById('newDocCategoryName').value='';
   document.getElementById('newDocCategoryDescription').value='';
   openModal('docCategoryModal');
