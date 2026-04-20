@@ -609,10 +609,14 @@
     <div class="modal-body">
       <input type="hidden" id="bulkCloneItemId">
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:11px 13px;margin-bottom:14px;font-size:12.5px;color:#166534;line-height:1.5">
-        Create copies of this same item with different serial numbers. Leave the box empty and choose <strong>Create One Clone</strong> for the normal clone flow.
+        Create copies of this same item with different serial numbers. Scan one serial for a single clone, or keep scanning into the list for bulk clone.
       </div>
       <div class="field">
         <label class="label">Serial Numbers</label>
+        <div class="clone-scan-actions">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="scanSingleCloneSerial()">Scan Single Serial</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="scanNextBulkCloneSerial()">Scan Next Bulk Serial</button>
+        </div>
         <textarea class="input mono" id="bulkCloneSerials" style="min-height:140px;resize:vertical" placeholder="Scan or paste one serial per line&#10;SN001&#10;SN002&#10;SN003" oninput="updateBulkCloneCount()"></textarea>
         <div id="bulkCloneCount" style="font-size:11px;color:#64748b;margin-top:6px">0 serials ready</div>
       </div>
@@ -817,6 +821,8 @@
 .tag-incomplete{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600;padding:1px 7px;border-radius:4px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;margin-left:6px;cursor:help}
 .bulk-clone-footer{display:flex;flex-wrap:wrap;gap:8px}
 .bulk-clone-footer .btn{flex:1 1 140px;min-width:0;justify-content:center}
+.clone-scan-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.clone-scan-actions .btn{flex:1 1 160px;justify-content:center}
 .bulk-action-bar{
   position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
   background:#0f172a;color:#fff;border-radius:14px;padding:10px 12px;
@@ -2144,21 +2150,53 @@ function updateBulkCloneCount(){
   const n=parseSerialLines(document.getElementById('bulkCloneSerials')?.value||'').length;
   document.getElementById('bulkCloneCount').textContent=n===1?'1 serial ready':`${n} serials ready`;
 }
+function setBulkCloneSerials(serials){
+  const box=document.getElementById('bulkCloneSerials');
+  if(!box)return;
+  box.value=serials.join('\n');
+  updateBulkCloneCount();
+}
+function scanSingleCloneSerial(){
+  openCameraScanner(code=>{
+    const serial=String(code||'').trim();
+    if(!serial)return;
+    setBulkCloneSerials([serial]);
+  });
+}
+function scanNextBulkCloneSerial(){
+  openCameraScanner(code=>{
+    const serial=String(code||'').trim();
+    if(!serial)return;
+    const existing=parseSerialLines(document.getElementById('bulkCloneSerials')?.value||'');
+    const key=serial.toLowerCase();
+    if(existing.some(s=>s.toLowerCase()===key)){toast('That serial is already in the clone list','warn');return;}
+    setBulkCloneSerials([...existing,serial]);
+  });
+}
 async function confirmOneClone(){
   const id=parseInt(document.getElementById('bulkCloneItemId').value);
-  const res=await api('/api/item/'+id+'/clone',{});
+  const serials=parseSerialLines(document.getElementById('bulkCloneSerials').value);
+  if(serials.length>1){toast('Multiple serials entered. Use Create Bulk Clones.','warn');return;}
+  const res=await api('/api/item/'+id+'/clone',serials.length?{serial:serials[0]}:{});
   if(res.ok){
     closeModal('bulkCloneModal');
     closeDetail();
     await loadItems();
-    toast('Cloned - opening new item...','ok');
-    const newItem=allItems.find(i=>i.id===res.id);if(newItem)editItem(newItem);
+    if(serials.length){
+      toast('Clone created with serial '+serials[0],'ok');
+      const newItem=allItems.find(i=>i.id===res.id);
+      if(newItem)selectedIds=new Set([newItem.id]);
+      updateSelectionUI();
+    }else{
+      toast('Cloned - opening new item...','ok');
+      const newItem=allItems.find(i=>i.id===res.id);if(newItem)editItem(newItem);
+    }
   }else toast(res.msg||'Error','err');
 }
 async function confirmBulkClone(){
   const id=parseInt(document.getElementById('bulkCloneItemId').value);
   const serials=parseSerialLines(document.getElementById('bulkCloneSerials').value);
-  if(serials.length<2){toast('Enter at least two serials for bulk clone, or use Create One Clone.','warn');return;}
+  if(serials.length<2){toast('Enter at least two serials for bulk clone, or use Create One Clone for one serial.','warn');return;}
   const res=serials.length>1
     ? await api('/api/item/'+id+'/bulk-clone',{serials})
     : await api('/api/item/'+id+'/clone',{});

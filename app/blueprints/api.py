@@ -2664,10 +2664,23 @@ def api_item_clone(iid):
     if not allowed: return jsonify({"ok": False, "msg": limit_msg})
     item = query("SELECT * FROM items WHERE id=? AND active=1", [iid], one=True)
     if not item: return jsonify({"ok": False, "msg": "Item not found"})
+    payload = request.json or {}
+    serials, duplicates = _clean_serials(payload.get("serial") or payload.get("serials") or "")
+    if duplicates:
+        return jsonify({"ok": False, "msg": f"Duplicate serials in clone request: {', '.join(duplicates[:8])}",
+                        "duplicates": duplicates})
+    if len(serials) > 1:
+        return jsonify({"ok": False, "msg": "Use bulk clone when entering more than one serial number."})
     d = dict(item)
     # Clear identity fields that must be unique
     d.pop("id", None); d.pop("serial", None); d.pop("sku", None)
     d.pop("internal_sku", None); d.pop("created_at", None)
+    if serials:
+        conflicts = _existing_serial_conflicts(d.get("product_id"), serials)
+        if conflicts:
+            joined = ", ".join(f"{c['serial']} on #{c['id']}" for c in conflicts[:8])
+            return jsonify({"ok": False, "msg": f"Duplicate serial found: {joined}", "conflicts": conflicts})
+        d["serial"] = serials[0]
     d["checked_out"] = 0; d["checkout_by"] = None; d["checkout_date"] = None
     d["job_ref"] = None; d["sold"] = 0; d["sold_date"] = None
     d["expected_return_date"] = None; d["kit_id"] = None
@@ -2677,7 +2690,8 @@ def api_item_clone(iid):
     placeholders = ", ".join("?" for _ in d)
     new_id = execute(f"INSERT INTO items ({cols}) VALUES ({placeholders})", list(d.values()))
     _ensure_internal_sku(new_id, d.get("category_id"))
-    log_action("ITEM_ADD", new_id, item["name"], f"Cloned from #{iid}")
+    log_detail = f"Cloned from #{iid}" + (f"; serial {serials[0]}" if serials else "")
+    log_action("ITEM_ADD", new_id, item["name"], log_detail)
     return jsonify({"ok": True, "id": new_id})
 
 

@@ -13,6 +13,7 @@ from app.blueprints.api import (
     api_cat_add,
     api_category_fields_save,
     api_item_add,
+    api_item_clone,
     api_items,
     api_product_edit,
     api_product_add,
@@ -959,6 +960,53 @@ def test_bulk_clone_creates_same_item_with_new_serials(app, tenant):
     assert [r["serial"] for r in rows] == ["CLONE-001", "CLONE-002"]
     assert all(r["name"] == "Bulk Clone Product" for r in rows)
     assert all(r["shelf"] == "CLONE-A" for r in rows)
+
+
+def test_single_clone_accepts_scanned_serial(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Single Clone Category", "#ffffff"],
+    ).lastrowid
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,require_serial,require_internal_sku,active,created_at) "
+        "VALUES (?,?,1,1,1,'2026-01-01 00:00:00')",
+        ["Single Clone Product", category_id],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (name,product_id,category_id,serial,shelf,cost_price,condition,active,created_at) "
+        "VALUES (?,?,?,?,?,?,?,1,'2026-01-01 00:00:00')",
+        ["Single Clone Product", product_id, category_id, "SRC-SINGLE", "A1", 33.0, "New"],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        f"/api/item/{item_id}/clone",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"serial": "SCANNED-SINGLE-001"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_item_clone(item_id))
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    cloned = db.execute("SELECT serial, shelf, cost_price FROM items WHERE id=?", [data["id"]]).fetchone()
+    db.close()
+
+    assert cloned["serial"] == "SCANNED-SINGLE-001"
+    assert cloned["shelf"] == "A1"
+    assert cloned["cost_price"] == 33.0
 
 
 def test_bulk_clone_handles_legacy_null_numeric_fields(app, tenant):
@@ -2517,6 +2565,28 @@ def test_add_item_identifier_fields_have_camera_scan_buttons(app, tenant):
     assert "openCameraScanner(code=>" in body
     assert 'placeholder="Scan or type serial number"' in body
     assert 'placeholder="Scan or type supplier part number"' in body
+
+
+def test_inventory_clone_modal_has_single_and_bulk_scan_actions(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Scan Single Serial" in body
+    assert "Scan Next Bulk Serial" in body
+    assert "scanSingleCloneSerial" in body
+    assert "scanNextBulkCloneSerial" in body
+    assert "Multiple serials entered. Use Create Bulk Clones." in body
 
 
 def test_demo_request_email_goes_to_platform_admin(app, monkeypatch):
