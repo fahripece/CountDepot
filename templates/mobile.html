@@ -7,7 +7,7 @@
     <div>
       <div class="m-kicker">Worker scanner</div>
       <h1>CountDepot Mobile</h1>
-      <p>Fast check in, check out, reservations, and simple item adds.</p>
+      <p>Fast scanner mode plus shortcuts into the full CountDepot app.</p>
     </div>
     <div class="m-head-actions">
       <span class="m-chip">Web app</span>
@@ -22,6 +22,17 @@
     </div>
     <button type="button" id="installBtn">Install</button>
     <button type="button" class="m-install-x" onclick="dismissInstallPrompt()" aria-label="Dismiss install prompt">x</button>
+  </section>
+
+  <section class="m-shortcuts" aria-label="Full CountDepot shortcuts">
+    <a href="/" class="m-shortcut"><strong>All inventory</strong><span>Search, filter, edit, bulk actions</span></a>
+    <a href="/add-item" class="m-shortcut"><strong>Add item</strong><span>Full add workflow and product fields</span></a>
+    <a href="/reservations" class="m-shortcut"><strong>Reservations</strong><span>View, create, manage holds</span></a>
+    <a href="/sites" class="m-shortcut"><strong>Sites</strong><span>Locations and site inventory</span></a>
+    <a href="/docs" class="m-shortcut"><strong>SOPs &amp; Docs</strong><span>Team procedures and permissions</span></a>
+    <a href="/procurement" class="m-shortcut"><strong>Purchasing</strong><span>POs, receiving, accounting sync</span></a>
+    <a href="/products" class="m-shortcut"><strong>Products</strong><span>Templates, fields, clone settings</span></a>
+    <a href="/report/financial" class="m-shortcut"><strong>Reports</strong><span>Financial and inventory reports</span></a>
   </section>
 
   <section class="m-scan">
@@ -101,11 +112,8 @@
 </div>
 
 <style>
-body.mobile-page .sidebar,body.mobile-page .mob-sidebar-overlay,body.mobile-page .mob-sidebar{display:none!important}
-body.mobile-page .layout{display:block;height:auto;min-height:100vh;overflow:visible}
-body.mobile-page .main{display:block;min-height:100vh;overflow:visible}
 body.mobile-page{background:#eef2f7}
-.m-app{min-height:100vh;padding:18px 14px 104px;background:radial-gradient(circle at 20% -10%,rgba(100,66,214,.2),transparent 34%),linear-gradient(180deg,#f8fafc,#eef2f7)}
+.m-app{min-height:100%;padding:18px 14px 104px;background:radial-gradient(circle at 20% -10%,rgba(100,66,214,.2),transparent 34%),linear-gradient(180deg,#f8fafc,#eef2f7)}
 .m-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:16px}
 .m-kicker{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:900;color:#6442d6}
 .m-head h1{font-family:var(--font-display);font-size:28px;line-height:1;margin:3px 0 6px;color:#111827}
@@ -118,6 +126,10 @@ body.mobile-page{background:#eef2f7}
 .m-install span{display:block;color:#64748b;font-size:12px;line-height:1.35;margin-top:2px}
 .m-install button{border:0;border-radius:999px;font-weight:900;padding:9px 12px;background:#6442d6;color:#fff}
 .m-install .m-install-x{background:#f1f5f9;color:#64748b;width:34px;height:34px;padding:0}
+.m-shortcuts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.m-shortcut{display:block;background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:13px 14px;box-shadow:var(--shadow-1);min-height:86px}
+.m-shortcut strong{display:block;color:#111827;font-size:14px;line-height:1.1}
+.m-shortcut span{display:block;color:#64748b;font-size:12px;line-height:1.35;margin-top:6px}
 .m-scan{background:#111827;color:#fff;border-radius:26px;padding:16px;box-shadow:0 18px 44px rgba(15,23,42,.22);margin-bottom:12px}
 .m-scan-btn{width:100%;height:78px;border:0;border-radius:20px;background:#6442d6;color:#fff;font-size:22px;font-weight:900;box-shadow:0 12px 28px rgba(100,66,214,.34);touch-action:manipulation}
 .m-search{display:flex;gap:8px;margin-top:12px}
@@ -159,8 +171,8 @@ body.mobile-page{background:#eef2f7}
 .m-actionbar button:nth-child(2){background:#16a34a}
 .m-actionbar button:nth-child(3){background:#6442d6}
 .m-actionbar button:nth-child(4){background:#f1f5f9;color:#111827}
-@media(min-width:760px){.m-app{max-width:560px;margin:0 auto;padding-top:28px}.m-actionbar{left:50%;transform:translateX(-50%);max-width:560px;border:1px solid #e2e8f0;border-bottom:0;border-radius:22px 22px 0 0}}
-@media(max-width:380px){.m-grid{grid-template-columns:1fr}.m-actionbar{grid-template-columns:1fr 1fr}.m-head h1{font-size:25px}}
+@media(min-width:760px){.m-app{max-width:760px;margin:0 auto;padding-top:28px}.m-actionbar{left:50%;transform:translateX(-50%);max-width:760px;border:1px solid #e2e8f0;border-bottom:0;border-radius:22px 22px 0 0}}
+@media(max-width:420px){.m-shortcuts,.m-grid{grid-template-columns:1fr}.m-actionbar{grid-template-columns:1fr 1fr}.m-head h1{font-size:25px}}
 </style>
 
 <script>

@@ -2446,9 +2446,12 @@ def test_mobile_page_is_scanner_first_and_installable(app, tenant):
     body = response.get_data(as_text=True)
     assert response.status_code == 200
     assert '<body class="mobile-page">' in body
-    assert "body.mobile-page .sidebar" in body
+    assert "Full CountDepot shortcuts" in body
     assert "body:has(.m-app)" not in body
+    assert ".mob-sidebar-overlay{display:flex!important}" not in body
     assert "Scan Item Barcode" in body
+    assert "All inventory" in body
+    assert "/procurement" in body
     assert "Use this like an app" in body
     assert "beforeinstallprompt" in body
     assert "scanAddSerial" in body
