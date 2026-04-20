@@ -4,7 +4,7 @@ import json
 import sqlite3
 import threading
 import time
-from datetime import datetime, date as _date
+from datetime import datetime, date as _date, timezone
 
 from flask import Blueprint, request, jsonify, session, send_file
 
@@ -22,6 +22,10 @@ from app.helpers import (login_required, perm_required, admin_required,
                          VIEWER_DEFAULT_PERMS)
 
 bp = Blueprint("api", __name__)
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @bp.route("/api/user/intro-tour-complete", methods=["POST"])
@@ -334,7 +338,7 @@ def _send_user_invite(user_id, email, slug, inviter):
     execute("UPDATE password_reset_tokens SET used=1 WHERE user_id=? AND used=0",
             [user_id])
     token = _sec.token_urlsafe(32)
-    expires_at = (_dt.utcnow() + _td(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
+    expires_at = (_utc_now() + _td(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
     execute("INSERT INTO password_reset_tokens (user_id,token,expires_at) VALUES (?,?,?)",
             [user_id, token, expires_at])
     emailed = bool(send_invite_email(email, slug, token, inviter=inviter))
@@ -5512,7 +5516,7 @@ def _resolve_site(site_id, new_site_name):
         existing = query("SELECT id FROM locations WHERE LOWER(name)=LOWER(?)", [name], one=True)
         if existing:
             return existing["id"]
-        now = datetime.utcnow().isoformat()
+        now = _utc_now().isoformat()
         return execute("INSERT INTO locations (name, created_at) VALUES (?, ?)", [name, now])
     return None
 
@@ -6248,7 +6252,7 @@ def api_invoice_save_mapping():
     mapping = d.get("mapping")
     if not vendor or not mapping:
         return jsonify({"ok": False, "msg": "vendor_name and mapping required"})
-    now = datetime.utcnow().isoformat()
+    now = _utc_now().isoformat()
     existing = query("SELECT id FROM invoice_mappings WHERE LOWER(vendor_name)=LOWER(?)",
                      [vendor], one=True)
     if existing:
@@ -6277,7 +6281,7 @@ def api_invoice_commit():
     if not import_rows and not new_rows:
         return jsonify({"ok": False, "msg": "No matched rows to import"})
 
-    now = datetime.utcnow().isoformat()
+    now = _utc_now().isoformat()
     created_ids = []
 
     for r in import_rows:
@@ -6685,7 +6689,7 @@ def api_inventory_commit():
     except Exception:
         pass
 
-    now = datetime.utcnow().isoformat()
+    now = _utc_now().isoformat()
     created_ids = []
     custom_field_candidates = d.get("custom_field_candidates", [])
 
@@ -8153,7 +8157,7 @@ def api_accounting_sync_po(po_id):
             remote_id = xero_sync_po(po_id)
         return jsonify({"ok": True, "remote_id": remote_id})
     except Exception as e:
-        now = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
         execute(
             "INSERT INTO accounting_sync_log (provider,entity_type,entity_id,status,detail,synced_at) "
             "VALUES (?,?,?,?,?,?)",

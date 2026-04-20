@@ -17,7 +17,7 @@ import re
 import os
 import secrets
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, render_template, request, redirect, url_for
 
@@ -28,6 +28,10 @@ from app.helpers             import hash_pw
 from config                  import Config
 
 bp = Blueprint("signup", __name__)
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _valid_slug(slug):
@@ -55,7 +59,7 @@ def _clean_expired_pending():
     """Delete expired/used pending signup rows."""
     try:
         db = get_platform_db()
-        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
         db.execute("DELETE FROM pending_signups WHERE expires_at < ? OR used = 1", [now])
         db.commit()
         db.close()
@@ -95,7 +99,7 @@ def signup():
 
             # Check if there's already a pending (unexpired) signup for this email
             db = get_platform_db()
-            now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
             existing = db.execute(
                 "SELECT id FROM pending_signups WHERE email=? AND used=0 AND expires_at>?",
                 [email, now]
@@ -104,14 +108,14 @@ def signup():
             if existing:
                 # Resend — update the token so it's fresh
                 token = secrets.token_urlsafe(32)
-                expires = (datetime.utcnow() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+                expires = (_utc_now() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
                 db.execute(
                     "UPDATE pending_signups SET token=?, expires_at=?, slug=?, name=?, password_hash=? WHERE id=?",
                     [token, expires, slug, name, hash_pw(password), existing["id"]]
                 )
             else:
                 token = secrets.token_urlsafe(32)
-                expires = (datetime.utcnow() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+                expires = (_utc_now() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
                 db.execute(
                     "INSERT INTO pending_signups (name, slug, email, password_hash, token, created_at, expires_at) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -135,7 +139,7 @@ def verify_signup(token):
     _clean_expired_pending()
 
     db = get_platform_db()
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     row = db.execute(
         "SELECT * FROM pending_signups WHERE token=? AND used=0 AND expires_at>?",
         [token, now]
@@ -225,7 +229,7 @@ def verify_signup(token):
     conn.close()
 
     # Set 30-day trial
-    trial_ends = (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    trial_ends = (_utc_now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     pdb = get_platform_db()
     pdb.execute("UPDATE tenants SET subscription_status='trial', trial_ends_at=? WHERE slug=?",
                 [trial_ends, slug])
@@ -264,7 +268,7 @@ def resend_signup_verify():
         return ("Email required", 400)
 
     db = get_platform_db()
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     row = db.execute(
         "SELECT * FROM pending_signups WHERE email=? AND used=0 AND expires_at>?",
         [email, now]
@@ -272,7 +276,7 @@ def resend_signup_verify():
 
     if row:
         token = secrets.token_urlsafe(32)
-        expires = (datetime.utcnow() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        expires = (_utc_now() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
         db.execute("UPDATE pending_signups SET token=?, expires_at=? WHERE id=?",
                    [token, expires, row["id"]])
         db.commit()

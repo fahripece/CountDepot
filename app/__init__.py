@@ -1,5 +1,6 @@
 import hmac
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from flask import Flask, request, jsonify, redirect, url_for, g, session, abort
 from config import Config
@@ -16,6 +17,10 @@ except ImportError:
     _oauth_available = False
 
 oauth = None  # set in create_app()
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def create_app():
@@ -195,8 +200,7 @@ def create_app():
                     trial_e = g.tenant.get("trial_ends_at", "") if g.tenant else ""
                     if sub_st == "trial" and trial_e:
                         try:
-                            from datetime import datetime as _dtb, timedelta as _tdb
-                            days_left = (_dtb.fromisoformat(trial_e[:19]) - _dtb.utcnow()).days
+                            days_left = (datetime.fromisoformat(trial_e[:19]) - _utc_now()).days
                             if days_left <= 7:
                                 g.banner_message = (
                                     f"Your free trial expires in {max(0, days_left)} day{'s' if days_left != 1 else ''}. "
@@ -270,14 +274,13 @@ def create_app():
         # Subscription enforcement — block expired/overdue tenants
         sub_status  = g.tenant.get("subscription_status", "trial")
         trial_ends  = g.tenant.get("trial_ends_at") or ""
-        from datetime import datetime as _dt, timedelta as _td
-        now_iso = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        now_iso = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
         # Fallback: if trial has no end date, derive one from created_at + 30 days
         if sub_status == "trial" and not trial_ends:
             created_at = g.tenant.get("created_at") or ""
             if created_at:
                 try:
-                    trial_ends = (_dt.strptime(created_at[:19], "%Y-%m-%d %H:%M:%S") + _td(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+                    trial_ends = (datetime.strptime(created_at[:19], "%Y-%m-%d %H:%M:%S") + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
                 except Exception:
                     pass
         if sub_status == "trial" and trial_ends and now_iso > trial_ends:
@@ -285,10 +288,10 @@ def create_app():
             from app.platform import get_platform_db as _get_pdb
             _pdb = _get_pdb()
             try:
-                trial_expired_at = _dt.strptime(trial_ends[:19], "%Y-%m-%d %H:%M:%S")
+                trial_expired_at = datetime.strptime(trial_ends[:19], "%Y-%m-%d %H:%M:%S")
             except ValueError:
-                trial_expired_at = _dt.strptime(trial_ends[:10], "%Y-%m-%d")
-            delete_at = (trial_expired_at + _td(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+                trial_expired_at = datetime.strptime(trial_ends[:10], "%Y-%m-%d")
+            delete_at = (trial_expired_at + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
             _pdb.execute(
                 "UPDATE tenants SET subscription_status='expired', trial_expired_at=?, "
                 "scheduled_delete_at=? WHERE slug=?",

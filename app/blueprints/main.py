@@ -4,7 +4,7 @@ import re
 from flask import (Blueprint, render_template, request, session, redirect, url_for,
                    jsonify, current_app, make_response, send_from_directory)
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db import query, execute
 from app.helpers import (login_required, perm_required, admin_required,
@@ -12,6 +12,10 @@ from app.helpers import (login_required, perm_required, admin_required,
 from app.seo_pages import seo_page_for_slug, seo_slugs
 
 bp = Blueprint("main", __name__)
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ── Health check (no auth, no tenant required) ────────────────────────────────
@@ -175,7 +179,7 @@ def api_demo_request():
             pass
         db.execute(
             "INSERT INTO demo_requests (name,company,email,team_size,created_at) VALUES (?,?,?,?,?)",
-            [name, company, email, size, _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S")])
+            [name, company, email, size, _utc_now().strftime("%Y-%m-%d %H:%M:%S")])
         db.commit()
         db.close()
     except Exception:
@@ -245,7 +249,7 @@ def status_page():
     return render_template("status.html",
                            checks=checks,
                            overall=overall,
-                           generated_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+                           generated_at=_utc_now().strftime("%Y-%m-%d %H:%M:%S UTC"))
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -539,7 +543,7 @@ def qb_oauth_callback():
             _get_setting("qb_client_secret", ""),
             code, redirect_uri)
         from datetime import datetime, timedelta
-        expiry = (datetime.utcnow() + timedelta(seconds=tokens["expires_in"])).isoformat()
+        expiry = (_utc_now() + timedelta(seconds=tokens["expires_in"])).isoformat()
         _set_setting("qb_access_token",  tokens["access_token"])
         _set_setting("qb_refresh_token", tokens["refresh_token"])
         _set_setting("qb_token_expiry",  expiry)
@@ -578,7 +582,7 @@ def ebay_oauth_callback():
             _get_setting("ebay_client_secret", ""),
             _get_setting("ebay_ru_name", ""),
             code)
-        expiry = (datetime.utcnow() + timedelta(seconds=tokens.get("expires_in", 7200))).isoformat()
+        expiry = (_utc_now() + timedelta(seconds=tokens.get("expires_in", 7200))).isoformat()
         _set_setting("ebay_access_token",  tokens["access_token"])
         _set_setting("ebay_refresh_token", tokens.get("refresh_token", ""))
         _set_setting("ebay_token_expiry",  expiry)
@@ -671,7 +675,7 @@ def xero_oauth_callback():
             _get_setting("xero_client_secret", ""),
             code, redirect_uri)
         from datetime import datetime, timedelta
-        expiry = (datetime.utcnow() + timedelta(seconds=tokens["expires_in"])).isoformat()
+        expiry = (_utc_now() + timedelta(seconds=tokens["expires_in"])).isoformat()
         _set_setting("xero_access_token",  tokens["access_token"])
         _set_setting("xero_refresh_token", tokens["refresh_token"])
         _set_setting("xero_token_expiry",  expiry)

@@ -7,6 +7,7 @@ and for setups that don't need email yet.
 
 import smtplib
 import logging
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text      import MIMEText
 from email.mime.base      import MIMEBase
@@ -14,6 +15,10 @@ from email               import encoders
 from config import Config
 
 log = logging.getLogger(__name__)
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def send_email(to: str, subject: str, html: str, text: str = "",
@@ -254,8 +259,7 @@ def send_error_alert(method: str, path: str, tenant: str, tb: str) -> bool:
     if not to:
         log.warning(f"[ERROR ALERT no-dest] {method} {path} — {tb[:200]}")
         return False
-    from datetime import datetime as _dt
-    ts = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    ts = _utc_now().strftime("%Y-%m-%d %H:%M:%S UTC")
     tb_escaped = tb.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     html = f"""
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#0f172a">
@@ -280,8 +284,7 @@ def send_error_alert(method: str, path: str, tenant: str, tb: str) -> bool:
 
 def send_daily_digest(to: str, stats: dict) -> bool:
     """Daily ops digest email for the platform admin."""
-    from datetime import datetime as _dt
-    ts = _dt.utcnow().strftime("%Y-%m-%d")
+    ts = _utc_now().strftime("%Y-%m-%d")
     tenants     = stats.get("tenants", 0)
     errors_24h  = stats.get("errors_24h", 0)
     low_stock   = stats.get("low_stock_alerts", 0)

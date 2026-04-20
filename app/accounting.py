@@ -14,11 +14,15 @@ import json
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import g, session
 
 from app.db import query, execute
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ── Settings helpers ──────────────────────────────────────────────────────────
@@ -107,7 +111,7 @@ def qb_ensure_fresh_token():
     """Refresh QB token if within 5 minutes of expiry. Returns current access token or raises."""
     creds  = qb_get_credentials()
     expiry = creds.get("token_expiry", "")
-    now    = datetime.utcnow()
+    now    = _utc_now()
     if expiry:
         try:
             exp_dt = datetime.fromisoformat(expiry)
@@ -170,8 +174,8 @@ def qb_sync_po(po_id):
 
     bill = {
         "VendorRef": {"name": po["vendor"] or "Unknown Vendor"},
-        "TxnDate":   (po["created_at"] or datetime.utcnow().isoformat())[:10],
-        "DueDate":   po["expected_date"] or (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d"),
+        "TxnDate":   (po["created_at"] or _utc_now().isoformat())[:10],
+        "DueDate":   po["expected_date"] or (_utc_now() + timedelta(days=30)).strftime("%Y-%m-%d"),
         "DocNumber": po["po_number"] or str(po_id),
         "Line":      line_items,
         "PrivateNote": f"Synced from CountDepot PO {po['po_number']}",
@@ -190,7 +194,7 @@ def qb_sync_po(po_id):
         result  = _qb_request("POST", "/bill", bill)
         bill_id = result["Bill"]["Id"]
 
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     execute("UPDATE purchase_orders SET qb_bill_id=?, synced_at=? WHERE id=?",
             [bill_id, now, po_id])
     execute(
@@ -267,7 +271,7 @@ def xero_refresh_access_token(client_id, client_secret, refresh_token):
 def xero_ensure_fresh_token():
     creds  = xero_get_credentials()
     expiry = creds.get("token_expiry", "")
-    now    = datetime.utcnow()
+    now    = _utc_now()
     if expiry:
         try:
             exp_dt = datetime.fromisoformat(expiry)
@@ -332,7 +336,7 @@ def xero_sync_po(po_id):
     xero_po = {
         "Type":           "PURCHASEORDER",
         "Contact":        {"Name": po["vendor"] or "Unknown Vendor"},
-        "DateString":     (po["created_at"] or datetime.utcnow().isoformat())[:10],
+        "DateString":     (po["created_at"] or _utc_now().isoformat())[:10],
         "DeliveryDateString": po["expected_date"] or "",
         "PurchaseOrderNumber": po["po_number"] or str(po_id),
         "Reference":      f"CountDepot {po['po_number']}",
@@ -348,7 +352,7 @@ def xero_sync_po(po_id):
         result = _xero_request("PUT", "PurchaseOrders", {"PurchaseOrders": [xero_po]})
 
     xero_id = result["PurchaseOrders"][0]["PurchaseOrderID"]
-    now     = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now     = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     execute("UPDATE purchase_orders SET xero_po_id=?, synced_at=? WHERE id=?",
             [xero_id, now, po_id])
     execute(

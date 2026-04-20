@@ -26,9 +26,13 @@ import hashlib
 import threading
 import urllib.request
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db import query, execute
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _sign(secret: str, body: bytes) -> str:
@@ -37,7 +41,7 @@ def _sign(secret: str, body: bytes) -> str:
 
 def _deliver(webhook_id: int, url: str, secret: str, event_type: str, payload: dict):
     """Deliver a single webhook. Runs in a background thread."""
-    now      = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now      = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     envelope = {
         "event":      event_type,
         "created_at": now,
@@ -48,7 +52,7 @@ def _deliver(webhook_id: int, url: str, secret: str, event_type: str, payload: d
         "Content-Type":          "application/json",
         "User-Agent":            "CountDepot-Webhooks/1.0",
         "X-CountDepot-Event":    event_type,
-        "X-CountDepot-Delivery": f"{webhook_id}-{event_type}-{int(datetime.utcnow().timestamp())}",
+        "X-CountDepot-Delivery": f"{webhook_id}-{event_type}-{int(_utc_now().timestamp())}",
     }
     if secret:
         headers["X-CountDepot-Signature"] = _sign(secret, body)

@@ -1,6 +1,11 @@
 import sqlite3
 import os
+from datetime import datetime, timedelta, timezone
 from config import Config
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def get_platform_db():
@@ -139,10 +144,9 @@ def get_tenant_by_owner_email(email):
 
 def create_tenant(slug, name, plan="trial", owner_email=None):
     """Create a new tenant and their data directory."""
-    from datetime import datetime, timedelta
     db  = get_platform_db()
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    trial_ends = (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
+    trial_ends = (_utc_now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     db.execute(
         "INSERT INTO tenants (slug, name, plan, sector, onboarded, active, created_at, "
         "owner_email, subscription_status, trial_ends_at) VALUES (?,?,?,'',0,1,?,?,?,?)",

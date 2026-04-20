@@ -135,7 +135,14 @@ async function saveXeroConfig(){
 
 async function disconnectProvider(key){
   if(!confirm(`Disconnect ${key==='qb'?'QuickBooks':'Xero'}?`)) return;
-  await api(`/api/integrations/accounting/${key}/disconnect`,{});
+  const disconnectRoutes = {
+    qb: '/api/integrations/accounting/qb/disconnect',
+    xero: '/api/integrations/accounting/xero/disconnect'
+  };
+  const route = disconnectRoutes[key];
+  if(!route){toast('Unknown accounting provider','error');return;}
+  const r = await api(route,{});
+  if(!r.ok){toast(r.msg||'Disconnect failed','error');return;}
   loadStatus();
   toast('Disconnected');
 }

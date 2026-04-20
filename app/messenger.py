@@ -14,9 +14,13 @@ import json
 import urllib.request
 import urllib.error
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db import query
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ── Settings helpers ──────────────────────────────────────────────────────────
@@ -77,7 +81,7 @@ def send_slack(webhook_url, event_type, title, body=None, link=None):
                     "type": "context",
                     "elements": [{
                         "type": "mrkdwn",
-                        "text": f"CountDepot · {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
+                        "text": f"CountDepot · {_utc_now().strftime('%Y-%m-%d %H:%M')} UTC",
                     }],
                 },
             ],

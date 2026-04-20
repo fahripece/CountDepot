@@ -2609,6 +2609,26 @@ def test_core_authenticated_pages_render(app, tenant):
         assert response.status_code == 200, path
 
 
+def test_accounting_page_uses_existing_disconnect_routes(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/integrations/accounting",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "/api/integrations/accounting/qb/disconnect" in body
+    assert "/api/integrations/accounting/xero/disconnect" in body
+    assert "/api/integrations/accounting/${key}/disconnect" not in body
+
+
 def test_platform_dashboard_renders_owner_metrics(app):
     from app.platform import get_platform_db
     from app.blueprints.platform import SESSION_KEY

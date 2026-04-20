@@ -30,11 +30,15 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db import query, execute
 
 SHOPIFY_API_VERSION = "2024-01"
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ── Settings helpers ──────────────────────────────────────────────────────────
@@ -214,7 +218,7 @@ def shopify_pull_orders(since_days=30):
     Returns a list of dicts: {order_id, order_name, variant_id, quantity, price, buyer, created_at}
     """
     from datetime import timedelta
-    since = (datetime.utcnow() - timedelta(days=since_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    since = (_utc_now() - timedelta(days=since_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     resp  = _shopify_request(
         "GET",
         f"/orders.json?status=any&financial_status=paid&created_at_min={urllib.parse.quote(since)}&limit=250"

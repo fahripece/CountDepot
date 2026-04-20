@@ -3,13 +3,17 @@ import json
 import urllib.parse
 import urllib.request
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db import execute, query
 from app.integration_catalog import connector_config, connector_status
 
 
 PROVIDER = "woocommerce"
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _config():
@@ -149,7 +153,7 @@ def _save_ref(entity_type, entity_id, remote_id, remote_url, status, detail):
 
 def _iso_days_ago(days_back):
     from datetime import timedelta
-    return (datetime.utcnow() - timedelta(days=int(days_back or 30))).isoformat() + "Z"
+    return (_utc_now() - timedelta(days=int(days_back or 30))).isoformat() + "Z"
 
 
 def _buyer_name(order):

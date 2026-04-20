@@ -3,7 +3,7 @@ import hmac
 import json
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 import bcrypt as _bcrypt
@@ -103,17 +103,19 @@ def clear_login_rate(ip):
 # After 5 consecutive failures for a specific email address, lock that account
 # for 15 minutes regardless of which IP the next attempt comes from.
 
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 LOCKOUT_MAX    = 5    # failures before lockout
 LOCKOUT_WINDOW = 900  # 15 minutes
 
 def check_account_lockout(username: str):
     """Returns (allowed: bool, locked_until_str: str | None).
     Uses the login_log in the current tenant DB (already open in g)."""
-    from datetime import datetime as _dt
-    cutoff = (_dt.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
     # Count consecutive failures in the last LOCKOUT_WINDOW seconds
-    cutoff_ts = (_dt.utcnow().timestamp() - LOCKOUT_WINDOW)
-    cutoff_s  = _dt.utcfromtimestamp(cutoff_ts).strftime("%Y-%m-%d %H:%M:%S")
+    cutoff_ts = _utc_now().timestamp() - LOCKOUT_WINDOW
+    cutoff_s  = datetime.fromtimestamp(cutoff_ts, timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
     try:
         row = query(
             "SELECT COUNT(*) FROM login_log "
@@ -127,10 +129,9 @@ def check_account_lockout(username: str):
                 "WHERE LOWER(username)=LOWER(?) AND result='fail' AND ts>=? "
                 "ORDER BY ts ASC LIMIT 1", [username, cutoff_s], one=True)
             if oldest:
-                from datetime import datetime as _dt2
-                oldest_ts  = _dt2.strptime(oldest[0], "%Y-%m-%d %H:%M:%S").timestamp()
+                oldest_ts  = datetime.strptime(oldest[0], "%Y-%m-%d %H:%M:%S").timestamp()
                 unlock_ts  = oldest_ts + LOCKOUT_WINDOW
-                unlock_str = _dt2.utcfromtimestamp(unlock_ts).strftime("%Y-%m-%d %H:%M:%S")
+                unlock_str = datetime.fromtimestamp(unlock_ts, timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
                 return False, unlock_str
         return True, None
     except Exception:
@@ -363,9 +364,8 @@ def notify_low_stock_if_needed(product_id):
             return
         last = product["low_stock_last_alerted"]
         if last:
-            from datetime import timedelta
             last_dt = datetime.strptime(last[:19], "%Y-%m-%d %H:%M:%S")
-            if datetime.utcnow() - last_dt < timedelta(hours=24):
+            if _utc_now() - last_dt < timedelta(hours=24):
                 return
         # Prefer site-specific alert emails over global settings
         site_rows = query("""
@@ -395,7 +395,7 @@ def notify_low_stock_if_needed(product_id):
             emails = [r["email"] for r in admins if r.get("email")]
         if not emails:
             return
-        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
         execute("UPDATE products SET low_stock_last_alerted=? WHERE id=?", [now, product_id])
         from app.mailer import send_low_stock_alert
         for email in emails:

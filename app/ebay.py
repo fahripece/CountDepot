@@ -21,7 +21,11 @@ import json
 import urllib.parse
 import urllib.request
 import urllib.error
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 from app.db import query, execute
 
@@ -154,8 +158,8 @@ def _get_valid_access_token():
 
     expiry = creds.get("token_expiry") or ""
     try:
-        exp_dt = datetime.fromisoformat(expiry) if expiry else datetime.utcnow()
-        needs_refresh = datetime.utcnow() >= exp_dt - timedelta(minutes=5)
+        exp_dt = datetime.fromisoformat(expiry) if expiry else _utc_now()
+        needs_refresh = _utc_now() >= exp_dt - timedelta(minutes=5)
     except Exception:
         needs_refresh = True
 
@@ -163,7 +167,7 @@ def _get_valid_access_token():
         resp = ebay_refresh_access_token(
             creds["client_id"], creds["client_secret"], creds["refresh_token"])
         access_token = resp["access_token"]
-        new_expiry = (datetime.utcnow() + timedelta(seconds=resp.get("expires_in", 7200))).isoformat()
+        new_expiry = (_utc_now() + timedelta(seconds=resp.get("expires_in", 7200))).isoformat()
         _set_setting("ebay_access_token", access_token)
         _set_setting("ebay_token_expiry", new_expiry)
         if resp.get("refresh_token"):

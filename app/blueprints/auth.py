@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Blueprint, render_template, request, session, redirect, url_for, g, jsonify
 
 import secrets as _secrets
@@ -14,6 +14,10 @@ bp = Blueprint("auth", __name__)
 SESSION_LIFETIME_HOURS = 8
 
 
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _build_session(user, perms):
     """Return a dict of session keys for a logged-in user."""
     loc_ids = get_user_location_ids(user["id"], user["role"])
@@ -23,7 +27,7 @@ def _build_session(user, perms):
         "role":                 user["role"],
         "permissions":          ",".join(perms),
         "must_change_password": bool(user["must_change_password"]),
-        "expires_at":           (datetime.utcnow() + timedelta(hours=SESSION_LIFETIME_HOURS)).isoformat(),
+        "expires_at":           (_utc_now() + timedelta(hours=SESSION_LIFETIME_HOURS)).isoformat(),
         "session_token":        _secrets.token_hex(32),
         "location_ids":         loc_ids,
     }
@@ -38,7 +42,7 @@ def check_session_expiry():
     expires = session.get("expires_at")
     if not expires:
         return False
-    if datetime.utcnow().isoformat() > expires:
+    if _utc_now().isoformat() > expires:
         session.clear()
         return False
     return True
@@ -107,7 +111,7 @@ def login_page():
                 import random
                 from app.mailer import send_email as _send_email
                 otp = f"{random.randint(0, 999999):06d}"
-                expires_at = (datetime.utcnow() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
+                expires_at = (_utc_now() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
                 execute("UPDATE login_otp SET used=1 WHERE user_id=? AND used=0", [user["id"]])
                 execute("INSERT INTO login_otp (user_id,otp,expires_at) VALUES (?,?,?)",
                         [user["id"], otp, expires_at])
@@ -128,7 +132,7 @@ def login_page():
             sess = _build_session(user, perms)
             session.clear()
             session.update(sess)
-            now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
             execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
                     [now_str, sess["session_token"], user["id"]])
             execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
@@ -139,7 +143,7 @@ def login_page():
         error = "Invalid username or password."
         execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
                 [None, username, ip, request.user_agent.string, "fail",
-                 datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")])
+                 _utc_now().strftime("%Y-%m-%d %H:%M:%S")])
         log_auth_event("LOGIN_FAIL", username=username, ip=ip,
                        tenant=getattr(g, "tenant_slug", ""))
     return render_template("login.html", error=error)
@@ -154,7 +158,7 @@ def logout():
     try:
         execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
                 [uid, username, ip, request.user_agent.string, "logout",
-                 datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")])
+                 _utc_now().strftime("%Y-%m-%d %H:%M:%S")])
     except Exception:
         pass
     session.clear()
@@ -220,7 +224,7 @@ def verify_2fa():
             except Exception:
                 pass
         else:
-            now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
             row = query("SELECT * FROM login_otp WHERE user_id=? AND used=0 AND expires_at > ? ORDER BY id DESC LIMIT 1",
                         [uid, now], one=True)
             if row and row["otp"] == otp:
@@ -239,7 +243,7 @@ def verify_2fa():
             sess = _build_session(user, perms)
             session.clear()
             session.update(sess)
-            now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
             execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
                     [now_str, sess["session_token"], user["id"]])
             execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
@@ -251,7 +255,7 @@ def verify_2fa():
         error = "Invalid or expired code. Please try again."
         execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
                 [uid, str(uid), ip, request.user_agent.string, "2fa_fail",
-                 datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")])
+                 _utc_now().strftime("%Y-%m-%d %H:%M:%S")])
         log_auth_event("2FA_FAIL", username=str(uid), ip=ip,
                        tenant=getattr(g, "tenant_slug", ""))
     return render_template("verify_2fa.html", method=method, error=error)
@@ -279,7 +283,7 @@ def forgot_password():
                 from app.mailer import send_password_reset_email
                 from flask import g
                 token      = _secrets.token_urlsafe(32)
-                expires_at = (datetime.utcnow() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+                expires_at = (_utc_now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
                 execute("UPDATE password_reset_tokens SET used=1 WHERE user_id=? AND used=0",
                         [user["id"]])
                 execute("INSERT INTO password_reset_tokens (user_id,token,expires_at) VALUES (?,?,?)",
@@ -292,7 +296,7 @@ def forgot_password():
 @bp.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
     """Step 2 — user clicks link, sets new password."""
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     row = query(
         "SELECT * FROM password_reset_tokens WHERE token=? AND used=0 AND expires_at > ?",
         [token, now], one=True)
@@ -335,7 +339,7 @@ def reset_password(token):
 @bp.route("/verify-email/<token>")
 def verify_email(token):
     """Email verification — user clicks link from their welcome email."""
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     row = query(
         "SELECT * FROM email_verification_tokens WHERE token=? AND used=0 AND expires_at > ?",
         [token, now], one=True)
@@ -407,7 +411,7 @@ def cross_login():
     import secrets as _sec
     from app.platform import get_platform_db as _get_pdb2
     token      = _sec.token_urlsafe(32)
-    now        = datetime.utcnow()
+    now        = _utc_now()
     expires_at = (now + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
     created_at = now.strftime("%Y-%m-%d %H:%M:%S")
     pdb2 = _get_pdb2()
@@ -480,7 +484,7 @@ def cross_forgot_password():
     if found_slug and found_user:
         import secrets as _sec
         conn = _sql.connect(os.path.join(_Cfg.TENANTS_DIR, found_slug, "inventory.db"))
-        expires_at = (datetime.utcnow() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+        expires_at = (_utc_now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
         token = _sec.token_urlsafe(32)
         conn.execute("UPDATE password_reset_tokens SET used=1 WHERE user_id=? AND used=0",
                      [found_user["id"]])
@@ -503,7 +507,7 @@ def auto_login():
     if not token:
         return redirect(url_for("auth.login_page"))
 
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     from app.platform import get_platform_db as _get_pdb
     pdb = _get_pdb()
     row = pdb.execute(
@@ -537,7 +541,7 @@ def auto_login():
     session.clear()
     session.update(sess)
     execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
-            [datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), sess["session_token"], user["id"]])
+                    [_utc_now().strftime("%Y-%m-%d %H:%M:%S"), sess["session_token"], user["id"]])
     log_auth_event("LOGIN_OK", username=user["username"],
                    ip=request.remote_addr or "", tenant=tenant_slug,
                    detail="via cross-login token")
@@ -623,7 +627,7 @@ def auth_google_callback():
             import secrets as _sec
             from app.platform import get_platform_db as _get_pdb2
             token_val  = _sec.token_urlsafe(32)
-            now        = datetime.utcnow()
+            now        = _utc_now()
             expires_at = (now + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
             created_at = now.strftime("%Y-%m-%d %H:%M:%S")
             pdb2 = _get_pdb2()
@@ -675,7 +679,7 @@ def auth_google_callback():
     sess = _build_session(user, perms)
     session.clear()
     session.update(sess)
-    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
             [now_str, sess["session_token"], user["id"]])
     execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
@@ -807,7 +811,7 @@ def sso_acs():
         sess = _build_session(user, perms)
         session.clear()
         session.update(sess)
-        now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
         execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
                 [now_str, sess["session_token"], user["id"]])
         execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
@@ -912,7 +916,7 @@ def resend_verification():
         if user and not email_verified:
             from app.mailer import send_verification_email
             token      = _secrets.token_urlsafe(32)
-            expires_at = (datetime.utcnow() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
+            expires_at = (_utc_now() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
             execute("UPDATE email_verification_tokens SET used=1 WHERE user_id=? AND used=0",
                     [user["id"]])
             execute("INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?,?,?)",

@@ -8,7 +8,7 @@ Billing routes for CountDepot.
 /_stripe/webhook  — Stripe webhook endpoint (no CSRF, signature-verified)
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import (Blueprint, render_template, request, session,
                    redirect, url_for, jsonify, g)
@@ -22,6 +22,10 @@ from app.stripe_billing import (PLANS, PLAN_ORDER, price_id_for,
 from config import Config
 
 bp = Blueprint("billing", __name__)
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -70,7 +74,7 @@ def _trial_days_remaining(tenant) -> int | None:
         return None
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
-            delta = datetime.strptime(trial_ends[:len(fmt)], fmt) - datetime.utcnow()
+            delta = datetime.strptime(trial_ends[:len(fmt)], fmt) - _utc_now()
             return max(0, delta.days)
         except ValueError:
             continue

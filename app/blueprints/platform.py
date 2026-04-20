@@ -11,7 +11,7 @@ a compromised tenant admin account cannot reach these routes.
 import os
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import (Blueprint, render_template, request, session,
                    redirect, url_for, jsonify, abort)
@@ -31,6 +31,10 @@ MFA_PENDING_KEY = "_platform_mfa_pending"   # set after password, cleared after 
 MFA_ENABLED     = bool(Config.PLATFORM_ADMIN_EMAIL)
 
 
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def platform_login_required(f):
     from functools import wraps
     @wraps(f)
@@ -45,8 +49,8 @@ def _send_mfa_code():
     """Generate a 6-digit OTP, store it in platform.db, email it.
     Returns the token string so callers can log it if needed."""
     code = f"{secrets.randbelow(1_000_000):06d}"
-    expires_at = (datetime.utcnow() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    expires_at = (_utc_now() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     db = get_platform_db()
     try:
         # Invalidate any previous unused tokens
@@ -74,7 +78,7 @@ def _send_mfa_code():
 
 def _verify_mfa_code(code: str) -> bool:
     """Check the OTP against platform.db. Marks it used on success."""
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     db = get_platform_db()
     try:
         row = db.execute(
@@ -197,7 +201,7 @@ def _days_since(value):
     for fmt, size in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d", 10), ("%m/%d/%y", 8)):
         try:
             dt = datetime.strptime(raw[:size], fmt)
-            return max(0, (datetime.utcnow() - dt).days)
+            return max(0, (_utc_now() - dt).days)
         except ValueError:
             continue
     return None
@@ -222,7 +226,7 @@ def _fmt_dt(value):
 def _sync_trial_expirations():
     """Keep platform trial status current even when dead tenants never log in."""
     db = get_platform_db()
-    now = datetime.utcnow()
+    now = _utc_now()
     cols = {r[1] for r in db.execute("PRAGMA table_info(tenants)").fetchall()}
     if "trial_expired_at" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN trial_expired_at TEXT")
@@ -259,7 +263,7 @@ def _trial_days_left(value):
     raw = str(value)[:19]
     for fmt, size in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d", 10)):
         try:
-            return (datetime.strptime(raw[:size], fmt) - datetime.utcnow()).days
+            return (datetime.strptime(raw[:size], fmt) - _utc_now()).days
         except ValueError:
             continue
     return None
@@ -269,7 +273,7 @@ def _days_until(value):
     dt = _parse_dt(value)
     if not dt:
         return None
-    return (dt - datetime.utcnow()).days
+    return (dt - _utc_now()).days
 
 
 def _is_free_access(tenant):
@@ -635,7 +639,7 @@ def _bootstrap_tenant_db(slug, admin_password, admin_email=None, pre_hashed_pass
     if admin_email and not pre_hashed_password and smtp_on:
         user_id = db.execute("SELECT id FROM users WHERE email=?", [admin_email]).fetchone()[0]
         verify_token = secrets.token_urlsafe(32)
-        token_expires = (datetime.utcnow() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
+        token_expires = (_utc_now() + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
         db.execute(
             "INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?,?,?)",
             [user_id, verify_token, token_expires])
@@ -700,7 +704,7 @@ def tenant_billing(slug):
         existing = db.execute("SELECT trial_ends_at FROM tenants WHERE slug=?", [slug]).fetchone()
         if existing and existing["trial_ends_at"]:
             trial_ends = existing["trial_ends_at"]
-    cancelled_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") if status == "cancelled" else None
+        cancelled_at = _utc_now().strftime("%Y-%m-%d %H:%M:%S") if status == "cancelled" else None
     db.execute(
         "UPDATE tenants SET subscription_status=?, trial_ends_at=?, notes=?, "
         "cancellation_reason=?, cancelled_at=?, free_access=? WHERE slug=?",
@@ -762,7 +766,7 @@ def platform_backup():
 def tenant_grant_free(slug):
     plan = request.form.get("plan", "pro")
     note = request.form.get("note", "").strip() or \
-           f"Free access granted {datetime.utcnow().strftime('%Y-%m-%d')} by platform admin"
+            f"Free access granted {_utc_now().strftime('%Y-%m-%d')} by platform admin"
     db = get_platform_db()
     db.execute(
         "UPDATE tenants SET subscription_status='active', trial_ends_at=NULL, plan=?, notes=?, free_access=1 WHERE slug=?",
@@ -895,7 +899,7 @@ def tenant_impersonate(slug, user_id):
         return jsonify({"ok": False, "msg": "User not found"}), 404
 
     token      = secrets.token_urlsafe(32)
-    now        = datetime.utcnow()
+    now        = _utc_now()
     expires_at = (now + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
     pdb = get_platform_db()
     pdb.execute(
