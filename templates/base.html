@@ -859,7 +859,7 @@ function _cameraErrorMessage(err){
 }
 async function _loadZxing(){
   if(window.ZXingBrowser||window.ZXing)return window.ZXingBrowser||window.ZXing;
-  await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+  await new Promise((res,rej)=>{const s=document.createElement('script');s.src='/static/vendor/zxing-library-0.21.3.min.js?v=3';s.onload=res;s.onerror=()=>rej(new Error('Local ZXing script failed to load'));document.head.appendChild(s);});
   return window.ZXingBrowser||window.ZXing;
 }
 async function _loadHtml5Qrcode(){
@@ -981,13 +981,7 @@ async function _startCamera(){
     await _startZxingCamera(status,_camLastDeviceId);
     return;
   }catch(err){
-    console.warn('ZXing library camera scanner failed; trying html5-qrcode.',err);
-  }
-  try{
-    await _startHtml5Scanner(status,_camLastDeviceId);
-    return;
-  }catch(err){
-    console.warn('HTML5 barcode scanner failed; trying fallback detectors.',err);
+    console.warn('ZXing library camera scanner failed; trying fallback detectors.',err);
     if(err&&['NotAllowedError','NotFoundError','NotReadableError'].includes(err.name)){
       status.textContent=_cameraErrorMessage(err);
       status.style.color='#b91c1c';
@@ -1012,7 +1006,7 @@ async function _startCamera(){
     if('BarcodeDetector' in window){await _startNativeDetector(video,status);return;}
     throw new Error('No barcode detector available');
   }catch(err){
-    status.textContent='Camera opened, but the barcode scanner could not start. Type or paste the barcode below.';
+    status.textContent='Scanner startup failed: '+((err&&(err.name||err.message))||'unknown')+'. Type or paste the barcode below.';
     status.style.color='#b91c1c';
   }
 }
@@ -1026,14 +1020,7 @@ async function _switchCamera(){
     await _startZxingCamera(status,deviceId);
     return;
   }catch(e){
-    console.warn('ZXing library camera scanner failed after camera switch; trying html5-qrcode.',e);
-  }
-  try{
-    _camLastDeviceId=deviceId;
-    await _startHtml5Scanner(status,deviceId);
-    return;
-  }catch(e){
-    console.warn('HTML5 barcode scanner failed after camera switch; trying fallback detectors.',e);
+    console.warn('ZXing library camera scanner failed after camera switch; trying fallback detectors.',e);
     if(e&&['NotAllowedError','NotFoundError','NotReadableError'].includes(e.name)){
       status.textContent=_cameraErrorMessage(e);status.style.color='#b91c1c';return;
     }
@@ -1053,7 +1040,7 @@ async function _switchCamera(){
   try{
     if('BarcodeDetector' in window){await _startNativeDetector(video,status);return;}
     throw new Error('No barcode detector available');
-  }catch(e){status.textContent='Camera opened, but the barcode scanner could not start. Type or paste the barcode below.';status.style.color='#b91c1c';}
+  }catch(e){status.textContent='Scanner startup failed: '+((e&&(e.name||e.message))||'unknown')+'. Type or paste the barcode below.';status.style.color='#b91c1c';}
 }
 </script>
 
@@ -1332,7 +1319,9 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.getRegistrations()
+      .then(regs => regs.forEach(reg => reg.unregister()))
+      .catch(() => {});
   });
 }
 </script>

@@ -1,9 +1,10 @@
-const CACHE_VERSION = 'countdepot-mobile-v1';
+const CACHE_VERSION = 'countdepot-mobile-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const STATIC_ASSETS = [
   '/static/offline.html',
   '/static/icons/icon.svg',
-  '/static/icons/maskable.svg'
+  '/static/icons/maskable.svg',
+  '/static/vendor/zxing-library-0.21.3.min.js'
 ];
 
 self.addEventListener('install', event => {
