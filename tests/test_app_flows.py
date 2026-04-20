@@ -1881,8 +1881,8 @@ def test_repair_shop_seo_page_has_phase_two_content(app):
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Repair shop inventory workflow" in body
-    assert "From scattered parts lists to a clear repair workflow." in body
+    assert "repair shops workflow" in body
+    assert "From messy tracking to a clear operating system." in body
     assert "Reserve inventory before a job starts" in body
     assert "Phone repair shop tracking screens" in body
     assert "Questions repair shops ask before replacing spreadsheets." in body
@@ -1898,7 +1898,8 @@ def test_generic_seo_pages_do_not_show_repair_shop_phase_two_content(app):
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Repair shop inventory workflow" not in body
+    assert "repair shops workflow" not in body
+    assert "SOPs and team docs" in body
     assert '"@type": "FAQPage"' not in body
 
 
@@ -2444,6 +2445,9 @@ def test_mobile_page_is_scanner_first_and_installable(app, tenant):
 
     body = response.get_data(as_text=True)
     assert response.status_code == 200
+    assert '<body class="mobile-page">' in body
+    assert "body.mobile-page .sidebar" in body
+    assert "body:has(.m-app)" not in body
     assert "Scan Item Barcode" in body
     assert "Use this like an app" in body
     assert "beforeinstallprompt" in body

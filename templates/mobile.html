@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Mobile Scanner - CountDepot{% endblock %}
+{% block body_class %}mobile-page{% endblock %}
 {% block content %}
 <main class="m-app">
   <header class="m-head">
@@ -100,10 +101,10 @@
 </div>
 
 <style>
-body:has(.m-app) .sidebar,body:has(.m-app) .mob-sidebar-overlay,body:has(.m-app) .mob-sidebar{display:none!important}
-body:has(.m-app) .layout{display:block;height:auto;min-height:100vh}
-body:has(.m-app) .main{display:block;min-height:100vh;overflow:visible}
-body:has(.m-app){background:#eef2f7}
+body.mobile-page .sidebar,body.mobile-page .mob-sidebar-overlay,body.mobile-page .mob-sidebar{display:none!important}
+body.mobile-page .layout{display:block;height:auto;min-height:100vh;overflow:visible}
+body.mobile-page .main{display:block;min-height:100vh;overflow:visible}
+body.mobile-page{background:#eef2f7}
 .m-app{min-height:100vh;padding:18px 14px 104px;background:radial-gradient(circle at 20% -10%,rgba(100,66,214,.2),transparent 34%),linear-gradient(180deg,#f8fafc,#eef2f7)}
 .m-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:16px}
 .m-kicker{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:900;color:#6442d6}

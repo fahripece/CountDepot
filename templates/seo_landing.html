@@ -11,6 +11,9 @@
 <meta property="og:description" content="{{ page.description }}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="{{ canonical_url }}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ page.title }}">
+<meta name="twitter:description" content="{{ page.description }}">
 {% if page.phase2 %}
 <script type="application/ld+json">
 {
@@ -33,160 +36,216 @@
 {% endif %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0b1020;--bg2:#111827;--card:#172033;--border:#26364f;--primary:#6442D6;--primary2:#7c5df0;--accent:#C8B3FD;--success:#16A34A;--text:#f8fafc;--muted:#94a3b8;--max:1120px}
-html{scroll-behavior:smooth}
-body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+:root{
+  --bg:#0b1020;--bg2:#111827;--card:#172033;--card2:#121b2e;--border:#26364f;
+  --primary:#6442D6;--primary2:#7c5df0;--accent:#C8B3FD;--success:#16A34A;
+  --text:#f1f5f9;--muted:#64748b;--muted2:#94a3b8;--max:1180px;--radius:24px;
+  --shadow:0 28px 80px rgba(0,0,0,.38);--glow:rgba(200,179,253,.14)
+}
+html{scroll-behavior:smooth;overflow-x:hidden}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;line-height:1.65}
 a{color:inherit;text-decoration:none}
-.nav{position:sticky;top:0;z-index:10;background:rgba(11,16,32,.82);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.08)}
-.nav-inner{max-width:var(--max);margin:0 auto;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:18px}
-.logo{font-weight:900;font-size:22px;letter-spacing:-.04em}.logo span{color:var(--accent)}
-.nav-links{display:flex;align-items:center;gap:22px;color:var(--muted);font-weight:700;font-size:14px}.nav-links a:hover{color:var(--text)}
-.nav-cta{background:var(--primary);color:#fff;padding:10px 18px;border-radius:999px;font-weight:900}
-.hero{position:relative;overflow:hidden;padding:92px 22px 70px;background:radial-gradient(circle at 20% 0,rgba(100,66,214,.3),transparent 35%),radial-gradient(circle at 85% 15%,rgba(200,179,253,.16),transparent 34%)}
-.hero-inner{max-width:var(--max);margin:0 auto;display:grid;grid-template-columns:1.15fr .85fr;gap:44px;align-items:center}
-.badge{display:inline-flex;background:rgba(100,66,214,.16);border:1px solid rgba(200,179,253,.32);color:var(--accent);padding:7px 14px;border-radius:999px;font-size:13px;font-weight:800;margin-bottom:22px}
-h1{font-size:clamp(38px,6vw,68px);line-height:.96;letter-spacing:-.06em;margin-bottom:22px}
-.lead{font-size:20px;color:var(--muted);max-width:680px}
-.hero-card{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.12);border-radius:30px;padding:26px;box-shadow:0 28px 80px rgba(0,0,0,.34)}
-.hero-card h2{font-size:22px;line-height:1.1;margin-bottom:14px}.hero-card p{color:var(--muted)}
-.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}.btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:14px 22px;font-weight:900}.btn-primary{background:var(--primary);color:#fff}.btn-secondary{border:1px solid rgba(255,255,255,.18);color:var(--text)}
-.section{padding:76px 22px}.section.alt{background:var(--bg2)}.wrap{max-width:var(--max);margin:0 auto}
-.eyebrow{color:var(--accent);font-size:13px;text-transform:uppercase;letter-spacing:.12em;font-weight:900;margin-bottom:12px}
-h2{font-size:clamp(30px,4vw,46px);line-height:1.05;letter-spacing:-.045em;margin-bottom:16px}.section p{color:var(--muted);font-size:17px;max-width:760px}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px}.card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:24px}.card strong{display:block;font-size:18px;margin-bottom:8px}.card p{font-size:15px}
-.list{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:30px}.list div{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:16px;font-weight:700}.list div::before{content:'✓';color:var(--success);font-weight:900;margin-right:9px}
-.compare{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:34px}.compare ul{list-style:none;display:grid;gap:12px;color:var(--muted)}.compare li::before{content:'•';color:var(--accent);font-weight:900;margin-right:9px}
-.grid.two{grid-template-columns:repeat(2,1fr)}
-.feature-strip{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:34px}.feature-strip .card{background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03))}
-.faq{display:grid;gap:14px;margin-top:30px}.faq details{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px}.faq summary{cursor:pointer;font-weight:900}.faq p{margin-top:10px;font-size:15px}
-.quote{margin-top:32px;border-left:4px solid var(--accent);padding:20px 22px;background:rgba(200,179,253,.08);border-radius:0 18px 18px 0;color:var(--text)}
-.final{padding:74px 22px;text-align:center;background:linear-gradient(135deg,var(--primary),#4f2fbd)}.final h2{max-width:820px;margin:0 auto 16px}.final p{margin:0 auto;color:#ede9fe}
-.footer{padding:30px 22px;color:var(--muted);font-size:14px;border-top:1px solid rgba(255,255,255,.08)}.footer-inner{max-width:var(--max);margin:0 auto;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
-@media(max-width:860px){.hero-inner,.grid,.grid.two,.list,.compare,.feature-strip{grid-template-columns:1fr}.nav-links{gap:12px}.nav-links a:not(.nav-cta){display:none}}
+.site-nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:18px max(24px,calc((100vw - var(--max)) / 2));display:flex;align-items:center;justify-content:space-between;background:rgba(11,16,32,.78);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.08)}
+.nav-logo{font-weight:800;font-size:22px;letter-spacing:-.5px}.nav-logo span{color:var(--accent)}
+.nav-links{display:flex;align-items:center;gap:32px}.nav-links a{color:var(--muted2);font-size:14px;font-weight:500;transition:color .2s}.nav-links a:hover{color:var(--text)}
+.nav-actions{display:flex;align-items:center;gap:12px}
+.nav-link-signin{color:var(--text);font-size:14px;font-weight:600;padding:9px 20px;border:1px solid rgba(255,255,255,.18);border-radius:999px;transition:border-color .2s,background .2s}
+.nav-link-signin:hover{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.05)}
+.nav-cta,.btn-primary{background:var(--primary);color:#fff;border:1px solid transparent}.nav-cta{padding:10px 22px;border-radius:999px;font-size:14px;font-weight:800}.nav-cta:hover,.btn-primary:hover{background:var(--primary2);transform:translateY(-2px);box-shadow:0 8px 30px rgba(100,66,214,.4)}
+.hero{min-height:92vh;display:flex;align-items:center;justify-content:center;padding:132px 24px 84px;position:relative;overflow:hidden;text-align:center}
+.hero::before{content:"";position:absolute;width:820px;height:820px;border-radius:50%;background:radial-gradient(circle,var(--glow) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.hero::after{content:"";position:absolute;width:440px;height:440px;border-radius:50%;background:radial-gradient(circle,rgba(100,66,214,.2) 0%,transparent 70%);top:28%;left:63%;transform:translate(-50%,-50%);pointer-events:none}
+.hero-inner{width:min(var(--max),100%);position:relative;z-index:2}
+.badge{display:inline-flex;align-items:center;gap:8px;background:rgba(100,66,214,.16);border:1px solid rgba(200,179,253,.28);color:var(--accent);padding:6px 16px;border-radius:999px;font-size:13px;font-weight:600;margin-bottom:30px;animation:fadeUp .6s ease both}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
+h1{font-size:clamp(38px,6vw,74px);font-weight:800;line-height:1.08;letter-spacing:-1.7px;max-width:980px;margin:0 auto 24px;animation:fadeUp .6s .1s ease both}
+h1 span,.gradient-text{background:linear-gradient(135deg,var(--primary2),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-sub{font-size:clamp(16px,2.5vw,20px);font-weight:300;color:var(--muted2);max-width:740px;line-height:1.7;margin:0 auto 42px;animation:fadeUp .6s .2s ease both}
+.hero-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;animation:fadeUp .6s .3s ease both}
+.btn-primary,.btn-secondary{display:inline-flex;align-items:center;justify-content:center;padding:14px 32px;border-radius:999px;font-size:16px;font-weight:800;transition:all .2s}
+.btn-secondary{color:var(--muted2);border:1px solid var(--border)}.btn-secondary:hover{color:var(--text);border-color:var(--muted);transform:translateY(-2px)}
+.hero-note{margin-top:22px;color:var(--muted);font-size:13px;animation:fadeUp .6s .4s ease both}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);width:min(var(--max),calc(100% - 48px));margin:-34px auto 0;background:rgba(17,24,39,.86);backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:var(--radius);position:relative;z-index:3;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.26)}
+.stat{padding:27px 22px;text-align:center;border-right:1px solid var(--border)}.stat:last-child{border-right:none}.stat-val{font-size:30px;font-weight:800;letter-spacing:-1px;color:var(--text)}.stat-label{font-size:13px;color:var(--muted);margin-top:4px}
+section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-width:var(--max);margin:0 auto}.section-head{text-align:center;max-width:780px;margin:0 auto}.section-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--accent);margin-bottom:16px;text-align:center}.section-title{font-size:clamp(28px,4vw,46px);font-weight:800;letter-spacing:-.8px;line-height:1.12;margin-bottom:16px;text-align:center}.section-sub{font-size:17px;color:var(--muted2);font-weight:300;line-height:1.75;max-width:720px;margin:0 auto;text-align:center}
+.feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:62px}
+.feature{background:var(--card);border:1px solid rgba(255,255,255,.04);border-radius:18px;padding:30px;transition:background .2s,transform .2s,border-color .2s}.feature:hover{background:#1c2740;transform:translateY(-3px);border-color:rgba(200,179,253,.28)}
+.feature-icon{width:46px;height:46px;border-radius:12px;background:rgba(100,66,214,.14);border:1px solid rgba(200,179,253,.26);display:flex;align-items:center;justify-content:center;color:var(--accent);font-weight:900;margin-bottom:18px}
+.feature h3{font-size:18px;font-weight:800;margin-bottom:10px;letter-spacing:-.3px}.feature p{font-size:14px;color:var(--muted2);font-weight:300;line-height:1.75}
+.workflow{display:grid;grid-template-columns:.9fr 1.1fr;gap:28px;margin-top:62px;align-items:stretch}.proof-card{background:linear-gradient(145deg,rgba(23,32,51,.94),rgba(15,22,40,.94));border:1px solid rgba(200,179,253,.18);border-radius:var(--radius);padding:34px;box-shadow:0 22px 70px rgba(0,0,0,.24)}.proof-card h3{font-size:24px;line-height:1.2;margin-bottom:14px}.proof-card p{color:var(--muted2);font-weight:300}
+.steps{display:grid;gap:14px}.step{display:flex;gap:16px;align-items:flex-start;background:rgba(23,32,51,.82);border:1px solid var(--border);border-radius:20px;padding:20px}.step-num{width:38px;height:38px;border-radius:12px;background:rgba(100,66,214,.18);border:1px solid rgba(200,179,253,.24);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:900;flex:0 0 auto}.step h3{font-size:16px;margin-bottom:4px}.step p{font-size:14px;color:var(--muted2);font-weight:300}
+.compare-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin-top:62px}.compare-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:34px}.compare-card h3{font-size:21px;margin-bottom:18px}.compare-card ul{list-style:none;display:grid;gap:13px}.compare-card li{color:var(--muted2);font-size:14px}.compare-card li::before{content:"";display:inline-block;width:7px;height:7px;border-radius:999px;background:var(--accent);margin-right:10px;vertical-align:middle}
+.industry-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:46px}.industry-pill{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:17px;font-weight:700;color:var(--text)}
+.faq{display:grid;gap:14px;margin-top:44px}.faq details{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px}.faq summary{cursor:pointer;font-weight:800}.faq p{margin-top:10px;color:var(--muted2);font-size:15px;font-weight:300}
+.trial-section{text-align:center;padding:100px 24px;position:relative;overflow:hidden;background:var(--bg)}.trial-section::before{content:"";position:absolute;width:620px;height:620px;border-radius:50%;background:radial-gradient(circle,rgba(100,66,214,.18) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}.trial-inner{position:relative;z-index:2}.trial-section h2{font-size:clamp(32px,5vw,56px);font-weight:800;letter-spacing:-1.5px;margin-bottom:16px}.trial-section p{font-size:18px;color:var(--muted2);font-weight:300;margin-bottom:40px}.trial-note{margin-top:16px;font-size:13px;color:var(--muted)}
+.footer{border-top:1px solid var(--border);padding:32px 24px;color:var(--muted);font-size:13px}.footer-inner{max-width:var(--max);margin:0 auto;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.42}}@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:900px){.site-nav{padding:14px 18px}.nav-links{display:none}.hero{min-height:auto;padding-top:116px}.stats,.feature-grid,.workflow,.compare-grid,.industry-strip{grid-template-columns:1fr}.stat{border-right:0;border-bottom:1px solid var(--border)}.stat:last-child{border-bottom:0}section{padding:74px 20px}}
 </style>
 </head>
 <body>
-<nav class="nav">
-  <div class="nav-inner">
-    <a class="logo" href="/">Count<span>Depot</span></a>
-    <div class="nav-links">
-      <a href="/#features">Features</a>
-      <a href="/#pricing">Pricing</a>
-      <a href="/login">Sign in</a>
-      <a class="nav-cta" href="/signup">Start free trial</a>
-    </div>
+<nav class="site-nav">
+  <a class="nav-logo" href="/">Count<span>Depot</span></a>
+  <div class="nav-links">
+    <a href="/#features">Features</a>
+    <a href="/#integrations">Integrations</a>
+    <a href="/#pricing">Pricing</a>
+    <a href="/#contact">Contact</a>
+  </div>
+  <div class="nav-actions">
+    <a class="nav-link-signin" href="/login">Sign in</a>
+    <a class="nav-cta" href="/signup">Start free trial</a>
   </div>
 </nav>
 
 <header class="hero">
   <div class="hero-inner">
-    <div>
-      <div class="badge">{{ page.tier }} SEO guide</div>
-      <h1>{{ page.hero }}</h1>
-      <p class="lead">{{ page.description }}</p>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="/signup">Start free trial</a>
-        <a class="btn btn-secondary" href="/#pricing">See pricing</a>
-      </div>
+    <div class="badge"><span class="badge-dot"></span>{{ page.keyword }}</div>
+    <h1>{{ page.hero }}</h1>
+    <p class="hero-sub">{{ page.description }}</p>
+    <div class="hero-actions">
+      <a class="btn-primary" href="/signup">Start 30-day free trial</a>
+      <a class="btn-secondary" href="/#pricing">See pricing</a>
     </div>
-    <aside class="hero-card">
-      <h2>Why {{ page.audience }} switch from spreadsheets</h2>
-      <p>{{ page.pain }}</p>
-    </aside>
+    <div class="hero-note">No credit card required. Built for practical inventory control, not enterprise complexity.</div>
   </div>
 </header>
 
-<section class="section">
-  <div class="wrap">
-    <div class="eyebrow">{{ page.keyword }}</div>
-    <h2>Built around the inventory work that actually happens.</h2>
-    <p>CountDepot keeps item tracking practical: barcode scanning, quantities, locations, reservations, checkouts, low-stock visibility, and simple user permissions.</p>
-    <div class="list">
+<div class="stats" aria-label="CountDepot highlights">
+  <div class="stat"><div class="stat-val">30-day</div><div class="stat-label">free trial</div></div>
+  <div class="stat"><div class="stat-val">$20</div><div class="stat-label">starter pricing</div></div>
+  <div class="stat"><div class="stat-val">Mobile</div><div class="stat-label">scanner workflow</div></div>
+  <div class="stat"><div class="stat-val">SOPs</div><div class="stat-label">docs included</div></div>
+</div>
+
+<section>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-label">Built for {{ page.audience }}</div>
+      <h2 class="section-title">Inventory software that matches how {{ page.audience }} actually work.</h2>
+      <p class="section-sub">{{ page.pain }}</p>
+    </div>
+    <div class="feature-grid">
       {% for use_case in page.use_cases %}
-      <div>{{ use_case }}</div>
+      <div class="feature">
+        <div class="feature-icon">{{ loop.index }}</div>
+        <h3>{{ use_case }}</h3>
+        <p>Use CountDepot to keep this workflow visible, searchable, and tied to real item records instead of scattered spreadsheets.</p>
+      </div>
       {% endfor %}
+      <div class="feature">
+        <div class="feature-icon">SOP</div>
+        <h3>Document repeatable procedures</h3>
+        <p>Add SOPs for receiving, checkout rules, safety notes, field procedures, and team training right inside the inventory system.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">QR</div>
+        <h3>Scan from phones and browsers</h3>
+        <p>Workers can scan or search from the mobile web page for check in, check out, reservations, and simple field workflows.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-alt">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-label">{{ page.audience }} workflow</div>
+      <h2 class="section-title">From messy tracking to a clear operating system.</h2>
+      <p class="section-sub">{% if page.phase2 %}{{ page.phase2.intro }}{% else %}CountDepot helps {{ page.audience }} replace scattered notes with a simple flow for tracking items, quantities, people, locations, reservations, and SOPs.{% endif %}</p>
+    </div>
+    <div class="workflow">
+      <div class="proof-card">
+        <h3>Why this matters for <span class="gradient-text">{{ page.audience }}</span></h3>
+        <p>{{ page.pain }}</p>
+      </div>
+      <div class="steps">
+        {% if page.phase2 %}
+          {% for step in page.phase2.workflow %}
+          <div class="step"><div class="step-num">{{ loop.index }}</div><div><h3>{{ step.title }}</h3><p>{{ step.copy }}</p></div></div>
+          {% endfor %}
+        {% else %}
+          <div class="step"><div class="step-num">1</div><div><h3>Create clean records</h3><p>Store item names, SKUs, serials, locations, costs, category fields, notes, and photos in one searchable place.</p></div></div>
+          <div class="step"><div class="step-num">2</div><div><h3>Move inventory with context</h3><p>Check items in or out, reserve them for future work, and see who used what without digging through messages.</p></div></div>
+          <div class="step"><div class="step-num">3</div><div><h3>Standardize the process</h3><p>Use SOPs and permissions so the team follows the same receiving, checkout, and field procedures.</p></div></div>
+          <div class="step"><div class="step-num">4</div><div><h3>Know what needs attention</h3><p>Monitor low stock, quantities, sites, costs, and activity before missing items slow the team down.</p></div></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-label">Core platform</div>
+      <h2 class="section-title">The same CountDepot foundation, tailored to {{ page.audience }}.</h2>
+      <p class="section-sub">Every page focuses on a different search need, but the product stays consistent: practical inventory, scanning, reservations, docs, reports, sites, and permissions.</p>
+    </div>
+    <div class="compare-grid">
+      <div class="compare-card">
+        <h3>Instead of spreadsheets</h3>
+        <ul>
+          <li>Use item records with history, costs, quantities, and locations.</li>
+          <li>Search by name, serial, SKU, owner, manufacturer, site, and category.</li>
+          <li>Keep SOPs beside the process so workers know what to do next.</li>
+        </ul>
+      </div>
+      <div class="compare-card">
+        <h3>Instead of oversized systems</h3>
+        <ul>
+          <li>Launch faster with fewer setup decisions.</li>
+          <li>Keep the worker interface simple on desktop and mobile web.</li>
+          <li>Pay for practical inventory control before buying enterprise complexity.</li>
+        </ul>
+      </div>
     </div>
   </div>
 </section>
 
 {% if page.phase2 %}
-<section class="section alt">
-  <div class="wrap">
-    <div class="eyebrow">Repair shop inventory workflow</div>
-    <h2>From scattered parts lists to a clear repair workflow.</h2>
-    <p>{{ page.phase2.intro }}</p>
-    <div class="grid two">
-      {% for step in page.phase2.workflow %}
-      <div class="card">
-        <strong>{{ step.title }}</strong>
-        <p>{{ step.copy }}</p>
-      </div>
-      {% endfor %}
+<section class="section-alt">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-label">Real examples</div>
+      <h2 class="section-title">Use cases for {{ page.audience }}.</h2>
     </div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <div class="eyebrow">Real repair shop use cases</div>
-    <h2>Built for parts, tools, jobs, and technicians.</h2>
-    <div class="feature-strip">
+    <div class="industry-strip">
       {% for example in page.phase2.examples %}
-      <div class="card"><strong>{{ example }}</strong></div>
+      <div class="industry-pill">{{ example }}</div>
       {% endfor %}
-    </div>
-    <div class="quote">
-      CountDepot is strongest when a repair team needs practical accountability: who has the tool, where the part is stored, how many are available, and what is already reserved for the next job.
     </div>
   </div>
 </section>
 {% endif %}
 
-<section class="section alt">
-  <div class="wrap">
-    <div class="eyebrow">Core features</div>
-    <h2>Everything small teams need before inventory gets messy.</h2>
-    <div class="grid">
-      <div class="card"><strong>Mobile scanning</strong><p>Use the phone-friendly web app to scan, search, check in, check out, and reserve inventory without a separate app-store install.</p></div>
-      <div class="card"><strong>Reservations and quantities</strong><p>See what is available, what is reserved, and what is already checked out before a job or event starts.</p></div>
-      <div class="card"><strong>Affordable control</strong><p>Start with the workflows that matter instead of paying for a large platform before your process needs it.</p></div>
+<section class="{% if not page.phase2 %}section-alt{% endif %}">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-label">Features included</div>
+      <h2 class="section-title">Everything small teams need before inventory gets expensive.</h2>
     </div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <div class="eyebrow">Why CountDepot</div>
-    <h2>A simpler path than spreadsheet cleanup or enterprise software.</h2>
-    <div class="compare">
-      <div class="card">
-        <strong>Instead of spreadsheets</strong>
-        <ul>
-          <li>Use real item records with history.</li>
-          <li>Track locations, categories, quantities, and costs.</li>
-          <li>Reduce duplicate or stale inventory lists.</li>
-        </ul>
-      </div>
-      <div class="card">
-        <strong>Instead of oversized systems</strong>
-        <ul>
-          <li>Launch faster with fewer setup decisions.</li>
-          <li>Keep the interface simple for workers.</li>
-          <li>Pay for practical inventory control, not complexity.</li>
-        </ul>
-      </div>
+    <div class="feature-grid">
+      <div class="feature"><div class="feature-icon">01</div><h3>Mobile scanning</h3><p>Use the phone-friendly web app to scan, search, check in, check out, and reserve inventory without app-store work.</p></div>
+      <div class="feature"><div class="feature-icon">02</div><h3>Reservations and quantities</h3><p>See what is available, reserved, checked out, and total before work starts.</p></div>
+      <div class="feature"><div class="feature-icon">03</div><h3>Sites and permissions</h3><p>Split inventory by warehouse, room, vehicle, client, branch, or jobsite and restrict users where needed.</p></div>
+      <div class="feature"><div class="feature-icon">04</div><h3>SOPs and team docs</h3><p>Store procedures, safety notes, and training steps with view/create/delete permissions.</p></div>
+      <div class="feature"><div class="feature-icon">05</div><h3>Financial visibility</h3><p>Track cost, sale price, stock value, sold items, and reports without burying the team in accounting screens.</p></div>
+      <div class="feature"><div class="feature-icon">06</div><h3>Integrations and API</h3><p>Use connectors, webhooks, and API keys when the workflow needs to connect with other systems.</p></div>
     </div>
   </div>
 </section>
 
 {% if page.phase2 %}
-<section class="section alt">
-  <div class="wrap">
-    <div class="eyebrow">FAQ</div>
-    <h2>Questions repair shops ask before replacing spreadsheets.</h2>
+<section class="section-alt">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-label">FAQ</div>
+      <h2 class="section-title">Questions {{ page.audience }} ask before replacing spreadsheets.</h2>
+    </div>
     <div class="faq">
       {% for item in page.phase2.faq %}
       <details>
@@ -199,17 +258,21 @@ h2{font-size:clamp(30px,4vw,46px);line-height:1.05;letter-spacing:-.045em;margin
 </section>
 {% endif %}
 
-<section class="final">
-  <h2>Ready to try CountDepot for {{ page.audience }}?</h2>
-  <p>Start with the mobile-friendly inventory workflow and grow from there.</p>
-  <div class="cta-row" style="justify-content:center">
-    <a class="btn btn-secondary" style="background:#fff;color:#4f2fbd;border-color:#fff" href="/signup">Start free trial</a>
+<section class="trial-section">
+  <div class="trial-inner">
+    <h2>Try CountDepot for <span class="gradient-text">{{ page.audience }}</span>.</h2>
+    <p>Start with a 30-day free trial, no credit card required.</p>
+    <div class="hero-actions">
+      <a class="btn-primary" href="/signup">Start free trial</a>
+      <a class="btn-secondary" href="/#pricing">Compare plans</a>
+    </div>
+    <div class="trial-note">Built for {{ page.keyword }}.</div>
   </div>
 </section>
 
 <footer class="footer">
   <div class="footer-inner">
-    <span>© CountDepot</span>
+    <span>CountDepot</span>
     <span>{{ page.keyword }}</span>
   </div>
 </footer>

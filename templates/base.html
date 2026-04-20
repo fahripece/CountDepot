@@ -362,7 +362,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
 {% if brand_color and brand_color != '#0f172a' %}
 <style>:root{--sidebar-bg:{{ brand_color }}}</style>
 {% endif %}
-<body>
+<body class="{% block body_class %}{% endblock %}">
 <!-- Mobile sidebar drawer -->
 <div class="mob-sidebar-overlay" id="mobSidebarOverlay" onclick="closeMobSidebar()"></div>
 <aside class="mob-sidebar" id="mobSidebar"></aside>
