@@ -2457,6 +2457,8 @@ def test_mobile_page_is_scanner_first_and_installable(app, tenant):
     assert "Use this like an app" not in body
     assert "beforeinstallprompt" not in body
     assert "installPrompt" not in body
+    assert "Html5Qrcode" in body
+    assert "html5-qrcode@2.3.8" in body
     assert "BarcodeDetector" in body
     assert "ZXingBrowser" in body
     assert "Camera requires HTTPS" in body

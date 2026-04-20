@@ -811,7 +811,7 @@ function closeMobSidebar(){document.getElementById('mobSidebar').classList.remov
 // ── Camera barcode scanner (global, reusable) ─────────────────────────────────
 // Usage: openCameraScanner(code => doSomethingWith(code))
 // Works on any page — feeds into whatever callback is passed.
-let _camScanCb=null,_camReader=null,_camStream=null,_camNativeDetector=null,_camNativeLoop=false,_camLastDeviceId=null;
+let _camScanCb=null,_camReader=null,_camStream=null,_camNativeDetector=null,_camNativeLoop=false,_camLastDeviceId=null,_camHtml5=null;
 
 function openCameraScanner(cb){
   _camScanCb=cb;
@@ -828,10 +828,18 @@ function closeCameraScanner(){
 }
 function _stopCamera(){
   _camNativeLoop=false;
+  if(_camHtml5){
+    try{
+      if(_camHtml5.isScanning)_camHtml5.stop().catch(()=>{});
+      _camHtml5.clear().catch(()=>{});
+    }catch(e){}
+  }
+  _camHtml5=null;
   if(_camReader){try{if(typeof _camReader.stop==='function')_camReader.stop();else if(typeof _camReader.reset==='function')_camReader.reset();}catch(e){}}
   _camReader=null;
   if(_camStream){_camStream.getTracks().forEach(t=>t.stop());}_camStream=null;
   const v=document.getElementById('camScanVideo');if(v)v.srcObject=null;
+  const html5=document.getElementById('camHtml5Reader');if(html5)html5.innerHTML='';
 }
 function _deliverCameraCode(code){
   if(!code)return;
@@ -853,6 +861,41 @@ async function _loadZxing(){
   if(window.ZXingBrowser||window.ZXing)return window.ZXingBrowser||window.ZXing;
   await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://unpkg.com/@zxing/browser@latest';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   return window.ZXingBrowser||window.ZXing;
+}
+async function _loadHtml5Qrcode(){
+  if(window.Html5Qrcode)return window.Html5Qrcode;
+  await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+  return window.Html5Qrcode;
+}
+function _html5Formats(){
+  const F=window.Html5QrcodeSupportedFormats;
+  if(!F)return undefined;
+  return [F.QR_CODE,F.CODE_128,F.CODE_39,F.CODE_93,F.CODABAR,F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.ITF].filter(Boolean);
+}
+async function _startHtml5Scanner(status,deviceId){
+  const Html5Qrcode=await _loadHtml5Qrcode();
+  if(!Html5Qrcode)throw new Error('Scanner library could not load.');
+  const devices=await Html5Qrcode.getCameras();
+  if(!devices||!devices.length)throw {name:'NotFoundError'};
+  const sel=document.getElementById('camDeviceSelect');
+  sel.innerHTML='';
+  devices.forEach((d,i)=>{const o=document.createElement('option');o.value=d.id;o.textContent=d.label||`Camera ${i+1}`;sel.appendChild(o);});
+  sel.style.display=devices.length>1?'block':'none';
+  const preferred=deviceId||_camLastDeviceId||(devices.find(d=>/back|rear|environment/i.test(d.label||''))||devices[0]).id;
+  _camLastDeviceId=preferred;
+  sel.value=preferred;
+  const reader=document.getElementById('camHtml5Reader');
+  const nativeVideo=document.getElementById('camScanVideo');
+  if(nativeVideo)nativeVideo.style.display='none';
+  reader.style.display='block';
+  _camHtml5=new Html5Qrcode('camHtml5Reader', false);
+  status.textContent='Point camera at barcode...';status.style.color='#15803d';
+  await _camHtml5.start(
+    preferred,
+    {fps:10,qrbox:(w,h)=>({width:Math.floor(Math.min(w,h)*0.72),height:Math.floor(Math.min(w,h)*0.42)}),formatsToSupport:_html5Formats()},
+    decodedText=>_deliverCameraCode(decodedText),
+    ()=>{}
+  );
 }
 async function _populateCameraDevices(){
   const sel=document.getElementById('camDeviceSelect');
@@ -904,6 +947,21 @@ async function _startCamera(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
     status.textContent='Camera not available on this browser.';status.style.color='#b91c1c';return;
   }
+  const nativeVideo=document.getElementById('camScanVideo');
+  const html5Reader=document.getElementById('camHtml5Reader');
+  if(nativeVideo)nativeVideo.style.display='block';
+  if(html5Reader){html5Reader.style.display='none';html5Reader.innerHTML='';}
+  try{
+    await _startHtml5Scanner(status,_camLastDeviceId);
+    return;
+  }catch(err){
+    console.warn('HTML5 barcode scanner failed; trying fallback detectors.',err);
+    if(err&&['NotAllowedError','NotFoundError','NotReadableError'].includes(err.name)){
+      status.textContent=_cameraErrorMessage(err);
+      status.style.color='#b91c1c';
+      return;
+    }
+  }
   let video;
   try{
     video=await _openCameraStream(_camLastDeviceId);
@@ -931,6 +989,16 @@ async function _switchCamera(){
   const deviceId=sel.value;
   _stopCamera();
   const status=document.getElementById('camScanStatus');
+  try{
+    _camLastDeviceId=deviceId;
+    await _startHtml5Scanner(status,deviceId);
+    return;
+  }catch(e){
+    console.warn('HTML5 barcode scanner failed after camera switch; trying fallback detectors.',e);
+    if(e&&['NotAllowedError','NotFoundError','NotReadableError'].includes(e.name)){
+      status.textContent=_cameraErrorMessage(e);status.style.color='#b91c1c';return;
+    }
+  }
   let video;
   try{
     _camLastDeviceId=deviceId;
@@ -1054,6 +1122,7 @@ async function _switchCamera(){
   <!-- Video container -->
   <div style="position:relative;width:min(92vw,420px);aspect-ratio:4/3;border-radius:12px;overflow:hidden;background:#000;margin-bottom:16px">
     <video id="camScanVideo" style="width:100%;height:100%;object-fit:cover" playsinline muted></video>
+    <div id="camHtml5Reader" style="display:none;width:100%;height:100%"></div>
     <!-- Targeting reticle -->
     <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
       <div style="width:72%;height:40%;position:relative">
