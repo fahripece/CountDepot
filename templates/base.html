@@ -169,7 +169,15 @@ body.dark [style*="background:#f8f7f5"],body.dark [style*="background:#f5f4f1"],
 body.dark [style*="background:#f0f7ff"],body.dark [style*="background:#f0f9ff"]{background:#1e293b!important;border-color:#1e3a8a!important}
 .intro-tour-overlay{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.18);display:none;align-items:flex-start;justify-content:flex-end;padding:84px 24px 18px;pointer-events:none}
 .intro-tour-overlay.show{display:flex}
+.intro-tour-overlay.choice-mode{align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.38);pointer-events:auto}
 .intro-tour-card{width:min(430px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--border);border-radius:28px;box-shadow:var(--shadow-3);overflow:hidden;color:var(--text);pointer-events:auto;position:relative;z-index:10003}
+.intro-tour-choice{width:min(520px,calc(100vw - 32px));background:var(--surface);border:1px solid rgba(255,255,255,.65);border-radius:30px;box-shadow:var(--shadow-3);padding:28px;color:var(--text);pointer-events:auto;position:relative;z-index:10004}
+.intro-tour-choice h2{font-size:28px;line-height:1.05;letter-spacing:-.04em;margin:8px 0 10px}
+.intro-tour-choice p{color:var(--muted);line-height:1.6;font-size:14px;margin:0 0 18px}
+.intro-tour-choice-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.intro-tour-choice-actions .btn,.intro-tour-choice-actions .intro-tour-skip{min-height:42px}
+.intro-tour-choice-actions .intro-tour-skip{border:1px solid var(--border);border-radius:999px;background:var(--surface);padding:9px 16px}
+.intro-tour-card.tour-hidden,.intro-tour-choice.tour-hidden{display:none}
 .intro-tour-spotlight{position:fixed;border:3px solid var(--primary);border-radius:18px;box-shadow:0 0 0 9999px rgba(15,23,42,.22),0 18px 42px rgba(15,23,42,.25);pointer-events:none;z-index:10001;transition:all .18s ease;display:none}
 .intro-tour-target-active{position:relative;z-index:10002!important;box-shadow:0 0 0 3px rgba(200,179,253,.72),0 12px 28px rgba(100,66,214,.28)!important;background:rgba(100,66,214,.26)!important;color:#fff!important}
 .intro-tour-hero{padding:24px;background:radial-gradient(circle at 14% 0,rgba(100,66,214,.2),transparent 34%),linear-gradient(135deg,#111827,#1f2937);color:#fff}
@@ -192,7 +200,7 @@ body.dark [style*="background:#f0f7ff"],body.dark [style*="background:#f0f9ff"]{
 .intro-tour-skip:hover{color:var(--text)}
 .intro-tour-link{display:inline-flex;margin-top:6px;color:var(--primary);font-weight:900;font-size:13px}
 @media(max-width:900px){.intro-tour-overlay{padding:76px 14px 14px}.intro-tour-card{width:min(420px,100%)}}
-@media(max-width:520px){.intro-tour-title{font-size:23px}.intro-tour-actions{flex-wrap:wrap}.intro-tour-actions .btn{flex:1}.intro-tour-skip{width:100%;order:3;padding-top:4px}}
+@media(max-width:520px){.intro-tour-title{font-size:23px}.intro-tour-actions{flex-wrap:wrap}.intro-tour-actions .btn{flex:1}.intro-tour-skip{width:100%;order:3;padding-top:4px}.intro-tour-choice-actions{grid-template-columns:1fr}}
 .mono{font-family:var(--font-mono)}
 .layout{display:flex;height:100vh;overflow:hidden}
 .sidebar{width:224px;background:linear-gradient(180deg,var(--sidebar-bg,#111827) 0%,#0b1220 100%);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;box-shadow:inset -1px 0 rgba(255,255,255,.06)}
@@ -401,7 +409,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
     {% if session.get('role') == 'admin' or 'view_docs' in user_perms %}
     <div class="sb-section" style="margin-top:10px">Docs</div>
     <nav class="nav">
-      <a href="/docs" class="navlink {% if request.path == '/docs' %}active{% endif %}">
+      <a href="/docs" data-tour="docs" class="navlink {% if request.path == '/docs' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
         <span>SOPs &amp; Docs</span>
       </a>
@@ -875,49 +883,93 @@ async function _switchCamera(){
 </script>
 
 {% if session.get("show_intro_tour") %}
-<div class="intro-tour-overlay show" id="introTourOverlay" role="dialog" aria-labelledby="introTourTitle">
+<div class="intro-tour-overlay show choice-mode" id="introTourOverlay" role="dialog" aria-labelledby="introTourTitle">
   <div class="intro-tour-spotlight" id="introTourSpotlight" aria-hidden="true"></div>
-  <div class="intro-tour-card">
+  <div class="intro-tour-choice" id="introTourChoice">
+    <div class="intro-tour-kicker">First login guide</div>
+    <h2 id="introTourTitle">Want a quick CountDepot walkthrough?</h2>
+    <p>We can take you through the setup flow automatically: categories, products, adding inventory, sites, reservations, SOPs, mobile scanning, and users.</p>
+    <div class="intro-tour-list">
+      <div>Shows each page in order instead of making you hunt for it.</div>
+      <div>You can stop anytime, or skip it permanently.</div>
+    </div>
+    <div class="intro-tour-choice-actions">
+      <button class="btn btn-primary" type="button" onclick="startIntroTour()">Start tutorial now</button>
+      <button class="btn btn-secondary" type="button" onclick="snoozeIntroTour()">Later</button>
+      <button class="intro-tour-skip" type="button" style="grid-column:1 / -1" onclick="completeIntroTour()">I don't need a tutorial</button>
+    </div>
+  </div>
+  <div class="intro-tour-card tour-hidden" id="introTourCard">
     <div class="intro-tour-hero">
       <div class="intro-tour-kicker">First login guide</div>
-      <div class="intro-tour-title" id="introTourTitle">Welcome to CountDepot.</div>
-      <p class="intro-tour-copy">This quick tour shows the core workflow: organize categories, define products, add inventory, and split items across sites.</p>
+      <div class="intro-tour-title">Welcome to CountDepot.</div>
+      <p class="intro-tour-copy">This guided tour opens each core page for you and explains what to do there.</p>
     </div>
     <div class="intro-tour-body">
-      <div class="intro-tour-step active" data-step="0" data-target="categories" data-section="settings">
+      {% if can_manage_settings %}
+      <div class="intro-tour-step active" data-step="0" data-path="/categories" data-target="categories" data-section="settings">
         <h3>1. Start with categories</h3>
         <p>Categories organize inventory and define custom fields for groups like Tools, Parts, Supplies, or Equipment.</p>
         <div class="intro-tour-list"><div>Create categories from Settings.</div><div>Add fields like asset tag, warranty, or inspection date.</div></div>
-        <a class="intro-tour-link" href="/categories" onclick="completeIntroTour(true)">Open Categories</a>
+        <a class="intro-tour-link" href="/categories">Open Categories</a>
       </div>
-      <div class="intro-tour-step" data-step="1" data-target="products" data-section="settings">
+      <div class="intro-tour-step" data-step="1" data-path="/products" data-target="products" data-section="settings">
         <h3>2. Create products</h3>
         <p>Products are reusable templates. Create a product once, then add individual units or quantities from it.</p>
         <div class="intro-tour-list"><div>Set default category, cost, sale price, and SKU rules.</div><div>Bulk add similar items with different serial numbers.</div></div>
-        <a class="intro-tour-link" href="/products" onclick="completeIntroTour(true)">Open Products</a>
+        <a class="intro-tour-link" href="/products">Open Products</a>
       </div>
-      <div class="intro-tour-step" data-step="2" data-target="add-item">
+      {% endif %}
+      {% if session.get('role') != 'viewer' %}
+      <div class="intro-tour-step" data-step="2" data-path="/add-item" data-target="add-item">
         <h3>3. Add inventory items</h3>
         <p>Items are the actual things you own. Add serials, quantities, shelf/bin, condition, cost, and product details.</p>
         <div class="intro-tour-list"><div>Add single items, quantity stock, or bulk serial-number units.</div><div>Use the bottom action bar for edit, reserve, clone, and checkout.</div></div>
-        <a class="intro-tour-link" href="/add-item" onclick="completeIntroTour(true)">Add First Item</a>
+        <a class="intro-tour-link" href="/add-item">Add First Item</a>
       </div>
-      <div class="intro-tour-step" data-step="3" data-target="sites">
+      {% endif %}
+      <div class="intro-tour-step" data-step="3" data-path="/sites" data-target="sites">
         <h3>4. Use sites and locations</h3>
         <p>Sites separate inventory by warehouse, truck, client, room, branch, or jobsite.</p>
         <div class="intro-tour-list"><div>Create sites from the Sites page.</div><div>Assign users to sites for location-restricted access.</div></div>
-        <a class="intro-tour-link" href="/sites" onclick="completeIntroTour(true)">Open Sites</a>
+        <a class="intro-tour-link" href="/sites">Open Sites</a>
       </div>
-      <div class="intro-tour-step" data-step="4" data-target="reservations">
-        <h3>5. Scan, reserve, and invite your team</h3>
-        <p>Use the mobile page for field work, reservations to protect job inventory, and Admin to invite workers.</p>
-        <div class="intro-tour-list"><div>Use /mobile for scanner-first check in/check out.</div><div>Use Reservations when inventory is promised for a future job.</div><div>Invite workers from Admin with only the permissions they need.</div></div>
-        <a class="intro-tour-link" href="/mobile" onclick="completeIntroTour(true)">Open Mobile Scanner</a>
+      {% if session.get('role') != 'viewer' %}
+      <div class="intro-tour-step" data-step="4" data-path="/reservations" data-target="reservations">
+        <h3>5. Reserve inventory for jobs</h3>
+        <p>Reservations protect stock that is promised for a client, job, or future date so workers see conflicts before using it.</p>
+        <div class="intro-tour-list"><div>Track reserved, available, and total quantity.</div><div>Use warnings and overrides when work conflicts with reservations.</div></div>
+        <a class="intro-tour-link" href="/reservations">Open Reservations</a>
       </div>
+      {% endif %}
+      {% if session.get('role') == 'admin' or 'view_docs' in user_perms %}
+      <div class="intro-tour-step" data-step="5" data-path="/docs" data-target="docs">
+        <h3>6. Add SOPs and team docs</h3>
+        <p>SOPs keep receiving steps, checkout rules, safety notes, and field procedures next to the inventory system.</p>
+        <div class="intro-tour-list"><div>Create docs categories like Receiving, Safety, or Field Work.</div><div>Give some users view-only docs access and others create/delete permission.</div></div>
+        <a class="intro-tour-link" href="/docs">Open SOPs & Docs</a>
+      </div>
+      {% endif %}
+      {% if session.get('role') != 'viewer' %}
+      <div class="intro-tour-step" data-step="6" data-path="/mobile">
+        <h3>7. Use mobile scanner mode</h3>
+        <p>The mobile page is the simplified worker flow for scan/search, check in, check out, and reservations.</p>
+        <div class="intro-tour-list"><div>Use it from phones and handheld scanners.</div><div>Keep billing and admin-heavy tools off the worker screen.</div></div>
+        <a class="intro-tour-link" href="/mobile">Open Mobile Scanner</a>
+      </div>
+      {% endif %}
+      {% if session.get('role') == 'admin' %}
+      <div class="intro-tour-step" data-step="7" data-path="/admin" data-target="admin" data-section="settings">
+        <h3>8. Invite users and set permissions</h3>
+        <p>Admin controls who can view, create, edit, delete, reserve, manage docs, and access sites.</p>
+        <div class="intro-tour-list"><div>Invite workers with the minimum permissions they need.</div><div>Promote trusted users to admin when they need full workflow control.</div></div>
+        <a class="intro-tour-link" href="/admin">Open Users & Permissions</a>
+      </div>
+      {% endif %}
       <div class="intro-tour-progress" aria-hidden="true"><span id="introTourProgress"></span></div>
     </div>
     <div class="intro-tour-actions">
-      <button class="intro-tour-skip" type="button" onclick="completeIntroTour()">Skip for now</button>
+      <button class="intro-tour-skip" type="button" onclick="snoozeIntroTour()">Finish later</button>
       <div style="display:flex;gap:8px;margin-left:auto">
         <button class="btn btn-secondary" type="button" id="introTourBack" onclick="moveIntroTour(-1)">Back</button>
         <button class="btn btn-primary" type="button" id="introTourNext" onclick="moveIntroTour(1)">Next</button>
@@ -958,6 +1010,18 @@ async function _switchCamera(){
 <script>
 let introTourIndex=0;
 let introTourResizeHandler=null;
+const INTRO_TOUR_ACTIVE_KEY='countDepotIntroTourActive';
+const INTRO_TOUR_STEP_KEY='countDepotIntroTourStep';
+const INTRO_TOUR_SNOOZE_KEY='countDepotIntroTourSnoozed';
+function introTourSteps(){
+  return [...document.querySelectorAll('#introTourOverlay .intro-tour-step')];
+}
+function introTourCurrentPath(){
+  return window.location.pathname.replace(/\/$/,'')||'/';
+}
+function introTourStepPath(step){
+  return (step?.dataset.path||'').replace(/\/$/,'')||'/';
+}
 function clearIntroTourTarget(){
   document.querySelectorAll('.intro-tour-target-active').forEach(el=>el.classList.remove('intro-tour-target-active'));
   const spot=document.getElementById('introTourSpotlight');
@@ -997,8 +1061,11 @@ function positionIntroTourSpotlight(){
 function refreshIntroTour(){
   const overlay=document.getElementById('introTourOverlay');
   if(!overlay)return;
-  const steps=[...overlay.querySelectorAll('.intro-tour-step')];
+  const steps=introTourSteps();
+  if(!steps.length){completeIntroTour();return;}
+  introTourIndex=Math.max(0,Math.min(steps.length-1,introTourIndex));
   steps.forEach((step,idx)=>step.classList.toggle('active',idx===introTourIndex));
+  steps.forEach((step,idx)=>step.dataset.step=String(idx));
   const progress=document.getElementById('introTourProgress');
   if(progress)progress.style.width=((introTourIndex+1)/steps.length*100)+'%';
   const back=document.getElementById('introTourBack');
@@ -1007,17 +1074,64 @@ function refreshIntroTour(){
   if(next)next.textContent=introTourIndex===steps.length-1?'Finish':'Next';
   positionIntroTourSpotlight();
 }
+function showIntroTourCard(){
+  const overlay=document.getElementById('introTourOverlay');
+  const choice=document.getElementById('introTourChoice');
+  const card=document.getElementById('introTourCard');
+  if(!overlay||!card)return;
+  overlay.classList.add('show');
+  overlay.classList.remove('choice-mode');
+  if(choice)choice.classList.add('tour-hidden');
+  card.classList.remove('tour-hidden');
+}
+function showIntroTourChoice(){
+  const overlay=document.getElementById('introTourOverlay');
+  const choice=document.getElementById('introTourChoice');
+  const card=document.getElementById('introTourCard');
+  if(!overlay||!choice)return;
+  overlay.classList.add('show','choice-mode');
+  choice.classList.remove('tour-hidden');
+  if(card)card.classList.add('tour-hidden');
+  clearIntroTourTarget();
+}
+function goToIntroTourStep(index){
+  const steps=introTourSteps();
+  if(!steps.length)return;
+  introTourIndex=Math.max(0,Math.min(steps.length-1,index));
+  sessionStorage.setItem(INTRO_TOUR_ACTIVE_KEY,'1');
+  sessionStorage.setItem(INTRO_TOUR_STEP_KEY,String(introTourIndex));
+  sessionStorage.removeItem(INTRO_TOUR_SNOOZE_KEY);
+  const targetPath=introTourStepPath(steps[introTourIndex]);
+  if(targetPath&&targetPath!==introTourCurrentPath()){
+    window.location.href=targetPath;
+    return;
+  }
+  showIntroTourCard();
+  refreshIntroTour();
+}
+function startIntroTour(){
+  goToIntroTourStep(introTourIndex||0);
+}
 function moveIntroTour(delta){
-  const steps=[...document.querySelectorAll('#introTourOverlay .intro-tour-step')];
+  const steps=introTourSteps();
   if(!steps.length)return;
   if(delta>0&&introTourIndex>=steps.length-1){completeIntroTour();return;}
-  introTourIndex=Math.max(0,Math.min(steps.length-1,introTourIndex+delta));
-  refreshIntroTour();
+  goToIntroTourStep(introTourIndex+delta);
+}
+function snoozeIntroTour(){
+  const overlay=document.getElementById('introTourOverlay');
+  if(overlay)overlay.classList.remove('show');
+  clearIntroTourTarget();
+  sessionStorage.removeItem(INTRO_TOUR_ACTIVE_KEY);
+  sessionStorage.setItem(INTRO_TOUR_SNOOZE_KEY,'1');
 }
 async function completeIntroTour(keepNavigating){
   const overlay=document.getElementById('introTourOverlay');
   if(overlay)overlay.classList.remove('show');
   clearIntroTourTarget();
+  sessionStorage.removeItem(INTRO_TOUR_ACTIVE_KEY);
+  sessionStorage.removeItem(INTRO_TOUR_STEP_KEY);
+  sessionStorage.removeItem(INTRO_TOUR_SNOOZE_KEY);
   if(introTourResizeHandler){
     window.removeEventListener('resize',introTourResizeHandler);
     introTourResizeHandler=null;
@@ -1027,10 +1141,17 @@ async function completeIntroTour(keepNavigating){
   }catch(e){}
 }
 document.addEventListener('DOMContentLoaded',()=>{
-  refreshIntroTour();
-  if(document.getElementById('introTourOverlay')){
-    introTourResizeHandler=()=>positionIntroTourSpotlight();
-    window.addEventListener('resize',introTourResizeHandler);
+  const overlay=document.getElementById('introTourOverlay');
+  if(!overlay)return;
+  introTourResizeHandler=()=>positionIntroTourSpotlight();
+  window.addEventListener('resize',introTourResizeHandler);
+  if(sessionStorage.getItem(INTRO_TOUR_ACTIVE_KEY)==='1'){
+    introTourIndex=parseInt(sessionStorage.getItem(INTRO_TOUR_STEP_KEY)||'0',10)||0;
+    goToIntroTourStep(introTourIndex);
+  }else if(sessionStorage.getItem(INTRO_TOUR_SNOOZE_KEY)==='1'){
+    overlay.classList.remove('show');
+  }else{
+    showIntroTourChoice();
   }
 });
 if ('serviceWorker' in navigator) {

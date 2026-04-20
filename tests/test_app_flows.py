@@ -97,10 +97,19 @@ def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
         page = _as_response(app, app.preprocess_request() or inventory())
 
     body = page.get_data(as_text=True)
+    assert "Want a quick CountDepot walkthrough?" in body
+    assert "Start tutorial now" in body
+    assert "Later" in body
+    assert "I don&#39;t need a tutorial" in body or "I don't need a tutorial" in body
     assert "First login guide" in body
     assert "Start with categories" in body
     assert "Create products" in body
     assert "Use sites and locations" in body
+    assert "Add SOPs and team docs" in body
+    assert 'data-path="/docs"' in body
+    assert 'data-tour="docs"' in body
+    assert "countDepotIntroTourActive" in body
+    assert "goToIntroTourStep" in body
     assert 'id="introTourSpotlight"' in body
     assert 'data-target="categories"' in body
     assert 'data-tour="categories"' in body
