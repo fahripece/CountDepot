@@ -851,7 +851,7 @@ function _cameraErrorMessage(err){
 }
 async function _loadZxing(){
   if(window.ZXingBrowser||window.ZXing)return window.ZXingBrowser||window.ZXing;
-  await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/umd/index.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+  await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://unpkg.com/@zxing/browser@latest';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   return window.ZXingBrowser||window.ZXing;
 }
 async function _populateCameraDevices(){
@@ -904,13 +904,25 @@ async function _startCamera(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
     status.textContent='Camera not available on this browser.';status.style.color='#b91c1c';return;
   }
+  let video;
   try{
-    const video=await _openCameraStream(_camLastDeviceId);
-    if('BarcodeDetector' in window)await _startNativeDetector(video,status);
-    else await _startZxingDetector(video,status,_camLastDeviceId);
-    return;
+    video=await _openCameraStream(_camLastDeviceId);
   }catch(err){
     status.textContent=_cameraErrorMessage(err);
+    status.style.color='#b91c1c';
+    return;
+  }
+  try{
+    await _startZxingDetector(video,status,_camLastDeviceId);
+    return;
+  }catch(err){
+    console.warn('ZXing scanner failed; trying native BarcodeDetector.',err);
+  }
+  try{
+    if('BarcodeDetector' in window){await _startNativeDetector(video,status);return;}
+    throw new Error('No barcode detector available');
+  }catch(err){
+    status.textContent='Camera opened, but the barcode scanner could not start. Type or paste the barcode below.';
     status.style.color='#b91c1c';
   }
 }
@@ -919,13 +931,22 @@ async function _switchCamera(){
   const deviceId=sel.value;
   _stopCamera();
   const status=document.getElementById('camScanStatus');
+  let video;
   try{
     _camLastDeviceId=deviceId;
-    const video=await _openCameraStream(deviceId);
-    if('BarcodeDetector' in window)await _startNativeDetector(video,status);
-    else await _startZxingDetector(video,status,deviceId);
-    return;
+    video=await _openCameraStream(deviceId);
   }catch(e){status.textContent=_cameraErrorMessage(e);status.style.color='#b91c1c';}
+  if(!video)return;
+  try{
+    await _startZxingDetector(video,status,deviceId);
+    return;
+  }catch(e){
+    console.warn('ZXing scanner failed after camera switch; trying native BarcodeDetector.',e);
+  }
+  try{
+    if('BarcodeDetector' in window){await _startNativeDetector(video,status);return;}
+    throw new Error('No barcode detector available');
+  }catch(e){status.textContent='Camera opened, but the barcode scanner could not start. Type or paste the barcode below.';status.style.color='#b91c1c';}
 }
 </script>
 

@@ -16,11 +16,12 @@
         <div style="font-size:16px;font-weight:600;color:#0f172a">Scan Item</div>
         <div style="font-size:13px;color:#94a3b8;margin-top:3px">Use your barcode scanner or type a serial / SKU below</div>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px" class="co-scan-row">
         <input id="scanBox" class="input mono" placeholder="Scan barcode or type serial / SKU…"
           style="flex:1;font-size:15px;padding:12px 14px;letter-spacing:.3px"
           autocomplete="off" autofocus
           onkeydown="if(event.key==='Enter')doScan()">
+        <button class="btn btn-secondary" style="padding:12px 16px;font-size:14px" onclick="scanCheckoutWithCamera()" type="button">Camera</button>
         <button class="btn btn-primary" style="padding:12px 20px;font-size:14px" onclick="doScan()">Find</button>
       </div>
       <div id="scan-feedback" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:500"></div>
@@ -82,10 +83,22 @@
 .recent-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;transition:box-shadow .12s}
 .recent-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .co-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+@media(max-width:640px){
+  .co-scan-row{display:grid!important;grid-template-columns:1fr 1fr;gap:8px!important}
+  .co-scan-row #scanBox{grid-column:1 / -1}
+  .co-scan-row .btn{width:100%;min-height:46px}
+}
 </style>
 
 <script>
 let _pendingItem=null;
+
+function scanCheckoutWithCamera(){
+  openCameraScanner(code=>{
+    document.getElementById('scanBox').value=code;
+    doScan();
+  });
+}
 
 async function doScan(){
   const code=document.getElementById('scanBox').value.trim();

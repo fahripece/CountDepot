@@ -2464,6 +2464,26 @@ def test_mobile_page_is_scanner_first_and_installable(app, tenant):
     assert "Sign in or permission required" in body
 
 
+def test_checkout_page_has_camera_scan_button(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/checkout",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "scanCheckoutWithCamera" in body
+    assert "openCameraScanner" in body
+    assert "Camera</button>" in body
+
+
 def test_demo_request_email_goes_to_platform_admin(app, monkeypatch):
     sent = {}
 
