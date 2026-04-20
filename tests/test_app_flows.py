@@ -2449,6 +2449,8 @@ def test_mobile_page_is_scanner_first_and_installable(app, tenant):
     assert "Full CountDepot shortcuts" in body
     assert "body:has(.m-app)" not in body
     assert ".mob-sidebar-overlay{display:flex!important}" not in body
+    assert ".sidebar .navlink span:not(.nb){display:none}" in body
+    assert ".mob-sidebar .navlink span{display:initial}" in body
     assert "Scan Item Barcode" in body
     assert "All inventory" in body
     assert "/procurement" in body
