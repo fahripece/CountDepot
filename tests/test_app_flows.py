@@ -2454,8 +2454,12 @@ def test_mobile_page_is_scanner_first_and_installable(app, tenant):
     assert "Scan Item Barcode" in body
     assert "All inventory" in body
     assert "/procurement" in body
-    assert "Use this like an app" in body
-    assert "beforeinstallprompt" in body
+    assert "Use this like an app" not in body
+    assert "beforeinstallprompt" not in body
+    assert "installPrompt" not in body
+    assert "BarcodeDetector" in body
+    assert "ZXingBrowser" in body
+    assert "Camera requires HTTPS" in body
     assert "scanAddSerial" in body
     assert "Sign in or permission required" in body
 

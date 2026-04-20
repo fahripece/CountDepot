@@ -15,15 +15,6 @@
     </div>
   </header>
 
-  <section class="m-install" id="installPrompt" hidden>
-    <div>
-      <strong>Use this like an app</strong>
-      <span>Add CountDepot to your home screen for faster warehouse access.</span>
-    </div>
-    <button type="button" id="installBtn">Install</button>
-    <button type="button" class="m-install-x" onclick="dismissInstallPrompt()" aria-label="Dismiss install prompt">x</button>
-  </section>
-
   <section class="m-shortcuts" aria-label="Full CountDepot shortcuts">
     <a href="/" class="m-shortcut"><strong>All inventory</strong><span>Search, filter, edit, bulk actions</span></a>
     <a href="/add-item" class="m-shortcut"><strong>Add item</strong><span>Full add workflow and product fields</span></a>
@@ -121,11 +112,6 @@ body.mobile-page{background:#eef2f7}
 .m-head-actions{display:flex;flex-direction:column;align-items:flex-end;gap:7px}
 .m-chip{font-size:11px;font-weight:900;border-radius:999px;padding:5px 9px;background:#ede7ff;color:#4f2fbd;border:1px solid #ddd6fe}
 .m-logout{font-size:12px;font-weight:800;color:#dc2626;background:#fff;border:1px solid #fecaca;border-radius:999px;padding:8px 11px;box-shadow:var(--shadow-1)}
-.m-install{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;background:#fff;border:1px solid #ddd6fe;border-radius:20px;padding:12px;margin-bottom:12px;box-shadow:0 12px 30px rgba(100,66,214,.12)}
-.m-install strong{display:block;color:#111827;font-size:13px}
-.m-install span{display:block;color:#64748b;font-size:12px;line-height:1.35;margin-top:2px}
-.m-install button{border:0;border-radius:999px;font-weight:900;padding:9px 12px;background:#6442d6;color:#fff}
-.m-install .m-install-x{background:#f1f5f9;color:#64748b;width:34px;height:34px;padding:0}
 .m-shortcuts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .m-shortcut{display:block;background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:13px 14px;box-shadow:var(--shadow-1);min-height:86px}
 .m-shortcut strong{display:block;color:#111827;font-size:14px;line-height:1.1}
@@ -180,7 +166,6 @@ const csrf=document.querySelector('meta[name="csrf-token"]').content;
 const userName={{ session.get('username','')|tojson }};
 let currentItem=null;
 let searchResults=[];
-let deferredInstallPrompt=null;
 
 function toastMsg(msg,type='info'){ if(window.toast) toast(msg,type); else alert(msg); }
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
@@ -350,20 +335,6 @@ async function addItem(){
     toastMsg('Item added','success');document.getElementById('mQuery').value='#'+data.id;lookupInput();
   }catch(e){toastMsg(e.message||'Add failed','error');}
 }
-function dismissInstallPrompt(){localStorage.setItem('countdepot-install-dismissed','1');document.getElementById('installPrompt').hidden=true;}
-window.addEventListener('beforeinstallprompt',e=>{
-  if(localStorage.getItem('countdepot-install-dismissed'))return;
-  e.preventDefault();
-  deferredInstallPrompt=e;
-  document.getElementById('installPrompt').hidden=false;
-});
-document.getElementById('installBtn').addEventListener('click',async()=>{
-  if(!deferredInstallPrompt)return;
-  deferredInstallPrompt.prompt();
-  await deferredInstallPrompt.userChoice;
-  deferredInstallPrompt=null;
-  dismissInstallPrompt();
-});
 document.getElementById('resFrom').value=today();
 document.getElementById('resTo').value=today();
 if(new URLSearchParams(location.search).get('action')==='add')setTab('add');

@@ -811,22 +811,92 @@ function closeMobSidebar(){document.getElementById('mobSidebar').classList.remov
 // ── Camera barcode scanner (global, reusable) ─────────────────────────────────
 // Usage: openCameraScanner(code => doSomethingWith(code))
 // Works on any page — feeds into whatever callback is passed.
-let _camScanCb=null,_camReader=null,_camStream=null;
+let _camScanCb=null,_camReader=null,_camStream=null,_camNativeDetector=null,_camNativeLoop=false,_camLastDeviceId=null;
 
 function openCameraScanner(cb){
   _camScanCb=cb;
-  document.getElementById('camScanOverlay').style.display='flex';
+  const overlay=document.getElementById('camScanOverlay');
+  if(!overlay){alert('Camera scanner is not available on this page.');return;}
+  overlay.style.display='flex';
   _startCamera();
 }
 function closeCameraScanner(){
-  document.getElementById('camScanOverlay').style.display='none';
+  const overlay=document.getElementById('camScanOverlay');
+  if(overlay)overlay.style.display='none';
   _stopCamera();
   _camScanCb=null;
 }
 function _stopCamera(){
-  if(_camReader){try{_camReader.reset();}catch(e){}}_camReader=null;
+  _camNativeLoop=false;
+  if(_camReader){try{if(typeof _camReader.stop==='function')_camReader.stop();else if(typeof _camReader.reset==='function')_camReader.reset();}catch(e){}}
+  _camReader=null;
   if(_camStream){_camStream.getTracks().forEach(t=>t.stop());}_camStream=null;
   const v=document.getElementById('camScanVideo');if(v)v.srcObject=null;
+}
+function _deliverCameraCode(code){
+  if(!code)return;
+  const status=document.getElementById('camScanStatus');
+  if(status){status.textContent=`Scanned ${code}`;status.style.color='#15803d';}
+  const flash=document.getElementById('camScanFlash');
+  if(flash){flash.style.opacity='1';setTimeout(()=>flash.style.opacity='0',200);}
+  if(_camScanCb)_camScanCb(code);
+  setTimeout(closeCameraScanner,250);
+}
+function _cameraErrorMessage(err){
+  if(!window.isSecureContext&&location.hostname!=='localhost'&&location.hostname!=='127.0.0.1')return 'Camera requires HTTPS. Open CountDepot from the secure https:// site.';
+  if(err&&err.name==='NotAllowedError')return 'Camera permission denied. Allow camera access in your browser settings.';
+  if(err&&err.name==='NotFoundError')return 'No camera found on this device.';
+  if(err&&err.name==='NotReadableError')return 'Camera is already in use by another app.';
+  return 'Could not access camera. You can still type or paste the barcode.';
+}
+async function _loadZxing(){
+  if(window.ZXingBrowser||window.ZXing)return window.ZXingBrowser||window.ZXing;
+  await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/umd/index.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+  return window.ZXingBrowser||window.ZXing;
+}
+async function _populateCameraDevices(){
+  const sel=document.getElementById('camDeviceSelect');
+  if(!sel||!navigator.mediaDevices?.enumerateDevices)return;
+  const devices=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+  sel.innerHTML='';
+  devices.forEach((d,i)=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||`Camera ${i+1}`;if(_camLastDeviceId&&d.deviceId===_camLastDeviceId)o.selected=true;sel.appendChild(o);});
+  sel.style.display=devices.length>1?'block':'none';
+}
+async function _openCameraStream(deviceId){
+  const videoConstraints=deviceId?{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720}}:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}};
+  _camStream=await navigator.mediaDevices.getUserMedia({video:videoConstraints,audio:false});
+  const track=_camStream.getVideoTracks()[0];
+  _camLastDeviceId=track?.getSettings?.().deviceId||deviceId||_camLastDeviceId;
+  const video=document.getElementById('camScanVideo');
+  video.srcObject=_camStream;
+  await video.play();
+  await _populateCameraDevices();
+  return video;
+}
+async function _startNativeDetector(video,status){
+  const supported=await BarcodeDetector.getSupportedFormats().catch(()=>[]);
+  const formats=supported.filter(f=>['qr_code','code_128','code_39','code_93','codabar','ean_13','ean_8','upc_a','upc_e','itf'].includes(f));
+  _camNativeDetector=new BarcodeDetector(formats.length?{formats}:{});
+  _camNativeLoop=true;
+  const scan=async()=>{
+    if(!_camNativeLoop||!_camNativeDetector)return;
+    try{const codes=await _camNativeDetector.detect(video);if(codes&&codes.length){_deliverCameraCode(codes[0].rawValue);return;}}catch(e){}
+    requestAnimationFrame(scan);
+  };
+  status.textContent='Point camera at barcode...';status.style.color='#15803d';
+  scan();
+}
+async function _startZxingDetector(video,status,deviceId){
+  const ZX=await _loadZxing();
+  if(!ZX||!ZX.BrowserMultiFormatReader)throw new Error('Barcode scanner library could not load.');
+  const reader=new ZX.BrowserMultiFormatReader();
+  const onResult=(result)=>{if(result&&typeof result.getText==='function')_deliverCameraCode(result.getText());};
+  status.textContent='Point camera at barcode...';status.style.color='#15803d';
+  if(typeof reader.decodeFromStream==='function'&&_camStream){reader.decodeFromStream(_camStream,video,onResult);_camReader=reader;return;}
+  _stopCamera();
+  const controls=await reader.decodeFromVideoDevice(deviceId||undefined,video,onResult);
+  _camReader=controls||reader;
+  await _populateCameraDevices();
 }
 async function _startCamera(){
   const status=document.getElementById('camScanStatus');
@@ -834,44 +904,13 @@ async function _startCamera(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
     status.textContent='Camera not available on this browser.';status.style.color='#b91c1c';return;
   }
-  // Load ZXing lazily
-  if(typeof ZXing==='undefined'){
-    await new Promise((res,rej)=>{
-      const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/umd/index.min.js';
-      s.onload=res;s.onerror=rej;document.head.appendChild(s);
-    });
-  }
   try{
-    // Prefer rear camera on mobile
-    _camStream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}
-    });
-    const video=document.getElementById('camScanVideo');
-    video.srcObject=_camStream;
-    await video.play();
-    status.textContent='Point camera at barcode…';status.style.color='#15803d';
-    // Populate camera selector
-    const devices=await ZXing.BrowserCodeReader.listVideoInputDevices();
-    const sel=document.getElementById('camDeviceSelect');
-    sel.innerHTML='';
-    devices.forEach((d,i)=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||`Camera ${i+1}`;sel.appendChild(o);});
-    sel.style.display=devices.length>1?'block':'none';
-    // Start decoding
-    _camReader=new ZXing.BrowserMultiFormatReader();
-    _camReader.decodeFromStream(_camStream,video,(result,err)=>{
-      if(!result)return;
-      const code=result.getText();
-      // Flash feedback
-      status.textContent=`✓ ${code}`;status.style.color='#15803d';
-      document.getElementById('camScanFlash').style.opacity='1';
-      setTimeout(()=>document.getElementById('camScanFlash').style.opacity='0',200);
-      // Deliver to callback, close
-      if(_camScanCb)_camScanCb(code);
-      setTimeout(closeCameraScanner,300);
-    });
+    const video=await _openCameraStream(_camLastDeviceId);
+    if('BarcodeDetector' in window)await _startNativeDetector(video,status);
+    else await _startZxingDetector(video,status,_camLastDeviceId);
+    return;
   }catch(err){
-    status.textContent=err.name==='NotAllowedError'?'Camera permission denied.':'Could not access camera.';
+    status.textContent=_cameraErrorMessage(err);
     status.style.color='#b91c1c';
   }
 }
@@ -881,18 +920,12 @@ async function _switchCamera(){
   _stopCamera();
   const status=document.getElementById('camScanStatus');
   try{
-    _camStream=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId}}});
-    const video=document.getElementById('camScanVideo');
-    video.srcObject=_camStream;await video.play();
-    _camReader=new ZXing.BrowserMultiFormatReader();
-    _camReader.decodeFromStream(_camStream,video,(result)=>{
-      if(!result)return;
-      const code=result.getText();
-      status.textContent=`✓ ${code}`;status.style.color='#15803d';
-      if(_camScanCb)_camScanCb(code);
-      setTimeout(closeCameraScanner,300);
-    });
-  }catch(e){status.textContent='Could not switch camera.';status.style.color='#b91c1c';}
+    _camLastDeviceId=deviceId;
+    const video=await _openCameraStream(deviceId);
+    if('BarcodeDetector' in window)await _startNativeDetector(video,status);
+    else await _startZxingDetector(video,status,deviceId);
+    return;
+  }catch(e){status.textContent=_cameraErrorMessage(e);status.style.color='#b91c1c';}
 }
 </script>
 
