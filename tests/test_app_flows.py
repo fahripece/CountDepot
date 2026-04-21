@@ -69,9 +69,64 @@ def test_login_redirects_to_inventory_for_onboarded_tenant(app, tenant):
 
     assert response.status_code == 302
     assert response.headers["Location"] == "/"
-    assert saved_session["username"] == tenant["email"]
-    assert saved_session["role"] == "admin"
-    assert saved_session["user_id"]
+
+
+def test_login_requires_totp_for_tenant_user_when_enabled(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "UPDATE users SET totp_enabled=1, totp_secret=?, must_change_password=0 WHERE email=?",
+        ["JBSWY3DPEHPK3PXP", tenant["email"]],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant)
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Two-factor verification" in body
+    assert "authenticator app" in body
+    assert saved_session["pending_2fa_method"] == "totp"
+    assert saved_session["pending_2fa_user_id"] == 1
+
+
+def test_login_requires_email_otp_for_tenant_user_when_enabled(app, tenant, monkeypatch):
+    sent = {}
+
+    def fake_send_email(to, subject, html, text):
+        sent["to"] = to
+        sent["subject"] = subject
+        sent["html"] = html
+        sent["text"] = text
+
+    monkeypatch.setattr(Config, "SMTP_HOST", "smtp.example.com", raising=False)
+    monkeypatch.setattr("app.mailer.send_email", fake_send_email)
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "UPDATE users SET two_fa_enabled=1, totp_enabled=0, totp_secret=NULL, must_change_password=0 WHERE email=?",
+        [tenant["email"]],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant)
+    body = response.get_data(as_text=True)
+
+    db = sqlite3.connect(tenant["db_path"])
+    otp_row = db.execute(
+        "SELECT otp FROM login_otp WHERE user_id=1 AND used=0 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    db.close()
+
+    assert response.status_code == 200
+    assert "Two-factor verification" in body
+    assert "email address" in body
+    assert saved_session["pending_2fa_method"] == "email"
+    assert saved_session["pending_2fa_user_id"] == 1
+    assert sent["to"] == tenant["email"]
+    assert sent["subject"] == "Your CountDepot login code"
+    assert otp_row is not None
 
 
 def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
@@ -2587,6 +2642,29 @@ def test_inventory_clone_modal_has_single_and_bulk_scan_actions(app, tenant):
     assert "scanSingleCloneSerial" in body
     assert "scanNextBulkCloneSerial" in body
     assert "Multiple serials entered. Use Create Bulk Clones." in body
+
+
+def test_admin_page_shows_email_otp_only_for_2fa(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/admin",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Two-Factor Authentication" in body
+    assert "Email OTP" in body
+    assert "next fresh login" in body
+    assert "Authenticator App (TOTP)" not in body
+    assert "startTotpSetup" not in body
+    assert "/api/user/totp/setup" not in body
 
 
 def test_demo_request_email_goes_to_platform_admin(app, monkeypatch):

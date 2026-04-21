@@ -147,35 +147,12 @@
 <div class="card" style="margin-bottom:20px">
   <div style="margin-bottom:12px">
     <div style="font-weight:600;font-size:15px">Two-Factor Authentication — Email OTP</div>
-    <div style="font-size:12px;color:#94a3b8;margin-top:1px">A one-time code sent to your email on each login. Requires SMTP to be configured.</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:1px">A one-time code sent to your email on sign-in. Requires SMTP to be configured and applies on your next fresh login.</div>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
     <div id="tfa-status" style="font-size:13px;color:#64748b">Loading…</div>
     <button class="btn btn-secondary btn-sm" id="tfa-btn" onclick="toggle2FA()" style="display:none"></button>
   </div>
-</div>
-
-<!-- TOTP -->
-<div class="card" style="margin-bottom:20px">
-  <div style="margin-bottom:12px">
-    <div style="font-weight:600;font-size:15px">Authenticator App (TOTP)</div>
-    <div style="font-size:12px;color:#94a3b8;margin-top:1px">Use Google Authenticator, Authy, or any TOTP app. Works offline — no email required.</div>
-  </div>
-  <div id="totp-status" style="font-size:13px;color:#64748b;margin-bottom:10px">Loading…</div>
-  <!-- Setup flow -->
-  <div id="totp-setup-area" style="display:none">
-    <div style="font-size:12px;color:#64748b;margin-bottom:10px">Scan this QR code with your authenticator app, then enter the 6-digit code to confirm.</div>
-    <div id="totp-qr" style="margin-bottom:12px;display:flex;justify-content:center"></div>
-    <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-align:center">Or enter the secret manually: <code id="totp-secret-txt" style="background:#f0efec;padding:1px 6px;border-radius:3px;font-size:11px"></code></div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input id="totp-code-input" class="input" placeholder="6-digit code" maxlength="6" inputmode="numeric"
-             style="width:140px;font-family:monospace;letter-spacing:4px;font-size:16px" oninput="this.value=this.value.replace(/\D/g,'')">
-      <button class="btn btn-primary btn-sm" onclick="confirmTotp()">Confirm &amp; Enable</button>
-      <button class="btn btn-secondary btn-sm" onclick="cancelTotpSetup()">Cancel</button>
-    </div>
-    <div id="totp-setup-err" style="display:none;margin-top:8px;font-size:12px;color:#b91c1c"></div>
-  </div>
-  <div id="totp-btns" style="display:flex;gap:8px"></div>
 </div>
 
 <!-- API KEYS -->
@@ -1078,84 +1055,18 @@ async function load2FA(){
   const statusEl=document.getElementById('tfa-status');
   const btn=document.getElementById('tfa-btn');
   statusEl.innerHTML=_2faEnabled
-    ?'<span style="color:#15803d;font-weight:600">✓ Enabled</span> — a code is required on each login'
-    :'<span style="color:#94a3b8">Disabled</span> — no extra verification at login';
+    ?'<span style="color:#15803d;font-weight:600">✓ Enabled</span> — an email code will be required on your next sign-in'
+    :'<span style="color:#94a3b8">Disabled</span> — no email code is required at sign-in';
   btn.textContent=_2faEnabled?'Disable 2FA':'Enable 2FA';
   btn.style.display='';
   btn.className='btn btn-sm '+(_2faEnabled?'btn-danger':'btn-secondary');
 }
 async function toggle2FA(){
   const res=await api('/api/user/2fa',{enabled:!_2faEnabled});
-  if(res.ok){toast(res.enabled?'2FA enabled ✓':'2FA disabled','ok');load2FA();}
+  if(res.ok){toast(res.enabled?'Email login codes enabled — this applies on your next sign-in':'2FA disabled','ok');load2FA();}
   else toast(res.msg||'Error','err');
 }
 load2FA();
-
-// ── TOTP ──
-let _totpEnabled=false;
-async function loadTotp(){
-  try{
-    const r=await fetch('/api/user/me').then(r=>r.json());
-    _totpEnabled=!!(r.totp_enabled);
-  }catch(e){_totpEnabled=false;}
-  const statusEl=document.getElementById('totp-status');
-  const btns=document.getElementById('totp-btns');
-  statusEl.innerHTML=_totpEnabled
-    ?'<span style="color:#15803d;font-weight:600">✓ Enabled</span> — authenticator app required on each login'
-    :'<span style="color:#94a3b8">Disabled</span>';
-  btns.innerHTML=_totpEnabled
-    ?'<button class="btn btn-danger btn-sm" onclick="disableTotp()">Disable Authenticator</button>'
-    :'<button class="btn btn-secondary btn-sm" onclick="startTotpSetup()">Set Up Authenticator App</button>';
-}
-async function startTotpSetup(){
-  const res=await api('/api/user/totp/setup',{});
-  if(!res.ok){toast(res.msg||'Error','err');return;}
-  document.getElementById('totp-secret-txt').textContent=res.secret;
-  document.getElementById('totp-setup-area').style.display='block';
-  document.getElementById('totp-btns').style.display='none';
-  // Render QR code using a lightweight inline SVG via a public CDN-free approach
-  // We'll encode the URI and link to it so user can open in any QR app
-  const qrEl=document.getElementById('totp-qr');
-  qrEl.innerHTML=`
-    <div style="text-align:center">
-      <a href="${encodeURI(res.uri)}" style="display:inline-block;padding:10px 16px;background:#f8f7f5;border:1px solid #e5e3de;border-radius:8px;font-size:12px;color:#475569;text-decoration:none" target="_blank">
-        Open in authenticator app
-      </a>
-      <div style="font-size:11px;color:#94a3b8;margin-top:6px">Or copy the secret key manually</div>
-    </div>`;
-  // Try to render QR with qrcode.js if available
-  if(window.QRCode){
-    qrEl.innerHTML='<canvas id="totp-canvas"></canvas>';
-    new QRCode(document.getElementById('totp-canvas'),{text:res.uri,width:180,height:180});
-  }
-}
-function cancelTotpSetup(){
-  document.getElementById('totp-setup-area').style.display='none';
-  document.getElementById('totp-btns').style.display='flex';
-  document.getElementById('totp-code-input').value='';
-  document.getElementById('totp-setup-err').style.display='none';
-}
-async function confirmTotp(){
-  const code=document.getElementById('totp-code-input').value.trim();
-  if(code.length!==6){toast('Enter the 6-digit code from your app','warn');return;}
-  const res=await api('/api/user/totp/verify',{code});
-  if(res.ok){
-    toast('Authenticator app enabled ✓','ok');
-    cancelTotpSetup();
-    loadTotp();
-  }else{
-    const err=document.getElementById('totp-setup-err');
-    err.textContent=res.msg||'Verification failed';
-    err.style.display='block';
-  }
-}
-async function disableTotp(){
-  if(!confirm('Disable authenticator app 2FA? You will only need your password to log in.'))return;
-  const res=await api('/api/user/totp/disable',{});
-  if(res.ok){toast('Authenticator disabled','warn');loadTotp();}
-  else toast(res.msg||'Error','err');
-}
-loadTotp();
 
 // ── API Keys ──
 async function loadApiKeys(){
