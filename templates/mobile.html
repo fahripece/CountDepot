@@ -28,10 +28,24 @@
 
   <section class="m-scan">
     <button class="m-scan-btn" type="button" onclick="scanWithCamera()">Scan Item Barcode</button>
+    <div class="m-bulk-toggle"><label><input id="mBulkToggle" type="checkbox" onchange="toggleMobileBulkMode()"> Bulk checkout queue</label></div>
     <div class="m-search">
       <input id="mQuery" placeholder="Serial, SKU, item name..." autocomplete="off" autocapitalize="none" enterkeyhint="search" onkeydown="if(event.key==='Enter')lookupInput()">
       <button type="button" onclick="lookupInput()">Find</button>
     </div>
+  </section>
+
+  <section class="m-panel" id="mobileBulkPanel" hidden>
+    <div class="m-row-head">
+      <h2>Bulk Checkout Queue</h2>
+      <button class="m-lite" type="button" onclick="clearMobileBulkQueue()">Clear</button>
+    </div>
+    <div class="m-grid">
+      <label>Tech Name<input id="mBulkWho" placeholder="Who is taking it"></label>
+      <label>Job / Client<input id="mBulkJob" placeholder="Client, site, or job"></label>
+    </div>
+    <div id="mobileBulkList" class="m-empty">Scan items to build a checkout queue.</div>
+    <button class="m-primary" id="mobileBulkSubmit" type="button" onclick="submitMobileBulkCheckout()" disabled>Check Out Queue</button>
   </section>
 
   <section class="m-tabs" role="tablist" aria-label="Mobile inventory actions">
@@ -122,6 +136,12 @@ body.mobile-page{background:#eef2f7}
 .m-search input,.m-search button,.m-panel input,.m-panel select{height:46px;border-radius:14px;border:1px solid #e2e8f0;padding:0 13px;font-size:15px;background:#fff;color:#111827}
 .m-search input{min-width:0;flex:1;background:#fff}
 .m-search button{border:0;background:#c8b3fd;color:#24145f;font-weight:900;touch-action:manipulation}
+.m-bulk-toggle{margin-top:12px;font-size:12.5px;color:#e2e8f0}
+.m-bulk-toggle label{display:inline-flex;align-items:center;gap:8px;font-weight:800}
+.m-bulk-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #e2e8f0}
+.m-bulk-item:last-child{border-bottom:0}
+.m-bulk-item-meta{font-size:12px;color:#64748b;margin-top:3px}
+.m-bulk-remove{border:0;background:#fee2e2;color:#b91c1c;border-radius:999px;padding:8px 10px;font-weight:900}
 .m-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px}
 .m-tabs button{height:44px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#64748b;font-weight:900;touch-action:manipulation}
 .m-tabs button.active{background:#111827;color:#fff;border-color:#111827}
@@ -166,6 +186,8 @@ const csrf=document.querySelector('meta[name="csrf-token"]').content;
 const userName={{ session.get('username','')|tojson }};
 let currentItem=null;
 let searchResults=[];
+let mobileBulkMode=false;
+let mobileBulkQueue=[];
 
 function toastMsg(msg,type='info'){ if(window.toast) toast(msg,type); else alert(msg); }
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
@@ -174,6 +196,71 @@ function setTab(tab){
   document.querySelectorAll('.m-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   ['lookup','reserve','add','active'].forEach(id=>document.getElementById(id+'Panel').hidden=id!==tab);
   if(tab==='active') loadReservations();
+}
+function toggleMobileBulkMode(){
+  mobileBulkMode=!!document.getElementById('mBulkToggle').checked;
+  document.getElementById('mobileBulkPanel').hidden=!mobileBulkMode;
+}
+function renderMobileBulkQueue(){
+  const list=document.getElementById('mobileBulkList');
+  const btn=document.getElementById('mobileBulkSubmit');
+  btn.disabled=!mobileBulkQueue.length;
+  if(!mobileBulkQueue.length){
+    list.className='m-empty';
+    list.innerHTML='Scan items to build a checkout queue.';
+    return;
+  }
+  list.className='';
+  list.innerHTML=mobileBulkQueue.map((row,idx)=>`
+    <div class="m-bulk-item">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:900;color:#111827">${esc(row.item.name)}${row.amount>1?` × ${row.amount}`:''}</div>
+        <div class="m-bulk-item-meta">${esc([row.item.serial||row.item.sku||row.item.internal_sku||('ID-'+row.item.id),row.item.shelf].filter(Boolean).join(' · '))}</div>
+      </div>
+      <button class="m-bulk-remove" type="button" onclick="removeMobileBulkItem(${idx})">Remove</button>
+    </div>`).join('');
+}
+function queueMobileCheckoutItem(item){
+  const existing=mobileBulkQueue.find(row=>row.item.id===item.id);
+  if(existing){
+    if(existing.qtyTracked){existing.amount+=1;renderMobileBulkQueue();return `Queued another unit of ${item.name}`;}
+    return `${item.name} is already queued`;
+  }
+  mobileBulkQueue.push({item,amount:1,qtyTracked:item.qty!==null&&item.qty!==undefined});
+  renderMobileBulkQueue();
+  return `Queued ${item.name}`;
+}
+function removeMobileBulkItem(idx){
+  mobileBulkQueue.splice(idx,1);
+  renderMobileBulkQueue();
+}
+function clearMobileBulkQueue(){
+  mobileBulkQueue=[];
+  renderMobileBulkQueue();
+}
+async function submitMobileBulkCheckout(){
+  if(!mobileBulkQueue.length)return;
+  const who=document.getElementById('mBulkWho').value.trim()||userName;
+  if(!who){toastMsg('Tech name is required','error');document.getElementById('mBulkWho').focus();return;}
+  const jobRef=document.getElementById('mBulkJob').value.trim();
+  const btn=document.getElementById('mobileBulkSubmit');
+  btn.disabled=true;
+  btn.textContent='Processing...';
+  let done=0, failed=[];
+  for(const row of mobileBulkQueue){
+    const body=row.qtyTracked
+      ? {id:row.item.id,who,amount:row.amount,action:'remove',note:'Mobile bulk checkout'}
+      : {id:row.item.id,who,job_ref:jobRef,scanned_code:row.item.serial||row.item.internal_sku||row.item.sku||''};
+    try{
+      const data=row.qtyTracked?await postJSON('/api/qty_adjust',body):await postJSON('/api/checkout',body);
+      if(data.ok)done+=row.amount||1;
+      else failed.push(data.detail||data.msg||`Checkout failed for ${row.item.name}`);
+    }catch(e){failed.push(e.message||`Checkout failed for ${row.item.name}`);}
+  }
+  btn.disabled=false;
+  btn.textContent='Check Out Queue';
+  if(done){toastMsg(`Checked out ${done} unit${done===1?'':'s'}`,'success');clearMobileBulkQueue();}
+  if(failed.length)toastMsg(failed[0],'error');
 }
 async function fetchJSON(url,opts={}){
   const r=await fetch(url,opts);
@@ -204,7 +291,17 @@ async function lookupInput(){
   document.getElementById('mResult').innerHTML='<div class="m-empty">Searching...</div>';
   try{
     let data=await fetchJSON('/api/scan?code='+encodeURIComponent(q));
-    if(data.found){await selectHydratedItem(data.item);return;}
+    if(data.found){
+      if(mobileBulkMode){
+        document.getElementById('mQuery').value='';
+        const hydrated=await fetchJSON('/api/items?q=%23'+encodeURIComponent(data.item.id)+'&hide_out=0');
+        const rows=Array.isArray(hydrated)?hydrated:(hydrated.items||[]);
+        const item=rows.find(x=>Number(x.id)===Number(data.item.id))||data.item;
+        document.getElementById('mResult').innerHTML=`<div class="m-note">${esc(queueMobileCheckoutItem(item))}</div>`;
+        return;
+      }
+      await selectHydratedItem(data.item);return;
+    }
     data=await fetchJSON('/api/items?q='+encodeURIComponent(q)+'&hide_out=0&per_page=20');
     const items=Array.isArray(data)?data:(data.items||[]);
     if(!items.length){document.getElementById('mResult').innerHTML='<div class="m-empty">No item found.</div>';document.getElementById('actionBar').hidden=true;return;}
@@ -340,5 +437,6 @@ document.getElementById('resFrom').value=today();
 document.getElementById('resTo').value=today();
 if(new URLSearchParams(location.search).get('action')==='add')setTab('add');
 loadReservations();
+renderMobileBulkQueue();
 </script>
 {% endblock %}

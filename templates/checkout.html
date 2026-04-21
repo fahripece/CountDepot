@@ -24,7 +24,40 @@
         <button class="btn btn-secondary" style="padding:12px 16px;font-size:14px" onclick="scanCheckoutWithCamera()" type="button">Camera</button>
         <button class="btn btn-primary" style="padding:12px 20px;font-size:14px" onclick="doScan()">Find</button>
       </div>
+      <div class="co-mode-row">
+        <label class="co-mode-pill"><input id="bulkModeToggle" type="checkbox" onchange="toggleBulkMode()"> Bulk queue mode</label>
+        <span id="bulkModeHint" class="co-mode-hint">Single item mode opens the checkout card right away.</span>
+      </div>
       <div id="scan-feedback" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:500"></div>
+    </div>
+  </div>
+
+  <div id="bulkQueueWrap" style="max-width:900px;margin:0 auto 24px;display:none">
+    <div style="background:#fff;border:1px solid #e5e3de;border-radius:14px;padding:22px 24px;box-shadow:0 2px 12px rgba(0,0,0,.05)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#0f172a">Bulk Checkout Queue</div>
+          <div style="font-size:12.5px;color:#64748b;margin-top:4px">Scan items one after another, then submit the whole batch.</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="clearBulkQueue()">Clear Queue</button>
+      </div>
+      <div class="co-bulk-fields">
+        <div class="field" style="margin-bottom:0">
+          <label class="label">Tech Name / Initials *</label>
+          <input class="input" id="bulkWho" placeholder="e.g. JD, John D.">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label class="label">Client / Location / Job Ref</label>
+          <input class="input" id="bulkLocation" placeholder="e.g. Acme Corp, Site B, Job #1042">
+        </div>
+      </div>
+      <div id="bulkQueueList" style="margin-top:14px">
+        <div style="text-align:center;padding:26px;color:#94a3b8;font-size:13px">Scan items to build a checkout queue.</div>
+      </div>
+      <div class="co-bulk-actions">
+        <div id="bulkQueueSummary" style="font-size:12.5px;color:#64748b">0 items queued</div>
+        <button class="btn btn-primary" id="bulkCheckoutBtn" type="button" onclick="submitBulkCheckout()" disabled>Check Out Queue</button>
+      </div>
     </div>
   </div>
 
@@ -83,21 +116,111 @@
 .recent-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;transition:box-shadow .12s}
 .recent-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .co-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.co-mode-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}
+.co-mode-pill{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:#0f172a;background:#f8fafc;border:1px solid #e2e8f0;border-radius:999px;padding:7px 12px}
+.co-mode-hint{font-size:12px;color:#94a3b8}
+.co-bulk-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.co-bulk-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;flex-wrap:wrap}
+.co-bulk-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 0;border-bottom:1px solid #f1f5f9}
+.co-bulk-row:last-child{border-bottom:0}
+.co-bulk-meta{font-size:11.5px;color:#64748b;margin-top:4px;font-family:'IBM Plex Mono',monospace}
+.co-bulk-remove{background:#fff1f2;color:#b91c1c;border:1px solid #fecdd3;border-radius:999px;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer}
 @media(max-width:640px){
   .co-scan-row{display:grid!important;grid-template-columns:1fr 1fr;gap:8px!important}
   .co-scan-row #scanBox{grid-column:1 / -1}
   .co-scan-row .btn{width:100%;min-height:46px}
+  .co-bulk-fields{grid-template-columns:1fr}
 }
 </style>
 
 <script>
 let _pendingItem=null;
+let _bulkCheckoutMode=false;
+let _bulkQueue=[];
 
 function scanCheckoutWithCamera(){
   openCameraScanner(code=>{
     document.getElementById('scanBox').value=code;
     doScan();
   });
+}
+function toggleBulkMode(){
+  _bulkCheckoutMode=!!document.getElementById('bulkModeToggle').checked;
+  document.getElementById('bulkQueueWrap').style.display=_bulkCheckoutMode?'block':'none';
+  document.getElementById('bulkModeHint').textContent=_bulkCheckoutMode
+    ?'Queue mode keeps scanning items until you submit the full batch.'
+    :'Single item mode opens the checkout card right away.';
+  document.getElementById('scanBox').focus();
+}
+function renderBulkQueue(){
+  const list=document.getElementById('bulkQueueList');
+  const summary=document.getElementById('bulkQueueSummary');
+  const btn=document.getElementById('bulkCheckoutBtn');
+  const total=_bulkQueue.reduce((sum,row)=>sum+(row.amount||1),0);
+  summary.textContent=`${total} unit${total===1?'':'s'} queued across ${_bulkQueue.length} item${_bulkQueue.length===1?'':'s'}`;
+  btn.disabled=!_bulkQueue.length;
+  if(!_bulkQueue.length){
+    list.innerHTML='<div style="text-align:center;padding:26px;color:#94a3b8;font-size:13px">Scan items to build a checkout queue.</div>';
+    return;
+  }
+  list.innerHTML=_bulkQueue.map((row,idx)=>`
+    <div class="co-bulk-row">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13px;color:#0f172a">${row.item.name}${row.amount>1?` <span style="color:#1d4ed8">× ${row.amount}</span>`:''}</div>
+        <div class="co-bulk-meta">${[row.item.serial||row.item.internal_sku||row.item.sku||('ID-'+row.item.id),row.item.shelf?('Shelf '+row.item.shelf):null].filter(Boolean).join(' · ')}</div>
+      </div>
+      <button type="button" class="co-bulk-remove" onclick="removeBulkQueueItem(${idx})">Remove</button>
+    </div>`).join('');
+}
+function removeBulkQueueItem(idx){
+  _bulkQueue.splice(idx,1);
+  renderBulkQueue();
+}
+function clearBulkQueue(){
+  _bulkQueue=[];
+  renderBulkQueue();
+}
+function queueCheckoutItem(item){
+  const existing=_bulkQueue.find(row=>row.item.id===item.id);
+  if(existing){
+    if(existing.qtyTracked){
+      existing.amount+=1;
+      renderBulkQueue();
+      return `Queued another unit of ${item.name}`;
+    }
+    return `${item.name} is already in the queue`;
+  }
+  _bulkQueue.push({item,amount:1,qtyTracked:item.qty!==null&&item.qty!==undefined});
+  renderBulkQueue();
+  return `Queued ${item.name}`;
+}
+async function submitBulkCheckout(){
+  if(!_bulkQueue.length)return;
+  const who=document.getElementById('bulkWho').value.trim();
+  if(!who){toast('Tech name is required','warn');document.getElementById('bulkWho').focus();return;}
+  const jobRef=document.getElementById('bulkLocation').value.trim();
+  const btn=document.getElementById('bulkCheckoutBtn');
+  btn.disabled=true;
+  btn.textContent='Processing…';
+  let done=0, failed=[];
+  for(const row of _bulkQueue){
+    const body=row.qtyTracked
+      ? {id:row.item.id,who,amount:row.amount,action:'remove',note:'Bulk checkout queue'}
+      : {id:row.item.id,who,job_ref:jobRef,scanned_code:row.item.serial||row.item.internal_sku||row.item.sku||''};
+    const res=await api(row.qtyTracked?'/api/qty_adjust':'/api/checkout',body);
+    if(res.ok)done+=row.amount||1;
+    else failed.push(res.msg||res.detail||`Failed on ${row.item.name}`);
+  }
+  btn.disabled=false;
+  btn.textContent='Check Out Queue';
+  if(done){
+    const fb=document.getElementById('scan-feedback');
+    fb.style.display='';fb.style.background='#f0fdf4';fb.style.color='#15803d';
+    fb.textContent=`✓ Checked out ${done} unit${done===1?'':'s'} from the queue`;
+    clearBulkQueue();
+    loadRecent();
+  }
+  if(failed.length)toast(failed[0],'err');
 }
 
 async function doScan(){
@@ -127,6 +250,10 @@ async function doScan(){
     return;
   }
   fb.style.background='#f0fdf4';fb.style.color='#15803d';
+  if(_bulkCheckoutMode){
+    fb.textContent='✓ '+queueCheckoutItem(item);
+    return;
+  }
   fb.textContent='✓ Found: '+item.name;
   openCoModal(item);
 }
@@ -214,5 +341,6 @@ _style.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
 document.head.appendChild(_style);
 
 loadRecent();
+renderBulkQueue();
 </script>
 {% endblock %}

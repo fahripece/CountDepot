@@ -811,7 +811,7 @@ function closeMobSidebar(){document.getElementById('mobSidebar').classList.remov
 // ── Camera barcode scanner (global, reusable) ─────────────────────────────────
 // Usage: openCameraScanner(code => doSomethingWith(code))
 // Works on any page — feeds into whatever callback is passed.
-let _camScanCb=null,_camReader=null,_camStream=null,_camNativeDetector=null,_camNativeLoop=false,_camLastDeviceId=null,_camHtml5=null,_camTorchOn=false;
+let _camScanCb=null,_camReader=null,_camStream=null,_camNativeDetector=null,_camNativeLoop=false,_camLastDeviceId=null,_camHtml5=null,_camTorchOn=false,_camPendingCode=null;
 
 function openCameraScanner(cb){
   _camScanCb=cb;
@@ -829,7 +829,9 @@ function closeCameraScanner(){
 function _stopCamera(){
   _camNativeLoop=false;
   _camTorchOn=false;
+  _camPendingCode=null;
   const torchBtn=document.getElementById('camTorchBtn');if(torchBtn){torchBtn.style.display='none';torchBtn.textContent='Light';}
+  const captureBtn=document.getElementById('camCaptureBtn');if(captureBtn){captureBtn.disabled=true;captureBtn.textContent='Capture';}
   if(_camHtml5){
     try{
       if(_camHtml5.isScanning)_camHtml5.stop().catch(()=>{});
@@ -842,6 +844,19 @@ function _stopCamera(){
   if(_camStream){_camStream.getTracks().forEach(t=>t.stop());}_camStream=null;
   const v=document.getElementById('camScanVideo');if(v)v.srcObject=null;
   const html5=document.getElementById('camHtml5Reader');if(html5)html5.innerHTML='';
+}
+function _captureCameraCode(){
+  if(!_camPendingCode)return;
+  _deliverCameraCode(_camPendingCode);
+}
+function _setPendingCameraCode(code){
+  const clean=String(code||'').trim();
+  if(!clean)return;
+  _camPendingCode=clean;
+  const status=document.getElementById('camScanStatus');
+  if(status){status.textContent=`Ready to capture: ${clean}`;status.style.color='#86efac';}
+  const captureBtn=document.getElementById('camCaptureBtn');
+  if(captureBtn){captureBtn.disabled=false;captureBtn.textContent='Capture';}
 }
 function _deliverCameraCode(code){
   if(!code)return;
@@ -880,8 +895,10 @@ function _cameraVideoConstraints(deviceId){
   return {...base,facingMode:{ideal:'environment'}};
 }
 function _cameraStatusReady(status){
-  status.textContent='Fill the blue box with the barcode. Tap Light or Refocus if it hunts.';
+  status.textContent='Fill the blue box with the barcode. When the right code appears, tap Capture.';
   status.style.color='#dbeafe';
+  const captureBtn=document.getElementById('camCaptureBtn');
+  if(captureBtn){captureBtn.disabled=!_camPendingCode;captureBtn.textContent='Capture';}
 }
 function _currentCameraTrack(){
   if(_camStream&&_camStream.getVideoTracks)return _camStream.getVideoTracks()[0]||null;
@@ -943,7 +960,7 @@ async function _startHtml5Scanner(status,deviceId){
   await _camHtml5.start(
     preferred,
     {fps:15,qrbox:(w,h)=>({width:Math.floor(Math.min(w,h)*0.86),height:Math.floor(Math.min(w,h)*0.30)}),formatsToSupport:_html5Formats()},
-    decodedText=>_deliverCameraCode(decodedText),
+    decodedText=>_setPendingCameraCode(decodedText),
     ()=>{}
   );
   _cameraStatusReady(status);
@@ -982,7 +999,7 @@ async function _startNativeDetector(video,status){
   _camNativeLoop=true;
   const scan=async()=>{
     if(!_camNativeLoop||!_camNativeDetector)return;
-    try{const codes=await _camNativeDetector.detect(video);if(codes&&codes.length){_deliverCameraCode(codes[0].rawValue);return;}}catch(e){}
+    try{const codes=await _camNativeDetector.detect(video);if(codes&&codes.length){_setPendingCameraCode(codes[0].rawValue);}}catch(e){}
     requestAnimationFrame(scan);
   };
   _cameraStatusReady(status);
@@ -992,7 +1009,7 @@ async function _startZxingDetector(video,status,deviceId){
   const ZX=await _loadZxing();
   if(!ZX||!ZX.BrowserMultiFormatReader)throw new Error('Barcode scanner library could not load.');
   const reader=new ZX.BrowserMultiFormatReader();
-  const onResult=(result)=>{if(result&&typeof result.getText==='function')_deliverCameraCode(result.getText());};
+  const onResult=(result)=>{if(result&&typeof result.getText==='function')_setPendingCameraCode(result.getText());};
   _cameraStatusReady(status);
   if(typeof reader.decodeFromStream==='function'&&_camStream){reader.decodeFromStream(_camStream,video,onResult);_camReader=reader;return;}
   _stopCamera();
@@ -1018,7 +1035,7 @@ async function _startZxingCamera(status,deviceId){
   if(preferred){_camLastDeviceId=preferred;sel.value=preferred;}
   _camReader=new ZX.BrowserMultiFormatReader();
   _cameraStatusReady(status);
-  const onResult=(result)=>{if(result&&typeof result.getText==='function')_deliverCameraCode(result.getText());};
+  const onResult=(result)=>{if(result&&typeof result.getText==='function')_setPendingCameraCode(result.getText());};
   if(typeof _camReader.decodeFromStream==='function'&&navigator.mediaDevices?.getUserMedia){
     const video=await _openCameraStream(preferred);
     _camReader.decodeFromStream(_camStream,video,onResult);
@@ -1230,6 +1247,7 @@ async function _switchCamera(){
   <div id="camScanStatus" style="color:#94a3b8;font-size:13px;margin-bottom:10px;text-align:center;padding:0 16px;max-width:560px">Starting camera…</div>
   <select id="camDeviceSelect" style="display:none;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 10px;font-size:12px;margin-bottom:10px" onchange="_switchCamera()"></select>
   <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+    <button id="camCaptureBtn" onclick="_captureCameraCode()" disabled style="background:#16a34a;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:7px;padding:8px 18px;font-size:13px;cursor:pointer;opacity:.75">Capture</button>
     <button id="camTorchBtn" onclick="_toggleTorch()" style="display:none;align-items:center;background:#2563eb;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:7px;padding:8px 16px;font-size:13px;cursor:pointer">Light</button>
     <button onclick="_refocusCamera()" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:7px;padding:8px 16px;font-size:13px;cursor:pointer">Refocus</button>
     <button onclick="closeCameraScanner()" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:7px;padding:8px 24px;font-size:13px;cursor:pointer">Cancel</button>

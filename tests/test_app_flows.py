@@ -2567,9 +2567,11 @@ def test_mobile_page_is_scanner_first_and_installable(app, tenant):
     assert "ZXingBrowser" in body
     assert "frameRate:{ideal:30,max:60}" in body
     assert "focusMode:'continuous'" in body
-    assert "Fill the blue box with the barcode" in body
+    assert "When the right code appears, tap Capture" in body
     assert "_toggleTorch" in body
     assert "_refocusCamera" in body
+    assert "_captureCameraCode" in body
+    assert 'id="camCaptureBtn"' in body
     assert "Camera requires HTTPS" in body
     assert "navigator.serviceWorker.register('/sw.js')" not in body
     assert ".unregister()" in body
@@ -2577,6 +2579,8 @@ def test_mobile_page_is_scanner_first_and_installable(app, tenant):
     assert "scanAddField('addSerial')" in body
     assert "scanAddField('addSku')" in body
     assert 'id="addSku" placeholder="Scan or type SKU"' in body
+    assert "Bulk checkout queue" in body
+    assert "submitMobileBulkCheckout" in body
     assert "Sign in or permission required" in body
 
 
@@ -2598,6 +2602,9 @@ def test_checkout_page_has_camera_scan_button(app, tenant):
     assert "scanCheckoutWithCamera" in body
     assert "openCameraScanner" in body
     assert "Camera</button>" in body
+    assert "Bulk Checkout Queue" in body
+    assert "submitBulkCheckout" in body
+    assert "bulkModeToggle" in body
 
 
 def test_add_item_identifier_fields_have_camera_scan_buttons(app, tenant):
