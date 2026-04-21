@@ -1633,7 +1633,7 @@ def test_write_items_worker_can_manage_categories_and_add_products(app, tenant):
     assert product_data["ok"] is True
 
 
-def test_incomplete_cost_requirement_can_be_disabled(app, tenant):
+def test_product_cost_requirement_change_updates_existing_items(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302
 
@@ -1643,7 +1643,7 @@ def test_incomplete_cost_requirement_can_be_disabled(app, tenant):
         ["Cost Optional Category", "#ffffff"],
     ).lastrowid
     product_id = db.execute(
-        "INSERT INTO products (name,category_id,active,created_at) VALUES (?,?,1,datetime('now'))",
+        "INSERT INTO products (name,category_id,require_cost,active,created_at) VALUES (?,?,1,1,datetime('now'))",
         ["Cost Optional Product", category_id],
     ).lastrowid
     item_id = db.execute(
@@ -1665,12 +1665,34 @@ def test_incomplete_cost_requirement_can_be_disabled(app, tenant):
 
     assert any(item["id"] == item_id and "cost" in item["missing_fields"] for item in default_items)
 
-    db = sqlite3.connect(tenant["db_path"])
-    db.execute(
-        "INSERT INTO settings (key,value) VALUES ('incomplete_requires_cost','0')"
-    )
-    db.commit()
-    db.close()
+    with app.test_request_context(
+        "/api/product/edit",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={
+            "id": product_id,
+            "name": "Cost Optional Product",
+            "category_id": category_id,
+            "require_cost": 0,
+            "require_serial": 0,
+            "require_vendor_sku": 0,
+            "require_internal_sku": 1,
+            "serial_tracked": 0,
+            "qty_tracked": 0,
+            "require_scan_checkout": 0,
+            "print_scan_label": 0,
+        },
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        edit_response = _as_response(app, app.preprocess_request() or api_product_edit())
+        edit_data = edit_response.get_json()
+
+    assert edit_response.status_code == 200
+    assert edit_data["ok"] is True
+    assert edit_data["resynced"]["checked"] == 1
+    assert edit_data["resynced"]["incomplete"] == 0
 
     with app.test_request_context(
         "/api/items?status=incomplete&hide_out=0",

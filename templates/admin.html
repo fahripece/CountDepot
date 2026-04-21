@@ -127,21 +127,10 @@
     <div style="font-weight:600;font-size:15px">Inventory Completeness</div>
     <div style="font-size:12px;color:#94a3b8;margin-top:1px">Choose which missing fields make an item show as incomplete.</div>
   </div>
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
-    <div>
-      <div style="font-weight:600;font-size:13px">Require cost before an item is complete</div>
-      <div style="font-size:12px;color:#94a3b8;margin-top:3px">When disabled, items with no cost will not be flagged incomplete. Shelf and product-required fields still apply.</div>
+    <div style="font-size:12px;color:#94a3b8;line-height:1.6">
+      Cost completeness is now controlled per product template from the Products page. Edit a product near its pricing fields to mark cost as required or optional.
     </div>
-    <select class="select" id="incomplete-cost-required" style="width:auto;min-width:150px">
-      <option value="1">Required</option>
-      <option value="0">Optional</option>
-    </select>
   </div>
-  <div style="display:flex;gap:8px;align-items:center;margin-top:14px">
-    <button class="btn btn-primary btn-sm" onclick="saveCompletenessSettings()">Save Completeness</button>
-    <span id="completeness-saved" style="font-size:12px;color:#15803d;display:none">Saved</span>
-  </div>
-</div>
 
 <!-- 2FA -->
   <div class="card" style="margin-bottom:20px">
@@ -812,20 +801,6 @@ async function saveBranding(){
 loadBranding();
 
 // ── Inventory Completeness ──
-async function loadCompletenessSettings(){
-  const s=await api('/api/settings');
-  document.getElementById('incomplete-cost-required').value=s.incomplete_requires_cost==='0'?'0':'1';
-}
-async function saveCompletenessSettings(){
-  const res=await api('/api/settings',{incomplete_requires_cost:document.getElementById('incomplete-cost-required').value});
-  if(res.ok){
-    const el=document.getElementById('completeness-saved');
-    el.style.display='inline';
-    setTimeout(()=>el.style.display='none',3000);
-  } else toast(res.msg||'Error','err');
-}
-loadCompletenessSettings();
-
 // ── Low Stock Alerts ──
 let _lsaEmails = [];   // current email tag list
 let _lsaUsers  = [];   // [{id, username, email, role, low_stock_alerts}, …]

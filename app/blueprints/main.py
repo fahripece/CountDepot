@@ -273,7 +273,7 @@ def _products_list():
     return [dict(r) for r in query(
         "SELECT id,name,manufacturer,model,category_id,serial_tracked,qty_tracked,"
         "require_scan_checkout,require_serial,require_vendor_sku,require_internal_sku,"
-        "print_scan_label,require_sku_label,default_cost,default_sale "
+        "require_cost,print_scan_label,require_sku_label,default_cost,default_sale "
         "FROM products WHERE active=1 ORDER BY name")]
 
 

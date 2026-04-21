@@ -104,6 +104,13 @@
           <div class="field"><label class="label">Default Cost ($)</label><input class="input" id="prod-cost" type="number" step="0.01" min="0" oninput="updateProdProfit()"></div>
           <div class="field"><label class="label">Default Sale Price ($)</label><input class="input" id="prod-sale" type="number" step="0.01" min="0" oninput="updateProdProfit()"></div>
         </div>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid #e2e8f0;transition:border-color .15s;margin-bottom:12px">
+          <input type="checkbox" id="prod-require-cost" style="width:15px;height:15px;margin-top:2px" checked>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#0f172a">Require Cost For Complete Items</div>
+            <div style="font-size:11.5px;color:#64748b;margin-top:2px">When enabled, items from this product stay incomplete until a cost is filled in.</div>
+          </div>
+        </label>
         <div id="prod-profit" style="font-size:12px;min-height:18px;margin-bottom:12px"></div>
 
         <div class="section-hdr">Low Stock Alert</div>
@@ -182,10 +189,11 @@ function renderGrid(){
     if(p.serial_tracked) flags.push('Serial');
     if(p.qty_tracked) flags.push('Qty');
     if(p.require_scan_checkout) flags.push('Scan');
-    if(p.print_scan_label) flags.push('Print label');
-    if(p.require_serial) flags.push('Req. SN');
-    if(p.require_vendor_sku) flags.push('Req. Vendor SKU');
-    if(p.require_internal_sku) flags.push('Auto SKU');
+      if(p.print_scan_label) flags.push('Print label');
+      if(p.require_serial) flags.push('Req. SN');
+      if(p.require_vendor_sku) flags.push('Req. Vendor SKU');
+      if(p.require_cost) flags.push('Req. Cost');
+      if(p.require_internal_sku) flags.push('Auto SKU');
     const flagsHtml=flags.map(f=>`<span class="tracking-flag">${f}</span>`).join(' ');
     const itemCount=p.item_count||0;
     return `<div class="prod-card">
@@ -221,11 +229,12 @@ async function loadProds(){
 function _clearProdForm(){
   ['prod-name','prod-mfr','prod-model','prod-vendor-sku','prod-cost','prod-sale','prod-desc','prod-threshold'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('prod-cat').value='';
-  document.getElementById('prod-serial').checked=false;
-  document.getElementById('prod-qty').checked=false;
-  document.getElementById('prod-scan').checked=false;
-  document.getElementById('prod-print-scan').checked=false;
-  document.getElementById('prod-req-serial').checked=false;
+    document.getElementById('prod-serial').checked=false;
+    document.getElementById('prod-qty').checked=false;
+    document.getElementById('prod-scan').checked=false;
+    document.getElementById('prod-print-scan').checked=false;
+    document.getElementById('prod-require-cost').checked=true;
+    document.getElementById('prod-req-serial').checked=false;
   document.getElementById('prod-req-vendor-sku').checked=false;
   document.getElementById('prod-req-internal-sku').checked=true; // default
   document.getElementById('prod-ident-error').style.display='none';
@@ -281,10 +290,11 @@ function openEditProd(id){
     document.getElementById('prod-name').value=p.name||'';
     document.getElementById('prod-mfr').value=p.manufacturer||'';
     document.getElementById('prod-model').value=p.model||'';
-    document.getElementById('prod-vendor-sku').value=p.vendor_sku||'';
-    document.getElementById('prod-cost').value=p.default_cost!=null?p.default_cost:'';
-    document.getElementById('prod-sale').value=p.default_sale!=null?p.default_sale:'';
-    document.getElementById('prod-desc').value=p.description||'';
+      document.getElementById('prod-vendor-sku').value=p.vendor_sku||'';
+      document.getElementById('prod-cost').value=p.default_cost!=null?p.default_cost:'';
+      document.getElementById('prod-sale').value=p.default_sale!=null?p.default_sale:'';
+      document.getElementById('prod-require-cost').checked=p.require_cost!==0;
+      document.getElementById('prod-desc').value=p.description||'';
     document.getElementById('prod-serial').checked=!!p.serial_tracked;
     document.getElementById('prod-qty').checked=!!p.qty_tracked;
     document.getElementById('prod-scan').checked=!!p.require_scan_checkout;
@@ -336,10 +346,11 @@ async function saveProd(){
     name, category_id:parseInt(cat)||null,
     manufacturer:document.getElementById('prod-mfr').value.trim()||null,
     model:document.getElementById('prod-model').value.trim()||null,
-    vendor_sku:document.getElementById('prod-vendor-sku').value.trim()||null,
-    default_cost:document.getElementById('prod-cost').value||null,
-    default_sale:document.getElementById('prod-sale').value||null,
-    description:document.getElementById('prod-desc').value.trim()||null,
+      vendor_sku:document.getElementById('prod-vendor-sku').value.trim()||null,
+      default_cost:document.getElementById('prod-cost').value||null,
+      default_sale:document.getElementById('prod-sale').value||null,
+      require_cost:document.getElementById('prod-require-cost').checked?1:0,
+      description:document.getElementById('prod-desc').value.trim()||null,
     serial_tracked:document.getElementById('prod-serial').checked?1:0,
     qty_tracked:document.getElementById('prod-qty').checked?1:0,
     require_scan_checkout:document.getElementById('prod-scan').checked?1:0,

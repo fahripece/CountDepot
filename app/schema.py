@@ -42,6 +42,7 @@ MIGRATIONS = [
     ("products", "require_serial",       "INTEGER DEFAULT 0"),
     ("products", "require_vendor_sku",   "INTEGER DEFAULT 0"),
     ("products", "require_internal_sku", "INTEGER DEFAULT 1"),
+    ("products", "require_cost",         "INTEGER DEFAULT 1"),
     ("products", "require_sku_label",    "INTEGER DEFAULT 0"),
     ("products", "print_scan_label",     "INTEGER DEFAULT 0"),
     ("products", "low_stock_threshold",    "INTEGER DEFAULT 0"),
@@ -283,6 +284,7 @@ def _init_db_conn(db):
             require_serial        INTEGER DEFAULT 0,
             require_vendor_sku    INTEGER DEFAULT 0,
             require_internal_sku  INTEGER DEFAULT 1,
+            require_cost          INTEGER DEFAULT 1,
             require_sku_label     INTEGER DEFAULT 0,
             print_scan_label      INTEGER DEFAULT 0,
             default_cost          REAL,
@@ -887,6 +889,23 @@ def _run_data_repairs(db):
             "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
             [key, str(cur.rowcount if cur.rowcount is not None else 0)],
         )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"Data repair failed: {key} - {e}")
+
+    key = "repair_products_require_cost_from_setting_v1"
+    try:
+        existing = db.execute("SELECT value FROM settings WHERE key='incomplete_requires_cost'").fetchone()
+        if existing is not None and not db.execute(
+            "SELECT 1 FROM settings WHERE key=?", [key]
+        ).fetchone():
+            require_cost = 0 if str(existing[0]) == "0" else 1
+            cur = db.execute("UPDATE products SET require_cost=?", [require_cost])
+            db.execute(
+                "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
+                [key, str(cur.rowcount if cur.rowcount is not None else 0)],
+            )
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(

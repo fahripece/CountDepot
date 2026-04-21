@@ -12,7 +12,7 @@ from app.db import query, execute
 from app.helpers import (login_required, perm_required, admin_required,
                          log_action, get_low_stock_alerts, hash_pw, verify_pw,
                          validate_password, api_rate_limit,
-                         incomplete_cost_required, _item_missing_fields,
+                         _item_missing_fields,
                          required_category_field_missing,
                          sync_item_task, sync_maintenance_tasks,
                          _parse_date_range, _date_filter_sql,
@@ -353,11 +353,10 @@ def _resync_completion_tasks(where_sql, args=None):
         "SELECT id, name, product_id, category_id, serial, sku, shelf, cost_price, extra_fields "
         f"FROM items WHERE active=1 AND COALESCE(retired,0)=0 AND {where_sql}",
         args or [])
-    cost_required = incomplete_cost_required()
     count = 0
     incomplete = 0
     for row in rows:
-        missing = _item_missing_fields(dict(row), cost_required)
+        missing = _item_missing_fields(dict(row))
         sync_item_task(row["id"], row["name"], missing)
         count += 1
         if missing:
@@ -770,7 +769,6 @@ def api_report_financial():
 def api_report_inventory():
     date_from, date_to = _parse_date_range(request)
     df_sql, df_args    = _date_filter_sql("i.created_at", date_from, date_to)
-    cost_required      = incomplete_cost_required()
     items = query(f"""SELECT i.id, i.name, i.product_id, i.category_id,
                       i.serial, i.sku, i.internal_sku, i.extra_fields,
                       i.condition, i.shelf, i.cost_price, i.sale_price,
@@ -794,7 +792,7 @@ def api_report_inventory():
         d = dict(r)
         d["available"]    = ((d["qty"] or 0) - (d["qty_out"] or 0) if d["qty"] is not None else None)
         d["is_low"]       = False
-        missing           = _item_missing_fields(d, cost_required)
+        missing           = _item_missing_fields(d)
         d["is_incomplete"]  = len(missing) > 0
         d["missing_fields"] = missing
         result.append(d)
@@ -1223,7 +1221,6 @@ def api_items():
     dept_id  = request.args.get("dept", "")
     tag      = request.args.get("tag", "").strip()
     cond_f   = request.args.get("cond", "").strip()
-    cost_required = incomplete_cost_required()
     show_retired = (status == "retired")
     base_where = """FROM items i
              LEFT JOIN categories c   ON c.id=i.category_id
@@ -1300,6 +1297,7 @@ def api_items():
         incomplete_conditions = [
             "(p.require_serial=1 AND (i.serial IS NULL OR i.serial=''))",
             "(p.require_vendor_sku=1 AND (i.sku IS NULL OR i.sku=''))",
+            "(COALESCE(p.require_cost, 1)=1 AND i.cost_price IS NULL)",
             "(i.shelf IS NULL OR i.shelf='')",
             """EXISTS (
                 SELECT 1 FROM category_fields cf
@@ -1314,11 +1312,9 @@ def api_items():
                        json_extract(COALESCE(i.extra_fields,'{}'), '$.' || cf.field_key) IS NULL
                        OR TRIM(CAST(json_extract(COALESCE(i.extra_fields,'{}'), '$.' || cf.field_key) AS TEXT))=''
                      ))
-                  )
+                )
             )""",
         ]
-        if cost_required:
-            incomplete_conditions.append("i.cost_price IS NULL")
         sql += " AND (" + " OR ".join(incomplete_conditions) + ")"
     elif status == "overdue":
         today_str = datetime.now().strftime("%Y-%m-%d")
@@ -1368,7 +1364,7 @@ def api_items():
         d["overdue"]     = bool(d.get("checked_out") and d.get("expected_return_date") and d["expected_return_date"] < today_s)
         d["maintenance_overdue"] = bool(d.get("next_maintenance_date") and d["next_maintenance_date"] < today_s)
         d["tax_amount"]  = (round(d["cost_price"] * (d["tax_rate"] or 0) / 100, 2) if d["cost_price"] and d["tax_paid"] == 1 else 0)
-        missing = _item_missing_fields(d, cost_required)
+        missing = _item_missing_fields(d)
         d["is_incomplete"]       = len(missing) > 0
         d["missing_fields"]      = missing
         d["reservation_count"]   = d.get("reservation_count") or 0
@@ -3284,6 +3280,7 @@ def api_product_add():
     req_serial   = int(d.get("require_serial",       0))
     req_vendor   = int(d.get("require_vendor_sku",   0))
     req_internal = int(d.get("require_internal_sku", 0))
+    req_cost     = int(d.get("require_cost",         1))
     if not req_serial and not req_vendor and not req_internal:
         return jsonify({"ok": False, "msg": "At least one identifier must be selected"})
     if req_vendor and req_internal:
@@ -3293,13 +3290,13 @@ def api_product_add():
         pid = execute(
             "INSERT INTO products (name,manufacturer,model,description,category_id,"
             "serial_tracked,qty_tracked,require_scan_checkout,"
-            "require_serial,require_vendor_sku,require_internal_sku,print_scan_label,"
-            "require_sku_label,default_cost,default_sale,low_stock_threshold,vendor_sku,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "require_serial,require_vendor_sku,require_internal_sku,require_cost,print_scan_label,"
+            "require_sku_label,default_cost,default_sale,low_stock_threshold,vendor_sku,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [d["name"].strip(), d.get("manufacturer") or None, d.get("model") or None,
              d.get("description") or None, d.get("category_id") or None,
              int(d.get("serial_tracked", 0)), int(d.get("qty_tracked", 0)),
              int(d.get("require_scan_checkout", 0)),
-             req_serial, req_vendor, req_internal, int(d.get("print_scan_label", 0)), 0,
+             req_serial, req_vendor, req_internal, req_cost, int(d.get("print_scan_label", 0)), 0,
              float(d["default_cost"]) if d.get("default_cost") not in (None, "") else None,
              float(d["default_sale"]) if d.get("default_sale") not in (None, "") else None,
              int(d.get("low_stock_threshold", 0)) if d.get("low_stock_threshold") not in (None, "") else 0,
@@ -3318,6 +3315,7 @@ def api_product_edit():
     req_serial   = int(d.get("require_serial",       0))
     req_vendor   = int(d.get("require_vendor_sku",   0))
     req_internal = int(d.get("require_internal_sku", 0))
+    req_cost     = int(d.get("require_cost",         1))
     if not req_serial and not req_vendor and not req_internal:
         req_internal = 1
     if req_vendor and req_internal:
@@ -3325,13 +3323,13 @@ def api_product_edit():
     execute(
         "UPDATE products SET name=?,manufacturer=?,model=?,description=?,category_id=?,"
         "serial_tracked=?,qty_tracked=?,require_scan_checkout=?,"
-        "require_serial=?,require_vendor_sku=?,require_internal_sku=?,print_scan_label=?,"
+        "require_serial=?,require_vendor_sku=?,require_internal_sku=?,require_cost=?,print_scan_label=?,"
         "default_cost=?,default_sale=?,low_stock_threshold=?,vendor_sku=? WHERE id=?",
         [d["name"], d.get("manufacturer") or None, d.get("model") or None,
          d.get("description") or None, d.get("category_id") or None,
          int(d.get("serial_tracked", 0)), int(d.get("qty_tracked", 0)),
          int(d.get("require_scan_checkout", 0)),
-         req_serial, req_vendor, req_internal, int(d.get("print_scan_label", 0)),
+         req_serial, req_vendor, req_internal, req_cost, int(d.get("print_scan_label", 0)),
          float(d["default_cost"]) if d.get("default_cost") not in (None, "") else None,
          float(d["default_sale"]) if d.get("default_sale") not in (None, "") else None,
          int(d.get("low_stock_threshold", 0)) if d.get("low_stock_threshold") not in (None, "") else 0,
@@ -4002,7 +4000,6 @@ ALLOWED_SETTINGS = {
     "low_stock_alerts_enabled", "low_stock_alert_email",
     "overdue_reminder_days_1", "overdue_reminder_days_2",
     "overdue_reminder_enabled",
-    "incomplete_requires_cost",
     "slack_webhook_url", "slack_enabled",
     "teams_webhook_url", "teams_enabled",
     "slack_events", "teams_events",

@@ -423,11 +423,6 @@ def notify_low_stock_if_needed(product_id):
 
 # ── Item completeness ─────────────────────────────────────────────────────────
 
-def incomplete_cost_required():
-    row = query("SELECT value FROM settings WHERE key='incomplete_requires_cost'", one=True)
-    return not row or str(row["value"]) != "0"
-
-
 def _extra_fields_dict(raw):
     if isinstance(raw, dict):
         return raw
@@ -465,15 +460,16 @@ def required_category_field_missing(s):
 
 
 def _item_missing_fields(s, cost_required=None):
-    if cost_required is None:
-        cost_required = incomplete_cost_required()
     missing = []
     prod = query(
-        "SELECT require_serial, require_vendor_sku FROM products WHERE id=?",
+        "SELECT require_serial, require_vendor_sku, require_cost FROM products WHERE id=?",
         [s.get("product_id")], one=True) if s.get("product_id") else None
     if prod:
         if prod["require_serial"]     and not s.get("serial"): missing.append("serial #")
         if prod["require_vendor_sku"] and not s.get("sku"):    missing.append("vendor SKU")
+        cost_required = bool(prod["require_cost"])
+    elif cost_required is None:
+        cost_required = True
     missing.extend(required_category_field_missing(s))
     if cost_required and s.get("cost_price") is None: missing.append("cost")
     if not s.get("shelf"):          missing.append("shelf")
