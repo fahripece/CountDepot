@@ -107,7 +107,21 @@ def login_page():
                 log_auth_event("2FA_TOTP_CHALLENGE", username=user["username"], ip=ip,
                                tenant=getattr(g, "tenant_slug", ""))
                 return render_template("verify_2fa.html", method="totp")
-            if two_fa and email and _Cfg.SMTP_HOST:
+            if two_fa:
+                if not email:
+                    log_auth_event("2FA_BLOCKED_NO_EMAIL", username=user["username"], ip=ip,
+                                   tenant=getattr(g, "tenant_slug", ""))
+                    return render_template(
+                        "login.html",
+                        error="Two-factor authentication is enabled for this account, but no email address is set."
+                    ), 403
+                if not _Cfg.SMTP_HOST:
+                    log_auth_event("2FA_BLOCKED_NO_SMTP", username=user["username"], ip=ip,
+                                   tenant=getattr(g, "tenant_slug", ""))
+                    return render_template(
+                        "login.html",
+                        error="Two-factor authentication is enabled for this account, but email delivery is not configured on this server. Contact your admin."
+                    ), 503
                 import random
                 from app.mailer import send_email as _send_email
                 otp = f"{random.randint(0, 999999):06d}"

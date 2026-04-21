@@ -129,6 +129,46 @@ def test_login_requires_email_otp_for_tenant_user_when_enabled(app, tenant, monk
     assert otp_row is not None
 
 
+def test_login_blocks_when_email_otp_enabled_but_smtp_missing(app, tenant, monkeypatch):
+    monkeypatch.setattr(Config, "SMTP_HOST", "", raising=False)
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "UPDATE users SET two_fa_enabled=1, totp_enabled=0, totp_secret=NULL, must_change_password=0 WHERE email=?",
+        [tenant["email"]],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant)
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 503
+    assert "email delivery is not configured on this server" in body
+    assert "pending_2fa_user_id" not in saved_session
+    assert saved_session.get("user_id") is None
+
+
+def test_login_blocks_when_email_otp_enabled_but_user_has_no_email(app, tenant, monkeypatch):
+    monkeypatch.setattr(Config, "SMTP_HOST", "smtp.example.com", raising=False)
+
+    db = sqlite3.connect(tenant["db_path"])
+    username = db.execute("SELECT username FROM users WHERE id=1").fetchone()[0]
+    db.execute(
+        "UPDATE users SET email=NULL, two_fa_enabled=1, totp_enabled=0, totp_secret=NULL, must_change_password=0 WHERE id=1"
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant, email=username)
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 403
+    assert "no email address is set" in body
+    assert "pending_2fa_user_id" not in saved_session
+    assert saved_session.get("user_id") is None
+
+
 def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
     db = sqlite3.connect(tenant["db_path"])
     db.row_factory = sqlite3.Row
