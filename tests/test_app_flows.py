@@ -2276,6 +2276,9 @@ def test_resources_hub_renders_on_bare_domain(app):
     assert "CountDepot Resources" in body
     assert "Real buyer guides, not fake filler pages." in body
     assert 'href="/resources/inventory-management-software-vs-spreadsheets"' in body
+    assert '"@type": "CollectionPage"' in body
+    assert '"@type": "ItemList"' in body
+    assert body.count('href="/resources/') >= 6
 
 
 def test_resource_article_renders_on_bare_domain(app):
@@ -2289,6 +2292,20 @@ def test_resource_article_renders_on_bare_domain(app):
     assert "Inventory management software vs. spreadsheets" in body
     assert "Where spreadsheets usually break" in body
     assert '<link rel="canonical" href="http://countdepot.com/resources/inventory-management-software-vs-spreadsheets">' in body
+    assert '"@type": "Article"' in body
+    assert '"@type": "BreadcrumbList"' in body
+
+
+def test_public_marketing_pages_do_not_render_img_tags_without_alt(app):
+    client = app.test_client()
+    for path in (
+        "/",
+        "/resources",
+        "/resources/inventory-management-software-vs-spreadsheets",
+        "/inventory-management-for-repair-shops",
+    ):
+        body = client.get(path, base_url="http://countdepot.com").get_data(as_text=True)
+        assert "<img" not in body, path
 
 
 def test_repair_shop_seo_page_has_phase_two_content(app):
@@ -2307,6 +2324,7 @@ def test_repair_shop_seo_page_has_phase_two_content(app):
     assert "Phone repair shop tracking screens" in body
     assert "Questions repair shops ask before replacing spreadsheets." in body
     assert '"@type": "FAQPage"' in body
+    assert '"@type": "Review"' not in body
     assert "Can CountDepot track both repair parts and tools?" in body
 
 

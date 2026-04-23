@@ -14,6 +14,33 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="CountDepot Resources | Inventory Guides and Buyer Documents">
 <meta name="twitter:description" content="Read CountDepot resource guides for comparing inventory software, replacing spreadsheets, and improving barcode inventory workflows.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "CollectionPage",
+      "@id": {{ (canonical_url ~ "#collection")|tojson }},
+      "name": "CountDepot Resources",
+      "url": {{ canonical_url|tojson }},
+      "description": "CountDepot resource guides for comparing inventory software, replacing spreadsheets, and improving barcode inventory workflows."
+    },
+    {
+      "@type": "ItemList",
+      "itemListElement": [
+        {% for guide in guides %}
+        {
+          "@type": "ListItem",
+          "position": {{ loop.index }},
+          "url": {{ ("https://countdepot.com/resources/" ~ guide.slug)|tojson }},
+          "name": {{ guide.title|tojson }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ]
+    }
+  ]
+}
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{

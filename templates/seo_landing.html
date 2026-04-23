@@ -38,6 +38,7 @@
   "@graph": [
     {
       "@type": "SoftwareApplication",
+      "@id": {{ (canonical_url ~ "#software")|tojson }},
       "name": "CountDepot",
       "applicationCategory": "BusinessApplication",
       "operatingSystem": "Web",
@@ -49,39 +50,6 @@
         "priceCurrency": "USD",
         "description": "Starter pricing with a 30-day free trial."
       }
-    },
-    {
-      "@type": "AggregateRating",
-      "itemReviewed": {
-        "@type": "SoftwareApplication",
-        "name": "CountDepot"
-      },
-      "ratingValue": "5",
-      "reviewCount": "3"
-    },
-    {
-      "@type": "Review",
-      "reviewRating": {
-        "@type": "Rating",
-        "ratingValue": "5"
-      },
-      "author": {
-        "@type": "Person",
-        "name": "Fahri Pece"
-      },
-      "reviewBody": "CountDepot helped us centralize inventory, barcode scanning, and day-to-day accountability without taking on enterprise complexity."
-    },
-    {
-      "@type": "Review",
-      "reviewRating": {
-        "@type": "Rating",
-        "ratingValue": "5"
-      },
-      "author": {
-        "@type": "Organization",
-        "name": "DSS IT"
-      },
-      "reviewBody": "The workflow is practical for real teams. We can track inventory, reservations, and procedures in one place instead of piecing together spreadsheets."
     },
     {
       "@type": "FAQPage",

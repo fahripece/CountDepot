@@ -163,6 +163,156 @@ RESOURCE_GUIDES = {
         "cta_title": "Buy for workflow, not for a giant feature spreadsheet",
         "cta_copy": "CountDepot is built for the teams that need scanning, reservations, stock visibility, and accountability without paying for unnecessary complexity.",
     },
+    "how-low-stock-alerts-should-work-across-multiple-locations": {
+        "title": "How Low-Stock Alerts Should Work Across Multiple Locations | CountDepot Resources",
+        "meta_description": "Learn how low-stock alerts should work by site, room, or warehouse instead of using one misleading global count.",
+        "eyebrow": "Operations Guide",
+        "hero_title": "How low-stock alerts should work across multiple locations",
+        "hero_subtitle": "A practical guide to avoiding false confidence from global stock totals when each location has different risk.",
+        "read_time": "6 min read",
+        "summary": "Low-stock alerts are only useful if they reflect where the shortage actually is. A global count can hide the fact that one office, room, or warehouse is empty while another still has excess stock. CountDepot is designed to evaluate low-stock risk by location so teams reorder for the place that needs attention.",
+        "sections": [
+            {
+                "title": "Why global counts fail",
+                "body": [
+                    "A single inventory total looks clean in a dashboard, but it does not tell an operations team whether a specific location can actually do the work in front of it.",
+                    "If one clinic has ten units and another clinic has zero, a global count of ten is misleading. The shortage is real even though the combined count looks healthy."
+                ],
+                "bullets": [
+                    "One site can run out while another still has stock",
+                    "Rush purchasing starts because the wrong location was monitored",
+                    "Users stop trusting the alert system when it misses obvious shortages"
+                ],
+            },
+            {
+                "title": "What a good low-stock workflow looks like",
+                "body": [
+                    "The product record should define a threshold, but the evaluation needs to happen against each location where that product is actually stocked.",
+                    "That means the system should compare available quantity and threshold per site, room, shelf, or storage area instead of only at the organization level."
+                ],
+                "bullets": [
+                    "Thresholds evaluated per site",
+                    "Low-stock pages that show the exact location at risk",
+                    "Procurement suggestions that group reorder needs by vendor and site"
+                ],
+            },
+            {
+                "title": "What teams should see in the alert",
+                "body": [
+                    "A useful alert answers the next question immediately: which product is low, which location is affected, how many are available there, and what threshold triggered the alert.",
+                    "The workflow should then make it easy to reserve remaining stock, transfer items, or create a reorder action."
+                ],
+                "bullets": [
+                    "Product name and location name",
+                    "Available count, threshold, and missing quantity",
+                    "Quick path to reorder or reserve remaining stock"
+                ],
+            },
+        ],
+        "cta_title": "Fix low-stock alerts before they create blind spots",
+        "cta_copy": "CountDepot helps teams see low-stock risk by site so shortages are caught where they actually happen.",
+    },
+    "how-to-run-inventory-reservations-without-overbooking-stock": {
+        "title": "How to Run Inventory Reservations Without Overbooking Stock | CountDepot Resources",
+        "meta_description": "See how to manage reservations with available, reserved, and total quantity so teams do not overbook inventory.",
+        "eyebrow": "Workflow",
+        "hero_title": "How to run inventory reservations without overbooking stock",
+        "hero_subtitle": "A practical reservation model for teams sharing equipment, parts, or supplies across jobs and locations.",
+        "read_time": "6 min read",
+        "summary": "Reservations fail when teams only track total quantity. To avoid overbooking, the workflow needs to show available, reserved, and total units clearly and warn when someone tries to commit inventory that is already spoken for. CountDepot uses that structure so teams can reserve stock confidently before work starts.",
+        "sections": [
+            {
+                "title": "Why reservations matter",
+                "body": [
+                    "Reservations are what stop future work from being accidentally consumed by present work. If a part or piece of equipment is promised for tomorrow, the system needs to make that visible today.",
+                    "Without reservations, teams rely on memory, messages, or side notes. That breaks down quickly once more than one person is moving stock."
+                ],
+                "bullets": [
+                    "Protect inventory for upcoming jobs",
+                    "Reduce internal conflict over shared stock",
+                    "Prevent accidental use of already-committed items"
+                ],
+            },
+            {
+                "title": "The counts that actually matter",
+                "body": [
+                    "Teams need three numbers, not one: total quantity, reserved quantity, and available quantity. Available quantity is what can still be used now without breaking a future commitment.",
+                    "That structure also makes warnings easier to understand because the user can immediately see whether they are reserving five out of ten or five out of five."
+                ],
+                "bullets": [
+                    "Total quantity for the full stock picture",
+                    "Reserved quantity for future commitments",
+                    "Available quantity for current decisions"
+                ],
+            },
+            {
+                "title": "What should happen when stock is tight",
+                "body": [
+                    "The system should block or warn when a user tries to reserve more than what is available. That warning should not be vague. It should show the actual numbers and the reason for the conflict.",
+                    "If the business wants override behavior, that should be explicit and logged. Silent overbooking creates the worst possible outcome because nobody knows the data was compromised."
+                ],
+                "bullets": [
+                    "Warnings with real quantities",
+                    "Optional override only when the business permits it",
+                    "Audit history on reservation changes"
+                ],
+            },
+        ],
+        "cta_title": "Make reservations visible before stock conflicts start",
+        "cta_copy": "CountDepot gives teams a reservation workflow built around available, reserved, and total quantity instead of guesswork.",
+    },
+    "inventory-sop-template-for-receiving-checkout-and-counts": {
+        "title": "Inventory SOP Template for Receiving, Checkout, and Counts | CountDepot Resources",
+        "meta_description": "Use this inventory SOP template structure for receiving, checkout, low-stock handling, and periodic counts.",
+        "eyebrow": "Template",
+        "hero_title": "Inventory SOP template for receiving, checkout, and counts",
+        "hero_subtitle": "A simple structure teams can follow when inventory is getting more valuable and process drift starts hurting accuracy.",
+        "read_time": "8 min read",
+        "summary": "Most inventory problems are process problems before they are software problems. An SOP gives the team one shared way to receive stock, check it out, reserve it, count it, and escalate problems. CountDepot keeps those SOPs in the same system as the inventory so the instructions stay close to the work.",
+        "sections": [
+            {
+                "title": "What every inventory SOP should define",
+                "body": [
+                    "The procedure should tell a worker what to do, what to record, what to verify, and when to escalate. If the SOP only describes the ideal flow, it will not help when a serial number is missing or quantity does not match the order.",
+                    "The goal is not to create a giant policy manual. It is to remove ambiguity from the highest-frequency actions."
+                ],
+                "bullets": [
+                    "Who is responsible for the action",
+                    "What fields must be recorded",
+                    "How exceptions should be handled",
+                    "When the issue needs escalation"
+                ],
+            },
+            {
+                "title": "Receiving SOP structure",
+                "body": [
+                    "Receiving should verify what arrived, where it goes, and whether the item needs a label or serial capture before it is stored.",
+                    "If receiving is rushed or inconsistent, every downstream report inherits bad data."
+                ],
+                "bullets": [
+                    "Match the shipment to the purchase order",
+                    "Capture required serials, SKUs, or locations",
+                    "Apply labels before stock is shelved",
+                    "Escalate quantity or condition mismatches immediately"
+                ],
+            },
+            {
+                "title": "Checkout and count SOP structure",
+                "body": [
+                    "Checkout needs to define who can take inventory, what reason is recorded, and how returns are handled. Periodic counts need to define how discrepancies are documented and approved.",
+                    "The best practice is to keep both SOPs accessible where the worker is already operating inside the inventory system."
+                ],
+                "bullets": [
+                    "Record who took the item and why",
+                    "Reserve inventory when it is promised for future work",
+                    "Document count variances instead of silently fixing them",
+                    "Require supervisor review for high-risk discrepancies"
+                ],
+            },
+        ],
+        "cta_title": "Keep the process next to the inventory",
+        "cta_copy": "CountDepot stores SOPs and team docs in the same system as inventory so the team sees the process when the work is happening.",
+    },
 }
 
 
