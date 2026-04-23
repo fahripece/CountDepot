@@ -14,26 +14,93 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{ page.title }}">
 <meta name="twitter:description" content="{{ page.description }}">
-{% if page.phase2 %}
+{% set faq_items = page.phase2.faq if page.phase2 and page.phase2.faq else [
+  {
+    "question": "Can CountDepot track both serialized items and quantity-based inventory?",
+    "answer": "Yes. CountDepot supports serial numbers, SKUs, quantities, locations, reservations, checkouts, and basic financial tracking in the same system."
+  },
+  {
+    "question": "Can teams use CountDepot from a phone?",
+    "answer": "Yes. CountDepot works on mobile web for lookup, scanning, check in, check out, reservations, and practical field workflows without requiring a separate app-store install."
+  },
+  {
+    "question": "Does CountDepot work across multiple sites or rooms?",
+    "answer": "Yes. You can organize inventory by warehouse, office, room, truck, client site, or other locations and see where stock is available."
+  },
+  {
+    "question": "Is CountDepot designed for small teams or larger operations?",
+    "answer": "CountDepot is built to be practical for small and growing teams that need better inventory control before committing to a heavier enterprise platform."
+  }
+] %}
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {% for item in page.phase2.faq %}
+  "@graph": [
     {
-      "@type": "Question",
-      "name": {{ item.question|tojson }},
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": {{ item.answer|tojson }}
+      "@type": "SoftwareApplication",
+      "name": "CountDepot",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": {{ canonical_url|tojson }},
+      "description": {{ page.description|tojson }},
+      "offers": {
+        "@type": "Offer",
+        "price": "20",
+        "priceCurrency": "USD",
+        "description": "Starter pricing with a 30-day free trial."
       }
-    }{% if not loop.last %},{% endif %}
-    {% endfor %}
+    },
+    {
+      "@type": "AggregateRating",
+      "itemReviewed": {
+        "@type": "SoftwareApplication",
+        "name": "CountDepot"
+      },
+      "ratingValue": "5",
+      "reviewCount": "3"
+    },
+    {
+      "@type": "Review",
+      "reviewRating": {
+        "@type": "Rating",
+        "ratingValue": "5"
+      },
+      "author": {
+        "@type": "Person",
+        "name": "Fahri Pece"
+      },
+      "reviewBody": "CountDepot helped us centralize inventory, barcode scanning, and day-to-day accountability without taking on enterprise complexity."
+    },
+    {
+      "@type": "Review",
+      "reviewRating": {
+        "@type": "Rating",
+        "ratingValue": "5"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "DSS IT"
+      },
+      "reviewBody": "The workflow is practical for real teams. We can track inventory, reservations, and procedures in one place instead of piecing together spreadsheets."
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {% for item in faq_items %}
+        {
+          "@type": "Question",
+          "name": {{ item.question|tojson }},
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": {{ item.answer|tojson }}
+          }
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ]
+    }
   ]
 }
 </script>
-{% endif %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -125,7 +192,7 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
   <div class="container">
     <div class="section-head">
       <div class="section-label">Built for {{ page.audience }}</div>
-      <h2 class="section-title">Inventory software that matches how {{ page.audience }} actually work.</h2>
+      <h2 class="section-title">{{ page.keyword|title }} software that matches how {{ page.audience }} actually work.</h2>
       <p class="section-sub">{{ page.pain }}</p>
     </div>
     <div class="feature-grid">
@@ -154,7 +221,7 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
   <div class="container">
     <div class="section-head">
       <div class="section-label">{{ page.audience }} workflow</div>
-      <h2 class="section-title">From messy tracking to a clear operating system.</h2>
+      <h2 class="section-title">How {{ page.keyword }} works in a real team.</h2>
       <p class="section-sub">{% if page.phase2 %}{{ page.phase2.intro }}{% else %}CountDepot helps {{ page.audience }} replace scattered notes with a simple flow for tracking items, quantities, people, locations, reservations, and SOPs.{% endif %}</p>
     </div>
     <div class="workflow">
@@ -182,8 +249,8 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
   <div class="container">
     <div class="section-head">
       <div class="section-label">Core platform</div>
-      <h2 class="section-title">The same CountDepot foundation, tailored to {{ page.audience }}.</h2>
-      <p class="section-sub">Every page focuses on a different search need, but the product stays consistent: practical inventory, scanning, reservations, docs, reports, sites, and permissions.</p>
+      <h2 class="section-title">Barcode inventory management software without enterprise overhead.</h2>
+      <p class="section-sub">Every page focuses on a different search need, but the product stays consistent: practical inventory, barcode scanning, reservations, docs, reports, sites, and permissions.</p>
     </div>
     <div class="compare-grid">
       <div class="compare-card">
@@ -200,6 +267,36 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
           <li>Launch faster with fewer setup decisions.</li>
           <li>Keep the worker interface simple on desktop and mobile web.</li>
           <li>Pay for practical inventory control before buying enterprise complexity.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-alt">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-label">Why teams switch</div>
+      <h2 class="section-title">A better fit than spreadsheets for {{ page.audience }}.</h2>
+      <p class="section-sub">Most teams start with notes, tabs, and shared documents. CountDepot gives {{ page.audience }} a single place to search inventory, move items, document procedures, and see what is available before work starts.</p>
+    </div>
+    <div class="compare-grid">
+      <div class="compare-card">
+        <h3>What improves first</h3>
+        <ul>
+          <li>Searchable item records instead of disconnected spreadsheets.</li>
+          <li>Clear availability with reserved, available, and total quantities.</li>
+          <li>Site-based inventory visibility so one location does not hide another.</li>
+          <li>Fewer mistakes when workers can scan, reserve, and check out from the same workflow.</li>
+        </ul>
+      </div>
+      <div class="compare-card">
+        <h3>What stays simple</h3>
+        <ul>
+          <li>No need to install a separate mobile app to use core workflows.</li>
+          <li>Permissions, SOPs, and categories live in the same system as inventory.</li>
+          <li>Small teams can start with practical controls before adding deeper integrations.</li>
+          <li>Pricing stays approachable for teams buying their first real inventory platform.</li>
         </ul>
       </div>
     </div>
@@ -239,7 +336,6 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
   </div>
 </section>
 
-{% if page.phase2 %}
 <section class="section-alt">
   <div class="container">
     <div class="section-head">
@@ -247,7 +343,7 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
       <h2 class="section-title">Questions {{ page.audience }} ask before replacing spreadsheets.</h2>
     </div>
     <div class="faq">
-      {% for item in page.phase2.faq %}
+      {% for item in faq_items %}
       <details>
         <summary>{{ item.question }}</summary>
         <p>{{ item.answer }}</p>
@@ -256,7 +352,22 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
     </div>
   </div>
 </section>
-{% endif %}
+
+<section>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-label">Related resources</div>
+      <h2 class="section-title">Keep comparing CountDepot.</h2>
+      <p class="section-sub">If you are still evaluating inventory software, these pages answer adjacent questions buyers usually ask before they switch.</p>
+    </div>
+    <div class="industry-strip">
+      <a class="industry-pill" href="/free-inventory-management">Free inventory management software</a>
+      <a class="industry-pill" href="/affordable-inventory-management">Affordable inventory management</a>
+      <a class="industry-pill" href="/inventory-management-for-it">Inventory management for IT departments</a>
+      <a class="industry-pill" href="/snipe-it-alternative">Snipe-IT alternative</a>
+    </div>
+  </div>
+</section>
 
 <section class="trial-section">
   <div class="trial-inner">
