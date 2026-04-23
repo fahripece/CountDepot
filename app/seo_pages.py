@@ -124,6 +124,61 @@ SEO_PAGES = {
         "pain": "Clinics need fast access to supplies and equipment information without relying on scattered notes or manual counts.",
         "use_cases": ["Track supplies, equipment, and consumables", "Organize inventory by room or storage area", "Monitor low-stock clinic items", "Keep audit history for item movement"],
     },
+    "inventory-software-for-medical-offices": {
+        "tier": "Tier 1",
+        "keyword": "inventory software for medical offices",
+        "audience": "medical offices",
+        "title": "Inventory Software for Medical Offices | CountDepot",
+        "description": "Track medical supplies, office equipment, exam room stock, and low inventory by site with CountDepot.",
+        "hero": "Inventory software for medical offices that need supplies, equipment, and room stock under control.",
+        "pain": "Medical offices lose time and create risk when supplies are scattered across exam rooms, closets, and satellite locations without clear stock visibility.",
+        "use_cases": ["Track exam room supplies and office equipment", "Monitor low stock by site or room", "Assign devices and assets to staff or locations", "Keep simple audit history for supply movement and checkouts"],
+        "phase2": {
+            "intro": "Medical offices need fast visibility into what is stocked, what is running low, and where supplies or devices are located. CountDepot helps teams manage that workflow without buying a heavy hospital-grade platform.",
+            "workflow": [
+                {
+                    "title": "Build clean supply and equipment records",
+                    "copy": "Track names, categories, serials, vendor SKUs, costs, room locations, and site assignments in one searchable system."
+                },
+                {
+                    "title": "Keep room and site stock visible",
+                    "copy": "Organize inventory by office, storage room, exam room, or closet so staff can find what they need quickly and know what is actually available."
+                },
+                {
+                    "title": "Catch low stock before appointments are affected",
+                    "copy": "Use low-stock thresholds and site-based alerts to see exactly which location needs replenishment instead of relying on a single global count."
+                },
+                {
+                    "title": "Track devices and shared assets",
+                    "copy": "Check scanners, tablets, diagnostic tools, and other shared equipment in or out to staff, rooms, or sites with a clean audit trail."
+                }
+            ],
+            "examples": [
+                "Primary care office tracking disposables, room stock, and front-desk equipment",
+                "Specialty clinic tracking diagnostic devices, treatment-room supplies, and shared tablets",
+                "Multi-site practice tracking stock by office location instead of one combined count",
+                "Small medical group managing supply closets, exam rooms, and mobile devices"
+            ],
+            "faq": [
+                {
+                    "question": "Can CountDepot track inventory by office or room?",
+                    "answer": "Yes. You can organize inventory by site, room, shelf, or storage area so staff know exactly where items are stored and which location is low."
+                },
+                {
+                    "question": "Can we track both supplies and equipment?",
+                    "answer": "Yes. CountDepot supports quantity-based supplies as well as serialized equipment, shared devices, and checked-out assets in the same workspace."
+                },
+                {
+                    "question": "Do low-stock alerts work per location?",
+                    "answer": "Yes. CountDepot can evaluate low-stock thresholds by location so one office running low is not hidden by inventory sitting at another site."
+                },
+                {
+                    "question": "Is this built only for large healthcare organizations?",
+                    "answer": "No. CountDepot is designed for practical medical-office inventory control without the cost and complexity of larger enterprise healthcare systems."
+                }
+            ]
+        },
+    },
     "inventory-management-for-it": {
         "tier": "Tier 2",
         "keyword": "inventory management for IT departments",
