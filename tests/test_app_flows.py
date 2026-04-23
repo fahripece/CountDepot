@@ -2291,9 +2291,12 @@ def test_resource_article_renders_on_bare_domain(app):
     assert response.status_code == 200
     assert "Inventory management software vs. spreadsheets" in body
     assert "Where spreadsheets usually break" in body
+    assert "How buyers should compare the options" in body
     assert '<link rel="canonical" href="http://countdepot.com/resources/inventory-management-software-vs-spreadsheets">' in body
     assert '"@type": "Article"' in body
     assert '"@type": "BreadcrumbList"' in body
+    assert "Related resources" in body
+    assert 'href="/resources/what-to-look-for-in-inventory-management-software"' in body
 
 
 def test_public_marketing_pages_do_not_render_img_tags_without_alt(app):

@@ -137,7 +137,17 @@ def resource_article_page(slug):
     if not page:
         return redirect(url_for("auth.login_page"))
     canonical_url = request.url_root.rstrip("/") + "/resources/" + slug.strip("/")
-    return render_template("resource_article.html", page=page, canonical_url=canonical_url)
+    related_pages = []
+    for related_slug in page.get("related_slugs", []):
+        related_page = resource_page_for_slug(related_slug)
+        if related_page:
+            related_pages.append({"slug": related_slug, **related_page})
+    return render_template(
+        "resource_article.html",
+        page=page,
+        canonical_url=canonical_url,
+        related_pages=related_pages,
+    )
 
 
 @bp.route("/<path:slug>")

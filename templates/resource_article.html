@@ -91,12 +91,17 @@ h1{font-size:clamp(36px,5vw,62px);line-height:1.06;letter-spacing:-1.2px;margin-
 .cta h2{margin-bottom:12px}
 .cta p{margin-bottom:22px}
 .cta-actions{display:flex;gap:12px;flex-wrap:wrap}
+.related-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:22px}
+.related-card{display:block;padding:22px;background:linear-gradient(145deg,rgba(23,32,51,.94),rgba(15,22,40,.94));border:1px solid rgba(200,179,253,.14);border-radius:20px}
+.related-kicker{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;background:rgba(100,66,214,.16);border:1px solid rgba(200,179,253,.22);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px}
+.related-card h3{font-size:18px;line-height:1.22;margin-bottom:10px}
+.related-card p{font-size:14px;color:var(--muted2);margin:0}
 .btn-primary,.btn-secondary{display:inline-flex;align-items:center;justify-content:center;padding:14px 26px;border-radius:999px;font-size:15px;font-weight:800}
 .btn-primary{background:var(--primary);color:#fff}
 .btn-secondary{border:1px solid var(--border);color:var(--text)}
 .footer{border-top:1px solid var(--border);padding:28px 24px;color:var(--muted)}
 .footer-inner{max-width:var(--max);margin:0 auto;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-@media(max-width:900px){.nav-links{display:none}.hero{padding:120px 20px 28px}.article{padding:10px 20px 70px}.article h2{font-size:26px}}
+@media(max-width:900px){.nav-links{display:none}.hero{padding:120px 20px 28px}.article{padding:10px 20px 70px}.article h2{font-size:26px}.related-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -150,6 +155,22 @@ h1{font-size:clamp(36px,5vw,62px);line-height:1.06;letter-spacing:-1.2px;margin-
         <a class="btn-secondary" href="/resources">Back to resources</a>
       </div>
     </section>
+
+    {% if related_pages %}
+    <section>
+      <h2>Related resources</h2>
+      <p>Use these next if you are building out the decision, the workflow, or the internal rollout plan.</p>
+      <div class="related-grid">
+        {% for related in related_pages %}
+        <a class="related-card" href="/resources/{{ related.slug }}">
+          <span class="related-kicker">{{ related.eyebrow }}</span>
+          <h3>{{ related.hero_title }}</h3>
+          <p>{{ related.meta_description }}</p>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
   </div>
 </main>
 
