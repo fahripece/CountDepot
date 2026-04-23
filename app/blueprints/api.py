@@ -19,7 +19,7 @@ from app.helpers import (login_required, perm_required, admin_required,
                          location_filter_sql, notify_low_stock_if_needed,
                          ALL_PERMISSIONS, PERM_KEYS,
                          ADMIN_DEFAULT_PERMS, WORKER_DEFAULT_PERMS,
-                         VIEWER_DEFAULT_PERMS)
+                         VIEWER_DEFAULT_PERMS, CLIENT_VIEWER_DEFAULT_PERMS)
 
 bp = Blueprint("api", __name__)
 
@@ -1199,6 +1199,7 @@ def api_dashboard():
 @bp.route("/api/items")
 @login_required
 def api_items():
+    is_client_viewer = session.get("role") == "client_viewer"
     search   = request.args.get("q", "").strip()
     cat_id   = request.args.get("cat", "")
     status   = request.args.get("status", "")
@@ -1341,11 +1342,13 @@ def api_items():
     if "ORDER" in where_part: where_part = where_part[:where_part.rindex("ORDER")]
 
     # Single aggregate query replaces the previous 3 separate COUNT/SUM queries
-    agg = query(
+    agg_sql = (
         "SELECT COUNT(*) as total,"
         " SUM(CASE WHEN i.checked_out=1 THEN 1 ELSE 0 END) as checked_out_count,"
         " COALESCE(SUM(COALESCE(i.cost_price,0)*CASE WHEN i.qty IS NULL THEN 1 ELSE COALESCE(i.qty,0) END),0) as stock_value "
-        + where_part, args, one=True)
+        + where_part
+    )
+    agg = query(agg_sql, args, one=True)
     total             = agg["total"] or 0
     checked_out_count = agg["checked_out_count"] or 0
     stock_value       = round(float(agg["stock_value"] or 0), 2)
@@ -1371,14 +1374,30 @@ def api_items():
         d["missing_fields"]      = missing
         d["reservation_count"]   = d.get("reservation_count") or 0
         d["reservation_details"] = d.get("reservation_details") or ""
+        if is_client_viewer:
+            for hidden_key in (
+                "cost_price", "sale_price", "sold_price", "profit", "tax_amount",
+                "owner_company", "notes", "po_number", "purchased_from",
+                "company_id", "company_name", "checkout_by", "job_ref",
+                "reservation_details", "extra_fields", "tax_rate", "tax_paid",
+                "department_id", "department_name", "department_color",
+            ):
+                d.pop(hidden_key, None)
+            d["internal_sku"] = None
+            d["sku"] = None
+            d["stock_value_hidden"] = True
         result.append(d)
 
     if no_paginate:
         return jsonify(result)
     pages = max(1, -(-total // per_page))  # ceil division
+    totals = {"checked_out": checked_out_count, "stock_value": stock_value}
+    if is_client_viewer:
+        totals["stock_value"] = None
+        totals["stock_value_hidden"] = True
     return jsonify({"items": result, "total": total, "page": page,
                     "pages": pages, "per_page": per_page,
-                    "totals": {"checked_out": checked_out_count, "stock_value": stock_value}})
+                    "totals": totals})
 
 
 @bp.route("/api/scan")
@@ -3682,6 +3701,8 @@ def api_user_add():
         perm_str = ",".join(sorted(ADMIN_DEFAULT_PERMS))
     elif role == "viewer":
         perm_str = ",".join(sorted(VIEWER_DEFAULT_PERMS))
+    elif role == "client_viewer":
+        perm_str = ",".join(sorted(CLIENT_VIEWER_DEFAULT_PERMS))
     else:
         custom = d.get("permissions")
         perm_str = (",".join(set(custom) & set(PERM_KEYS)) if custom is not None
@@ -3761,7 +3782,7 @@ def api_user_role():
     role = (d.get("role") or "").strip().lower()
     if not uid:
         return jsonify({"ok": False, "msg": "User ID required"})
-    if role not in {"admin", "worker", "viewer"}:
+    if role not in {"admin", "worker", "viewer", "client_viewer"}:
         return jsonify({"ok": False, "msg": "Invalid role"})
     if uid == session.get("user_id"):
         return jsonify({"ok": False, "msg": "Cannot change your own role"})
@@ -3780,6 +3801,8 @@ def api_user_role():
         perm_str = ",".join(sorted(ADMIN_DEFAULT_PERMS))
     elif role == "viewer":
         perm_str = ",".join(sorted(VIEWER_DEFAULT_PERMS))
+    elif role == "client_viewer":
+        perm_str = ",".join(sorted(CLIENT_VIEWER_DEFAULT_PERMS))
     else:
         existing = set((user["permissions"] or "").split(",")) & set(PERM_KEYS)
         if user["role"] == "worker" and existing:
