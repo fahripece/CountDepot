@@ -4,7 +4,7 @@ import json
 import sqlite3
 import threading
 import time
-from datetime import datetime, date as _date, timezone
+from datetime import datetime, date as _date, timedelta, timezone
 
 from flask import Blueprint, request, jsonify, session, send_file
 
@@ -782,11 +782,7 @@ def api_report_inventory():
                   LEFT JOIN products p ON p.id=i.product_id
                   WHERE i.active=1{df_sql}
                   ORDER BY i.name LIMIT 500""", df_args)
-    low_prod_ids = set(r["id"] for r in query("""
-        SELECT p.id FROM products p
-        LEFT JOIN items ii ON ii.product_id=p.id AND ii.active=1 AND ii.sold=0 AND ii.checked_out=0
-        WHERE p.active=1 AND p.low_stock_threshold>0
-        GROUP BY p.id HAVING COUNT(ii.id)<=p.low_stock_threshold"""))
+    low_prod_ids = {r["product_id"] for r in get_low_stock_alerts()}
     result = []
     for r in items:
         d = dict(r)
@@ -1145,11 +1141,7 @@ def api_report_activity():
 def api_dashboard():
     total       = query("SELECT COUNT(*) FROM items WHERE active=1 AND sold=0",       one=True)[0]
     checked_out = query("SELECT COUNT(*) FROM items WHERE active=1 AND checked_out=1 AND sold=0", one=True)[0]
-    low_stock   = query("""SELECT COUNT(*) FROM (
-        SELECT p.id FROM products p
-        LEFT JOIN items i ON i.product_id=p.id AND i.active=1 AND i.sold=0 AND i.checked_out=0
-        WHERE p.active=1 AND p.low_stock_threshold>0
-        GROUP BY p.id HAVING COUNT(i.id)<=p.low_stock_threshold)""", one=True)[0]
+    low_stock   = len(get_low_stock_alerts())
     sold_count  = query("SELECT COUNT(*) FROM items WHERE active=1 AND sold=1",        one=True)[0]
     stock_value = round(query("""SELECT SUM(CASE WHEN qty IS NULL THEN COALESCE(cost_price,0)
                                      ELSE COALESCE(cost_price,0)*COALESCE(qty,0) END)
@@ -1221,6 +1213,14 @@ def api_items():
     dept_id  = request.args.get("dept", "")
     tag      = request.args.get("tag", "").strip()
     cond_f   = request.args.get("cond", "").strip()
+    if cat_id not in ("", None):
+        cat_id = int(cat_id)
+    if prod_id not in ("", None):
+        prod_id = int(prod_id)
+    if loc_id not in ("", None):
+        loc_id = int(loc_id)
+    if dept_id not in ("", None):
+        dept_id = int(dept_id)
     show_retired = (status == "retired")
     base_where = """FROM items i
              LEFT JOIN categories c   ON c.id=i.category_id
@@ -1288,11 +1288,13 @@ def api_items():
     elif status == "in":
         sql += " AND i.checked_out=0 AND i.sold=0"
     elif status == "low":
-        sql += """ AND i.product_id IN (
-            SELECT p.id FROM products p
-            LEFT JOIN items ii ON ii.product_id=p.id AND ii.active=1 AND ii.sold=0 AND ii.checked_out=0
-            WHERE p.active=1 AND p.low_stock_threshold>0
-            GROUP BY p.id HAVING COUNT(ii.id)<=p.low_stock_threshold)"""
+        low_product_ids = sorted({r["product_id"] for r in get_low_stock_alerts()})
+        if low_product_ids:
+            placeholders = ",".join("?" * len(low_product_ids))
+            sql += f" AND i.product_id IN ({placeholders})"
+            args.extend(low_product_ids)
+        else:
+            sql += " AND 1=0"
     elif status == "incomplete":
         incomplete_conditions = [
             "(p.require_serial=1 AND (i.serial IS NULL OR i.serial=''))",
@@ -3250,6 +3252,8 @@ def _product_response_row(product_id):
 def api_products():
     q   = request.args.get("q", "")
     cat = request.args.get("cat", "")
+    if cat not in ("", None):
+        cat = int(cat)
     sql = """SELECT p.*, c.name as category_name, c.color as category_color,
                     COALESCE(ic.item_count, 0) as item_count
              FROM products p
@@ -3890,22 +3894,11 @@ def api_change_password():
 def api_alerts():
     loc_id = request.args.get("loc", "").strip()
     if loc_id:
-        rows = query("""
-            SELECT p.id, p.name, p.low_stock_threshold,
-                   COUNT(i.id) as available_count
-            FROM products p
-            LEFT JOIN items i ON i.product_id = p.id
-                AND i.active = 1 AND i.sold = 0 AND i.checked_out = 0
-                AND i.location_id = ?
-            WHERE p.active = 1 AND p.low_stock_threshold > 0
-            GROUP BY p.id
-            HAVING available_count <= p.low_stock_threshold
-            ORDER BY available_count ASC
-        """, [loc_id])
-        return jsonify([{"id": r["id"], "name": r["name"],
-                         "available_count": r["available_count"],
-                         "low_stock_threshold": r["low_stock_threshold"]}
-                        for r in rows])
+        try:
+            loc_id = int(loc_id)
+        except Exception:
+            return jsonify([])
+        return jsonify(get_low_stock_alerts(location_id=loc_id))
     return jsonify(get_low_stock_alerts())
 
 
@@ -4092,6 +4085,7 @@ def api_send_low_stock_report():
     rows_html = "".join(
         f"<tr style='border-bottom:1px solid #f0efec'>"
         f"<td style='padding:10px 14px;font-weight:500'>{a['name']}</td>"
+        f"<td style='padding:10px 14px;color:#475569'>{a.get('location_name') or 'Unassigned'}</td>"
         f"<td style='padding:10px 14px;font-family:monospace;color:#b91c1c;font-weight:700'>{a['available_count']}</td>"
         f"<td style='padding:10px 14px;font-family:monospace'>{a['low_stock_threshold']}</td>"
         f"<td style='padding:10px 14px;font-family:monospace;color:#b91c1c'>{max(0, a['low_stock_threshold'] - a['available_count'])}</td>"
@@ -4105,11 +4099,12 @@ def api_send_low_stock_report():
     html = f"""
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
       <h2 style="color:#0f172a;margin-bottom:4px">Low Stock Alert</h2>
-      <p style="color:#64748b;margin-top:0">{len(alerts)} product{'s' if len(alerts)!=1 else ''} at or below minimum threshold</p>
+      <p style="color:#64748b;margin-top:0">{len(alerts)} site-specific low-stock alert{'s' if len(alerts)!=1 else ''} at or below minimum threshold</p>
       <table style="width:100%;border-collapse:collapse;border:1px solid #e5e3de;border-radius:8px;overflow:hidden">
         <thead>
           <tr style="background:#f8f7f5">
             <th style="padding:10px 14px;text-align:left;font-size:12px;color:#64748b;font-weight:600">Product</th>
+            <th style="padding:10px 14px;text-align:left;font-size:12px;color:#64748b;font-weight:600">Site</th>
             <th style="padding:10px 14px;text-align:left;font-size:12px;color:#64748b;font-weight:600">Have</th>
             <th style="padding:10px 14px;text-align:left;font-size:12px;color:#64748b;font-weight:600">Min</th>
             <th style="padding:10px 14px;text-align:left;font-size:12px;color:#64748b;font-weight:600">Short</th>
@@ -4123,11 +4118,15 @@ def api_send_low_stock_report():
       <p style="font-size:11px;color:#94a3b8;margin-top:24px">Sent from CountDepot · {slug}.{domain}</p>
     </div>"""
 
-    plain = f"Low Stock Alert — {len(alerts)} product(s) below minimum.\n\n" + \
-            "\n".join(f"• {a['name']}: {a['available_count']} available (min {a['low_stock_threshold']})" for a in alerts) + \
+    plain = f"Low Stock Alert — {len(alerts)} site-specific alert(s) below minimum.\n\n" + \
+            "\n".join(
+                f"• {a['name']} @ {a.get('location_name') or 'Unassigned'}: "
+                f"{a['available_count']} available (min {a['low_stock_threshold']})"
+                for a in alerts
+            ) + \
             f"\n\nView: {link}"
 
-    subject = f"Low Stock Alert — {len(alerts)} product(s) need restocking"
+    subject = f"Low Stock Alert — {len(alerts)} site-specific alert(s) need restocking"
     sent_to, failed = [], []
     for addr in alert_emails:
         if send_email(addr, subject, html, plain):
@@ -4395,14 +4394,16 @@ def _send_scheduled_report(report_type: str, to: str) -> bool:
             return False  # nothing to report
         rows_html = "".join(
             f'<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e3de">{a["name"]}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de">{a.get("location_name") or "Unassigned"}</td>'
             f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de;color:#b91c1c">{a["available_count"]}</td>'
             f'<td style="padding:8px 12px;border-bottom:1px solid #e5e3de">{a["low_stock_threshold"]}</td></tr>'
             for a in alerts
         )
-        body_html = f"""<h2 style="font-size:16px;margin-bottom:12px">Low Stock Alert — {len(alerts)} product(s)</h2>
+        body_html = f"""<h2 style="font-size:16px;margin-bottom:12px">Low Stock Alert — {len(alerts)} site-specific alert(s)</h2>
         <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e3de;border-radius:8px;overflow:hidden">
           <thead><tr style="background:#f8f7f4">
             <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Product</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Site</th>
             <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Available</th>
             <th style="padding:8px 12px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase">Minimum</th>
           </tr></thead><tbody>{rows_html}</tbody></table>"""
@@ -4560,21 +4561,85 @@ def api_delete_key(key_id):
 
 # ── 2FA management ────────────────────────────────────────────────────────────
 
+def _send_email_2fa_code(user_id, email):
+    import random
+    from app.mailer import send_email as _send_email
+
+    otp = f"{random.randint(0, 999999):06d}"
+    expires_at = (_utc_now() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
+    execute("UPDATE login_otp SET used=1 WHERE user_id=? AND used=0", [user_id])
+    execute("INSERT INTO login_otp (user_id,otp,expires_at) VALUES (?,?,?)",
+            [user_id, otp, expires_at])
+    _send_email(
+        email,
+        "Your CountDepot verification code",
+        f"<p style='font-family:sans-serif'>Your CountDepot verification code is:</p>"
+        f"<p style='font-family:monospace;font-size:32px;font-weight:700;letter-spacing:8px'>{otp}</p>"
+        f"<p style='font-family:sans-serif;font-size:12px;color:#888'>Expires in 10 minutes. If you didn't request this, ignore it.</p>",
+        f"Your CountDepot verification code: {otp}\nExpires in 10 minutes.",
+    )
+    return otp
+
+
 @bp.route("/api/user/2fa", methods=["POST"])
 @login_required
 def api_toggle_2fa():
-    d       = request.json or {}
+    d = request.json or {}
     enabled = bool(d.get("enabled"))
-    uid     = session.get("user_id")
-    user    = query("SELECT email FROM users WHERE id=?", [uid], one=True)
+    uid = session.get("user_id")
+    user = query("SELECT email, two_fa_enabled FROM users WHERE id=?", [uid], one=True)
     if not user or not user["email"]:
         return jsonify({"ok": False, "msg": "Account has no email address"})
     from config import Config as _Cfg
     if enabled and not _Cfg.SMTP_HOST:
         return jsonify({"ok": False, "msg": "2FA requires email. Ask your admin to configure SMTP."})
-    execute("UPDATE users SET two_fa_enabled=? WHERE id=?", [1 if enabled else 0, uid])
-    log_action("2FA_TOGGLE", detail=f"2FA {'enabled' if enabled else 'disabled'} for user #{uid}")
-    return jsonify({"ok": True, "enabled": enabled})
+    if not enabled:
+        execute("UPDATE users SET two_fa_enabled=0 WHERE id=?", [uid])
+        log_action("2FA_TOGGLE", detail=f"2FA disabled for user #{uid}")
+        return jsonify({"ok": True, "enabled": False})
+    from app.helpers import check_rate_limit as _check_rate_limit
+    ip = request.remote_addr or "unknown"
+    allowed, retry_in = _check_rate_limit(ip, "2fa-setup-send", max_attempts=6, window=600)
+    if not allowed:
+        return jsonify({"ok": False, "msg": f"Too many verification codes sent. Try again in {retry_in} seconds."}), 429
+    _send_email_2fa_code(uid, user["email"])
+    session["pending_2fa_setup_user_id"] = uid
+    log_action("2FA_SETUP_CODE_SENT", detail=f"Sent email verification code for user #{uid}")
+    return jsonify({
+        "ok": True,
+        "enabled": bool(user["two_fa_enabled"]),
+        "requires_verification": True,
+        "msg": "Verification code sent to your email.",
+    })
+
+
+@bp.route("/api/user/2fa/verify", methods=["POST"])
+@login_required
+def api_verify_2fa_setup():
+    d = request.json or {}
+    uid = session.get("user_id")
+    pending_uid = session.get("pending_2fa_setup_user_id")
+    if pending_uid and pending_uid != uid:
+        session.pop("pending_2fa_setup_user_id", None)
+    code = (d.get("code") or "").strip()
+    if not code:
+        return jsonify({"ok": False, "msg": "Verification code required"}), 400
+    ip = request.remote_addr or "unknown"
+    from app.helpers import check_rate_limit as _check_rate_limit
+    allowed, retry_in = _check_rate_limit(ip, "2fa-setup-verify", max_attempts=8, window=600)
+    if not allowed:
+        return jsonify({"ok": False, "msg": f"Too many attempts. Try again in {retry_in} seconds."}), 429
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
+    row = query(
+        "SELECT * FROM login_otp WHERE user_id=? AND used=0 AND expires_at > ? ORDER BY id DESC LIMIT 1",
+        [uid, now], one=True)
+    if not row or row["otp"] != code:
+        return jsonify({"ok": False, "msg": "Invalid or expired code."}), 400
+    execute("UPDATE login_otp SET used=1 WHERE id=?", [row["id"]])
+    execute("UPDATE users SET two_fa_enabled=1 WHERE id=?", [uid])
+    session.pop("pending_2fa_setup_user_id", None)
+    log_action("2FA_TOGGLE", detail=f"2FA enabled for user #{uid}")
+    return jsonify({"ok": True, "enabled": True})
 
 
 # ── TOTP (authenticator app) 2FA ─────────────────────────────────────────────
@@ -4782,21 +4847,13 @@ def api_notifications_generate():
     count = 0
 
     # Low stock
-    low = query("""
-        SELECT p.id, p.name, p.low_stock_threshold,
-               COALESCE(SUM(i.qty),0)-COALESCE(SUM(i.qty_out),0) AS avail
-        FROM products p
-        JOIN items i ON i.product_id=p.id
-        WHERE p.low_stock_threshold IS NOT NULL AND p.low_stock_threshold>0
-          AND COALESCE(i.sold,0)=0 AND COALESCE(i.retired,0)=0
-        GROUP BY p.id
-        HAVING avail < p.low_stock_threshold
-    """)
+    low = get_low_stock_alerts()
     for row in low:
         push_notification("low_stock",
-                          f"Low stock: {row['name']}",
-                          f"Only {int(row['avail'])} available (threshold {row['low_stock_threshold']})",
-                          "/inventory")
+                          f"Low stock: {row['name']} ({row.get('location_name') or 'Unassigned'})",
+                          f"Only {int(row['available_count'])} available at {row.get('location_name') or 'Unassigned'} "
+                          f"(threshold {row['low_stock_threshold']})",
+                          "/low-stock")
         count += 1
 
     # Overdue checkouts (checked out, no due date or due date past)

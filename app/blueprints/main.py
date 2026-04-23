@@ -812,23 +812,34 @@ def integrations_page():
 def api_low_stock_orderables():
     """Products below threshold that have a preferred vendor set."""
     rows = query("""
+        WITH base AS (
+            SELECT DISTINCT i.product_id, i.location_id
+            FROM items i
+            WHERE i.active=1
+        )
         SELECT p.id as product_id, p.name as product_name,
                p.manufacturer, p.model, p.low_stock_threshold,
+               base.location_id,
+               COALESCE(l.name, 'Unassigned') as location_name,
                COUNT(i.id) as available_count,
                pv.vendor_id, d.name as vendor_name,
                pv.vendor_sku, pv.unit_price,
                vc.min_order_qty, vc.lead_days
         FROM products p
+        JOIN base ON base.product_id = p.id
+        LEFT JOIN locations l ON l.id = base.location_id
         LEFT JOIN items i ON i.product_id = p.id
+            AND ((i.location_id = base.location_id)
+                 OR (i.location_id IS NULL AND base.location_id IS NULL))
             AND i.active=1 AND i.sold=0 AND i.checked_out=0
         JOIN product_vendors pv ON pv.product_id = p.id AND pv.preferred=1 AND pv.active=1
         JOIN distributors d ON d.id = pv.vendor_id
         LEFT JOIN vendor_catalog vc ON vc.vendor_id = pv.vendor_id
             AND vc.vendor_sku = pv.vendor_sku AND vc.active=1
         WHERE p.active=1 AND p.low_stock_threshold > 0
-        GROUP BY p.id
+        GROUP BY p.id, base.location_id, l.name
         HAVING COUNT(i.id) < p.low_stock_threshold
-        ORDER BY COUNT(i.id) ASC, p.name
+        ORDER BY COUNT(i.id) ASC, p.name, location_name
     """)
     result = []
     for r in rows:
@@ -901,27 +912,38 @@ def api_po_from_low_stock():
 @login_required
 def api_low_stock():
     rows = query("""
+        WITH base AS (
+            SELECT DISTINCT i.product_id, i.location_id
+            FROM items i
+            WHERE i.active = 1
+        )
         SELECT p.id, p.name, p.manufacturer, p.model, p.description,
                p.category_id, p.low_stock_threshold,
+               base.location_id,
+               COALESCE(l.name, 'Unassigned') as location_name,
                c.name as category_name, c.color as category_color,
                COUNT(i.id) as available_count
         FROM products p
+        JOIN base ON base.product_id = p.id
+        LEFT JOIN locations l ON l.id = base.location_id
         LEFT JOIN categories c ON c.id = p.category_id
         LEFT JOIN items i ON i.product_id = p.id
+            AND ((i.location_id = base.location_id)
+                 OR (i.location_id IS NULL AND base.location_id IS NULL))
             AND i.active = 1 AND i.sold = 0 AND i.checked_out = 0
         WHERE p.active = 1 AND p.low_stock_threshold > 0
-        GROUP BY p.id
+        GROUP BY p.id, base.location_id
         ORDER BY
             CASE WHEN COUNT(i.id) = 0 THEN 0
                  WHEN COUNT(i.id) <= p.low_stock_threshold THEN 1
                  WHEN COUNT(i.id) <= ROUND(p.low_stock_threshold * 1.5) THEN 2
-                 ELSE 3 END, p.name
+                 ELSE 3 END, p.name, location_name
     """)
     result = []
     for r in rows:
         d = dict(r)
-        avail, thresh = d["available_count"], d["low_stock_threshold"]
-        d["status"]  = "red" if avail <= thresh else ("yellow" if avail <= round(thresh * 1.5) else "green")
+        avail, thresh = int(d["available_count"] or 0), int(d["low_stock_threshold"] or 0)
+        d["status"] = "red" if avail <= thresh else ("yellow" if avail <= round(thresh * 1.5) else "green")
         d["missing"] = max(0, thresh - avail)
         result.append(d)
     return jsonify(result)

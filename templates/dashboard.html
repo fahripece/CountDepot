@@ -224,6 +224,7 @@ async function loadDashboard(){
       return `<div class="low-row">
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+          <div style="font-size:11px;color:#64748b;margin-top:2px">${p.location_name||'Unassigned site'}</div>
           <div style="margin-top:5px;background:#f0efec;border-radius:4px;height:5px;overflow:hidden">
             <div style="width:${Math.min(pct,100)}%;height:100%;background:${p.available_count===0?'#b91c1c':'#d97706'};border-radius:4px"></div>
           </div>

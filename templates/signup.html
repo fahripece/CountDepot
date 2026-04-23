@@ -36,6 +36,7 @@ input:focus{border-color:#1d4ed8;box-shadow:0 0 0 3px rgba(29,78,216,.08)}
 .hint{font-size:11.5px;color:#94a3b8;margin-top:4px}
 .slug-preview{font-size:12px;color:#1d4ed8;font-family:'IBM Plex Mono',monospace;
   margin-top:4px;min-height:18px;font-weight:600}
+.hp{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
 button{width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;
   border-radius:7px;font-size:15px;font-weight:600;cursor:pointer;margin-top:6px;
   transition:background .15s}
@@ -63,6 +64,11 @@ a.signin:hover{text-decoration:underline}
 
     <form method="POST" onsubmit="if(typeof gtag==='function'){gtag('event','signup_submit',{page_location:window.location.href});}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="form_started" value="{{ form_started }}">
+      <div class="hp" aria-hidden="true">
+        <label for="website-field">Website</label>
+        <input id="website-field" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
       <div class="field">
         <label>Company name</label>
         <input name="name" id="name-input" autofocus required

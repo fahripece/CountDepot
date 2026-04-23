@@ -320,25 +320,105 @@ def log_action(action, item_id=None, item_name=None, detail=None,
 
 # ── Low stock alerts ──────────────────────────────────────────────────────────
 
-def get_low_stock_alerts():
-    rows = query("""
-        SELECT p.id, p.name, p.low_stock_threshold,
-               COUNT(i.id) as available_count
+def _low_stock_rows(product_id=None, location_id=None, include_healthy=False):
+    args = []
+    where = ["p.active = 1", "p.low_stock_threshold > 0"]
+    if product_id is not None:
+        where.append("p.id = ?")
+        args.append(product_id)
+    if location_id is not None:
+        where.append("base.location_id = ?")
+        args.append(location_id)
+
+    sql = f"""
+        WITH base AS (
+            SELECT DISTINCT i.product_id, i.location_id
+            FROM items i
+            WHERE i.active = 1
+        )
+        SELECT p.id,
+               p.name,
+               p.low_stock_threshold,
+               base.location_id,
+               COALESCE(l.name, 'Unassigned') AS location_name,
+               COUNT(av.id) AS available_count
         FROM products p
-        LEFT JOIN items i ON i.product_id = p.id
-            AND i.active = 1 AND i.sold = 0 AND i.checked_out = 0
-        WHERE p.active = 1 AND p.low_stock_threshold > 0
-        GROUP BY p.id
-        HAVING available_count <= p.low_stock_threshold
-        ORDER BY available_count ASC
-    """)
-    return [{"id": r["id"], "name": r["name"],
-             "available_count": r["available_count"],
-             "low_stock_threshold": r["low_stock_threshold"]}
-            for r in rows]
+        JOIN base ON base.product_id = p.id
+        LEFT JOIN locations l ON l.id = base.location_id
+        LEFT JOIN items av ON av.product_id = p.id
+            AND ((av.location_id = base.location_id)
+                 OR (av.location_id IS NULL AND base.location_id IS NULL))
+            AND av.active = 1
+            AND av.sold = 0
+            AND av.checked_out = 0
+        WHERE {" AND ".join(where)}
+        GROUP BY p.id, p.name, p.low_stock_threshold, base.location_id, l.name
+    """
+    if not include_healthy:
+        sql += " HAVING available_count <= p.low_stock_threshold"
+    sql += " ORDER BY available_count ASC, p.name, location_name"
+
+    rows = query(sql, args)
+    result = []
+    for r in rows:
+        available = int(r["available_count"] or 0)
+        threshold = int(r["low_stock_threshold"] or 0)
+        if threshold <= 0:
+            continue
+        missing = max(0, threshold - available)
+        if available <= threshold:
+            status = "red"
+        elif available <= round(threshold * 1.5):
+            status = "yellow"
+        else:
+            status = "green"
+        result.append({
+            "id": r["id"],
+            "product_id": r["id"],
+            "name": r["name"],
+            "location_id": r["location_id"],
+            "location_name": r["location_name"],
+            "available_count": available,
+            "low_stock_threshold": threshold,
+            "missing": missing,
+            "status": status,
+        })
+    return result
+
+
+def get_low_stock_alerts(product_id=None, location_id=None, include_healthy=False):
+    return _low_stock_rows(product_id=product_id,
+                           location_id=location_id,
+                           include_healthy=include_healthy)
 
 
 # ── Low stock notification ────────────────────────────────────────────────────
+
+def _low_stock_recipients(location_id=None):
+    emails = []
+    if location_id is not None:
+        location = query(
+            "SELECT email FROM locations WHERE id=? AND email IS NOT NULL AND email != ''",
+            [location_id], one=True)
+        if location and location["email"]:
+            emails.append(location["email"])
+    if emails:
+        return emails
+    setting = query("SELECT value FROM settings WHERE key='low_stock_alert_email'", one=True)
+    raw = (setting["value"] if setting else "") or ""
+    emails = [e.strip() for e in raw.split(",") if e.strip()]
+    user_rows = query(
+        "SELECT email FROM users WHERE COALESCE(low_stock_alerts,0)=1 "
+        "AND email IS NOT NULL AND email != '' AND active=1")
+    for r in user_rows:
+        if r["email"] not in emails:
+            emails.append(r["email"])
+    if emails:
+        return emails
+    admins = query(
+        "SELECT email FROM users WHERE role='admin' AND email IS NOT NULL AND email != '' AND active=1")
+    return [r["email"] for r in admins if r.get("email")]
+
 
 def notify_low_stock_if_needed(product_id):
     """Check if a product is below threshold and send an alert email if so.
@@ -350,73 +430,57 @@ def notify_low_stock_if_needed(product_id):
     if not Config.SMTP_HOST:
         return
     try:
-        product = query("""
-            SELECT p.id, p.name, p.low_stock_threshold, p.low_stock_last_alerted,
-                   COUNT(i.id) AS available_count
-            FROM products p
-            LEFT JOIN items i ON i.product_id = p.id
-                AND i.active = 1 AND i.sold = 0 AND i.checked_out = 0
-            WHERE p.id = ? AND p.active = 1 AND p.low_stock_threshold > 0
-            GROUP BY p.id
-            HAVING available_count <= p.low_stock_threshold
-        """, [product_id], one=True)
-        if not product:
-            return
-        last = product["low_stock_last_alerted"]
-        if last:
-            last_dt = datetime.strptime(last[:19], "%Y-%m-%d %H:%M:%S")
-            if _utc_now() - last_dt < timedelta(hours=24):
-                return
-        # Prefer site-specific alert emails over global settings
-        site_rows = query("""
-            SELECT DISTINCT l.email
-            FROM items i
-            JOIN locations l ON l.id = i.location_id
-            WHERE i.product_id = ? AND i.active = 1
-              AND l.email IS NOT NULL AND l.email != ''
-        """, [product_id])
-        emails = [r["email"] for r in site_rows if r.get("email")]
-        if not emails:
-            # Global alert emails from settings (comma-separated)
-            setting = query("SELECT value FROM settings WHERE key='low_stock_alert_email'", one=True)
-            raw = (setting["value"] if setting else "") or ""
-            emails = [e.strip() for e in raw.split(",") if e.strip()]
-            # Users with low_stock_alerts flag set
-            user_rows = query(
-                "SELECT email FROM users WHERE COALESCE(low_stock_alerts,0)=1 "
-                "AND email IS NOT NULL AND email != '' AND active=1")
-            for r in user_rows:
-                if r["email"] not in emails:
-                    emails.append(r["email"])
-        if not emails:
-            # Final fallback: all admin users
-            admins = query(
-                "SELECT email FROM users WHERE role='admin' AND email IS NOT NULL AND email != '' AND active=1")
-            emails = [r["email"] for r in admins if r.get("email")]
-        if not emails:
-            return
-        now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
-        execute("UPDATE products SET low_stock_last_alerted=? WHERE id=?", [now, product_id])
         from app.mailer import send_low_stock_alert
-        for email in emails:
-            send_low_stock_alert(email, product["name"],
-                                 product["available_count"], product["low_stock_threshold"])
-        try:
-            from app.messenger import notify as _notify
-            _notify("low_stock",
-                    f"Low Stock: {product['name']}",
-                    f"Only {product['available_count']} available (threshold {product['low_stock_threshold']})",
-                    "/inventory")
-        except Exception:
-            pass
-        try:
-            push_notification(
-                "low_stock",
-                f"Low stock: {product['name']}",
-                f"Only {product['available_count']} available (threshold {product['low_stock_threshold']})",
-                "/inventory")
-        except Exception:
-            pass
+        alerts = get_low_stock_alerts(product_id=product_id)
+        if not alerts:
+            return
+        now_dt = _utc_now()
+        now = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+        for alert in alerts:
+            state = query(
+                "SELECT last_alerted FROM low_stock_alert_state "
+                "WHERE product_id=? AND location_id IS ?",
+                [product_id, alert["location_id"]], one=True)
+            if state and state["last_alerted"]:
+                last_dt = datetime.strptime(state["last_alerted"][:19], "%Y-%m-%d %H:%M:%S")
+                if now_dt - last_dt < timedelta(hours=24):
+                    continue
+            emails = _low_stock_recipients(alert["location_id"])
+            if not emails:
+                continue
+            execute(
+                "INSERT INTO low_stock_alert_state (product_id, location_id, last_alerted) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(product_id, location_id) DO UPDATE SET last_alerted=excluded.last_alerted",
+                [product_id, alert["location_id"], now],
+            )
+            for email in emails:
+                send_low_stock_alert(
+                    email,
+                    alert["name"],
+                    alert["available_count"],
+                    alert["low_stock_threshold"],
+                    location_name=alert["location_name"],
+                )
+            detail = (f"{alert['location_name']}: only {alert['available_count']} available "
+                      f"(threshold {alert['low_stock_threshold']})")
+            link = "/low-stock"
+            try:
+                from app.messenger import notify as _notify
+                _notify("low_stock",
+                        f"Low Stock: {alert['name']} ({alert['location_name']})",
+                        detail,
+                        link)
+            except Exception:
+                pass
+            try:
+                push_notification(
+                    "low_stock",
+                    f"Low stock: {alert['name']} ({alert['location_name']})",
+                    detail,
+                    link)
+            except Exception:
+                pass
     except Exception:
         pass  # never crash the request
 

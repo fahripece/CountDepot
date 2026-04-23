@@ -136,7 +136,7 @@
   <div class="card" style="margin-bottom:20px">
     <div style="margin-bottom:12px">
       <div style="font-weight:600;font-size:15px">Two-Factor Authentication — Email OTP</div>
-      <div style="font-size:12px;color:#94a3b8;margin-top:1px">A one-time code sent to your email on sign-in. Requires SMTP to be configured and applies on your next fresh login.</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:1px">A one-time code sent to your email on sign-in. Enabling 2FA sends a verification code first, then applies on your next fresh login.</div>
     </div>
     <div style="display:flex;align-items:center;gap:14px">
       <div id="tfa-status" style="font-size:13px;color:#64748b">Loading…</div>
@@ -146,6 +146,27 @@
       SMTP is not configured on this server — email 2FA cannot be delivered, and sign-in will be blocked while 2FA is enabled.
     </div>
   </div>
+
+<div id="tfaVerifyModal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)close2FAModal()">
+  <div class="modal-box" style="width:420px;max-width:calc(100vw - 32px)">
+    <div class="modal-head">
+      <span class="modal-title">Verify Email Code</span>
+      <button class="modal-close" onclick="close2FAModal()">Ã—</button>
+    </div>
+    <div style="padding:20px">
+      <div style="font-size:13px;color:#64748b;line-height:1.6;margin-bottom:14px">
+        Enter the 6-digit code sent to your account email to finish turning on email 2FA.
+      </div>
+      <input class="input" id="tfa-code-input" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" style="font-family:'IBM Plex Mono',monospace;font-size:18px;letter-spacing:4px;text-align:center">
+      <div id="tfa-code-error" style="display:none;font-size:12px;color:#b91c1c;margin-top:10px"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="start2FASetup()">Resend Code</button>
+      <button class="btn btn-secondary" onclick="close2FAModal()">Cancel</button>
+      <button class="btn btn-primary" id="tfa-verify-btn" onclick="verify2FASetup()">Verify & Enable</button>
+    </div>
+  </div>
+</div>
 
 <!-- API KEYS -->
 <div class="card" style="margin-bottom:20px" id="apiKeysSection">
@@ -1025,6 +1046,15 @@ loadSchedReports();
 
 // ── 2FA ──
 let _2faEnabled=false;
+function open2FAModal(){
+  document.getElementById('tfa-code-input').value='';
+  document.getElementById('tfa-code-error').style.display='none';
+  document.getElementById('tfaVerifyModal').style.display='flex';
+  setTimeout(()=>document.getElementById('tfa-code-input').focus(), 30);
+}
+function close2FAModal(){
+  document.getElementById('tfaVerifyModal').style.display='none';
+}
 async function load2FA(){
     const smtpWarn=document.getElementById('tfa-smtp-warn');
     const smtpOk=await fetch('/api/smtp-status').then(r=>r.json()).then(r=>r.ok).catch(()=>false);
@@ -1041,9 +1071,58 @@ async function load2FA(){
   btn.textContent=_2faEnabled?'Disable 2FA':'Enable 2FA';
   btn.style.display='';
   btn.className='btn btn-sm '+(_2faEnabled?'btn-danger':'btn-secondary');
+  if(!_2faEnabled){
+    statusEl.innerHTML='<span style="color:#94a3b8">Disabled</span> - verify a code once to turn email 2FA on';
+  }
+}
+async function start2FASetup(){
+  const res=await api('/api/user/2fa',{enabled:true});
+  if(res.ok && res.requires_verification){
+    toast(res.msg||'Verification code sent','ok');
+    open2FAModal();
+    return;
+  }
+  if(res.ok){
+    toast('Email login codes enabled','ok');
+    load2FA();
+    return;
+  }
+  toast(res.msg||'Error','err');
+}
+async function verify2FASetup(){
+  const code=(document.getElementById('tfa-code-input').value||'').trim();
+  const err=document.getElementById('tfa-code-error');
+  const btn=document.getElementById('tfa-verify-btn');
+  err.style.display='none';
+  if(!/^[0-9]{6}$/.test(code)){
+    err.textContent='Enter the 6-digit code from your email.';
+    err.style.display='block';
+    return;
+  }
+  btn.disabled=true;
+  btn.textContent='Verifying...';
+  const res=await api('/api/user/2fa/verify',{code});
+  btn.disabled=false;
+  btn.textContent='Verify & Enable';
+  if(res.ok){
+    close2FAModal();
+    toast('Email login codes enabled - this applies on your next sign-in','ok');
+    load2FA();
+    return;
+  }
+  err.textContent=res.msg||'Verification failed';
+  err.style.display='block';
 }
 async function toggle2FA(){
-  const res=await api('/api/user/2fa',{enabled:!_2faEnabled});
+  if(!_2faEnabled){
+    return start2FASetup();
+  }
+  const res=await api('/api/user/2fa',{enabled:false});
+  if(res.ok){
+    toast('2FA disabled','ok');
+    load2FA();
+    return;
+  }
   if(res.ok){toast(res.enabled?'Email login codes enabled — this applies on your next sign-in':'2FA disabled','ok');load2FA();}
   else toast(res.msg||'Error','err');
 }

@@ -1,6 +1,8 @@
 import json
 import os
+import re
 import sqlite3
+from datetime import datetime, timedelta, timezone
 
 from flask import session
 
@@ -41,6 +43,9 @@ from app.blueprints.api import (
     api_item_woocommerce_list,
     api_woocommerce_sync_orders,
     api_set_user_locations,
+    api_toggle_2fa,
+    api_verify_2fa_setup,
+    api_alerts,
 )
 
 
@@ -62,6 +67,18 @@ def _login(app, tenant, email=None, password=None):
         session["_csrf_token"] = "test-csrf-token"
         response = _as_response(app, app.preprocess_request() or login_page())
         return response, dict(session)
+
+
+def _seed_logged_in_client(client, tenant):
+    expires_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat()
+    with client.session_transaction() as sess:
+        sess["user_id"] = 1
+        sess["username"] = "admin"
+        sess["role"] = "admin"
+        sess["permissions"] = ",".join(PERM_KEYS)
+        sess["expires_at"] = expires_at
+        sess["location_ids"] = []
+        sess["_csrf_token"] = "test-csrf-token"
 
 
 def test_login_redirects_to_inventory_for_onboarded_tenant(app, tenant):
@@ -169,6 +186,74 @@ def test_login_blocks_when_email_otp_enabled_but_user_has_no_email(app, tenant, 
     assert saved_session.get("user_id") is None
 
 
+def test_email_2fa_enable_requires_verification_code(app, client, tenant, monkeypatch):
+    sent = {}
+
+    def fake_send_email(to, subject, html, text):
+        sent["to"] = to
+        sent["subject"] = subject
+        sent["html"] = html
+        sent["text"] = text
+        return True
+
+    monkeypatch.setattr(Config, "SMTP_HOST", "smtp.example.com", raising=False)
+    monkeypatch.setattr("app.mailer.send_email", fake_send_email)
+
+    with app.test_request_context(
+        "/api/user/2fa",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"enabled": True},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session["user_id"] = 1
+        session["username"] = "admin"
+        session["role"] = "admin"
+        session["permissions"] = ",".join(PERM_KEYS)
+        session["expires_at"] = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat()
+        session["_csrf_token"] = "test-csrf-token"
+        setup_res = _as_response(app, app.preprocess_request() or api_toggle_2fa())
+        setup_payload = setup_res.get_json()
+
+    db = sqlite3.connect(tenant["db_path"])
+    otp_row = db.execute(
+        "SELECT otp FROM login_otp WHERE user_id=1 AND used=0 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    db.close()
+
+    assert setup_res.status_code == 200
+    assert setup_payload["ok"] is True
+    assert setup_payload["requires_verification"] is True
+    assert sent["to"] == tenant["email"]
+    assert sent["subject"] == "Your CountDepot verification code"
+    assert otp_row is not None
+
+    with app.test_request_context(
+        "/api/user/2fa/verify",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"code": otp_row[0]},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session["user_id"] = 1
+        session["username"] = "admin"
+        session["role"] = "admin"
+        session["permissions"] = ",".join(PERM_KEYS)
+        session["expires_at"] = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat()
+        session["_csrf_token"] = "test-csrf-token"
+        session["pending_2fa_setup_user_id"] = 1
+        verify_res = _as_response(app, app.preprocess_request() or api_verify_2fa_setup())
+        verify_payload = verify_res.get_json()
+
+    db = sqlite3.connect(tenant["db_path"])
+    enabled = db.execute("SELECT two_fa_enabled FROM users WHERE id=1").fetchone()[0]
+    db.close()
+
+    assert verify_res.status_code == 200
+    assert verify_payload == {"ok": True, "enabled": True}
+    assert enabled == 1
+
+
 def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
     db = sqlite3.connect(tenant["db_path"])
     db.row_factory = sqlite3.Row
@@ -238,6 +323,57 @@ def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
     second_response, second_session = _login(app, tenant)
     assert second_response.status_code == 302
     assert not second_session.get("show_intro_tour")
+
+
+def test_low_stock_alerts_are_scoped_per_site(app, client, tenant):
+    _seed_logged_in_client(client, tenant)
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute("INSERT INTO locations (name, active, created_at) VALUES ('Warehouse A', 1, datetime('now'))")
+    site_a = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    db.execute("INSERT INTO locations (name, active, created_at) VALUES ('Warehouse B', 1, datetime('now'))")
+    site_b = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    db.execute(
+        "INSERT INTO products (name, low_stock_threshold, active, created_at) VALUES (?,?,1,datetime('now'))",
+        ["Test Router", 2],
+    )
+    product_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    db.execute(
+        "INSERT INTO items (product_id, name, location_id, active, sold, checked_out, created_at) VALUES (?,?,?,?,0,0,datetime('now'))",
+        [product_id, "Test Router A1", site_a, 1],
+    )
+    for idx in range(4):
+        db.execute(
+            "INSERT INTO items (product_id, name, location_id, active, sold, checked_out, created_at) VALUES (?,?,?,?,0,0,datetime('now'))",
+            [product_id, f"Test Router B{idx}", site_b, 1],
+        )
+    db.commit()
+    db.close()
+
+    with app.test_request_context("/api/alerts", base_url=f"http://{tenant['host']}"):
+        session["user_id"] = 1
+        session["username"] = "admin"
+        session["role"] = "admin"
+        session["permissions"] = ",".join(PERM_KEYS)
+        session["expires_at"] = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat()
+        session["location_ids"] = []
+        res = _as_response(app, app.preprocess_request() or api_alerts())
+        payload = res.get_json()
+
+    with app.test_request_context(f"/api/alerts?loc={site_b}", base_url=f"http://{tenant['host']}"):
+        session["user_id"] = 1
+        session["username"] = "admin"
+        session["role"] = "admin"
+        session["permissions"] = ",".join(PERM_KEYS)
+        session["expires_at"] = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat()
+        session["location_ids"] = []
+        site_b_res = _as_response(app, app.preprocess_request() or api_alerts())
+        site_b_payload = site_b_res.get_json()
+
+    assert res.status_code == 200
+    assert any(a["name"] == "Test Router" and a["location_name"] == "Warehouse A" for a in payload)
+    assert not any(a["name"] == "Test Router" and a["location_name"] == "Warehouse B" for a in payload)
+    assert site_b_payload == []
 
 
 def test_intro_tour_shows_until_completed_even_if_user_has_logged_in_before(app, tenant):
@@ -379,6 +515,44 @@ def test_admin_can_create_product_and_item_and_fetch_inventory(app, tenant):
 
     assert inventory_response.status_code == 200
     assert any(item["name"] == "Roadmap Test Item" for item in items)
+
+
+def test_inventory_category_filter_matches_integer_category_ids(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_a = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Filter Cat A", "#ffffff"],
+    ).lastrowid
+    category_b = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Filter Cat B", "#000000"],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO items (name,category_id,shelf,cost_price,active,created_at) VALUES (?,?,?,?,1,datetime('now'))",
+        ["Category Match Item", category_a, "A1", 10.0],
+    )
+    db.execute(
+        "INSERT INTO items (name,category_id,shelf,cost_price,active,created_at) VALUES (?,?,?,?,1,datetime('now'))",
+        ["Wrong Category Item", category_b, "B1", 20.0],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        f"/api/items?cat={category_a}&hide_out=0",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        inventory_response = _as_response(app, app.preprocess_request() or api_items())
+        items = inventory_response.get_json()
+
+    assert inventory_response.status_code == 200
+    assert len(items) == 1
+    assert items[0]["name"] == "Category Match Item"
 
 
 def test_internal_sku_product_item_is_visible_in_inventory(app, tenant):
@@ -2007,6 +2181,65 @@ def test_signup_page_has_seo_meta_and_submit_event(app):
     ) in body
     assert '<link rel="canonical" href="https://countdepot.com/signup">' in body
     assert "signup_submit" in body
+    assert 'name="form_started"' in body
+    assert 'name="website"' in body
+
+
+def test_signup_blocks_honeypot_bot_submission(app):
+    client = app.test_client()
+    get_response = client.get("/signup", base_url="http://countdepot.com")
+    body = get_response.get_data(as_text=True)
+    match = re.search(r'name="form_started" value="(\d+)"', body)
+    csrf_match = re.search(r'name="csrf_token" value="([a-f0-9]+)"', body)
+    assert match is not None
+    assert csrf_match is not None
+
+    response = client.post(
+        "/signup",
+        base_url="http://countdepot.com",
+        data={
+            "csrf_token": csrf_match.group(1),
+            "form_started": match.group(1),
+            "website": "https://spam.example",
+            "name": "Bot Company",
+            "slug": "bot-company",
+            "email": "bot@example.com",
+            "password": "Password1!",
+        },
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "We could not process that signup. Please try again." in html
+
+
+def test_signup_rejects_disposable_email_domains(app):
+    client = app.test_client()
+    get_response = client.get("/signup", base_url="http://countdepot.com")
+    body = get_response.get_data(as_text=True)
+    match = re.search(r'name="form_started" value="(\d+)"', body)
+    csrf_match = re.search(r'name="csrf_token" value="([a-f0-9]+)"', body)
+    assert match is not None
+    assert csrf_match is not None
+    form_started = str(int(match.group(1)) - 10)
+
+    response = client.post(
+        "/signup",
+        base_url="http://countdepot.com",
+        data={
+            "csrf_token": csrf_match.group(1),
+            "form_started": form_started,
+            "website": "",
+            "name": "Temp Mail Co",
+            "slug": "temp-mail-co",
+            "email": "temp@mailinator.com",
+            "password": "Password1!",
+        },
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Please use your work email address." in html
 
 
 def test_www_countdepot_redirects_to_apex(app):

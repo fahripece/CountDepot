@@ -186,19 +186,27 @@ def send_support_message(subject: str, message: str, from_name: str,
     return send_email(to, f"[CountDepot Support] {subject}", html, text)
 
 
-def send_low_stock_alert(to: str, product_name: str, available: int, threshold: int) -> bool:
+def send_low_stock_alert(to: str, product_name: str, available: int, threshold: int,
+                         location_name: str = None) -> bool:
+    location_line = (f"<div style='font-size:12px;color:#7f1d1d;margin-bottom:8px'>"
+                     f"Site: <strong>{location_name}</strong></div>") if location_name else ""
+    text_location = f"Site: {location_name}\n" if location_name else ""
     subject = f"Low stock alert: {product_name}"
+    if location_name:
+        subject += f" ({location_name})"
     html = f"""
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#0f172a">
   <h2 style="font-size:18px;font-weight:700;margin-bottom:6px">Low stock alert</h2>
-  <p style="color:#64748b;margin-bottom:20px">A product has dropped to or below its low stock threshold.</p>
+  <p style="color:#64748b;margin-bottom:20px">A product has dropped to or below its low stock threshold for this site.</p>
   <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:16px 20px;margin-bottom:20px">
     <div style="font-size:13px;color:#991b1b;font-weight:600;margin-bottom:4px">{product_name}</div>
+    {location_line}
     <div style="font-size:13px;color:#7f1d1d">Available: <strong>{available}</strong> &nbsp;/&nbsp; Threshold: <strong>{threshold}</strong></div>
   </div>
-  <p style="font-size:12px;color:#94a3b8">You are receiving this because you are an admin on this CountDepot workspace. Alerts are sent at most once every 24 hours per product.</p>
+  <p style="font-size:12px;color:#94a3b8">You are receiving this because you are an admin on this CountDepot workspace. Alerts are sent at most once every 24 hours per product and site.</p>
 </div>"""
     text = (f"Low stock alert: {product_name}\n\n"
+            f"{text_location}"
             f"Available: {available} / Threshold: {threshold}\n\n"
             f"Log in to CountDepot to restock.")
     return send_email(to, subject, html, text)

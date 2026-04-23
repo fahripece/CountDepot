@@ -24,10 +24,29 @@ from flask import Blueprint, render_template, request, redirect, url_for
 from app.platform            import create_tenant, get_tenant_by_slug, get_tenant_by_owner_email, get_platform_db
 from app.blueprints.platform import _bootstrap_tenant_db
 from app.mailer              import send_signup_verification_email, send_welcome_email
-from app.helpers             import hash_pw
+from app.helpers             import hash_pw, check_rate_limit
 from config                  import Config
 
 bp = Blueprint("signup", __name__)
+
+DISPOSABLE_EMAIL_DOMAINS = {
+    "10minutemail.com",
+    "10minutemail.net",
+    "dispostable.com",
+    "fakeinbox.com",
+    "getnada.com",
+    "guerrillamail.com",
+    "guerrillamailblock.com",
+    "maildrop.cc",
+    "mailinator.com",
+    "sharklasers.com",
+    "temp-mail.org",
+    "tempmail.com",
+    "throwawaymail.com",
+    "trashmail.com",
+    "yopmail.com",
+}
+SIGNUP_MIN_FILL_SECONDS = 3
 
 
 def _utc_now():
@@ -67,37 +86,67 @@ def _clean_expired_pending():
         pass
 
 
+def _email_domain(email):
+    parts = (email or "").rsplit("@", 1)
+    return parts[1].lower().strip() if len(parts) == 2 else ""
+
+
+def _is_disposable_email(email):
+    return _email_domain(email) in DISPOSABLE_EMAIL_DOMAINS
+
+
 @bp.route("/signup", methods=["GET", "POST"])
 def signup():
     if not Config.SIGNUP_ENABLED:
         return render_template("signup_disabled.html"), 404
 
     error = None
+    form_started = int(_utc_now().timestamp())
 
     if request.method == "POST":
-        name     = request.form.get("name",     "").strip()
-        slug     = request.form.get("slug",     "").strip().lower()
-        email    = request.form.get("email",    "").strip().lower()
+        ip = request.remote_addr or "unknown"
+        name = request.form.get("name", "").strip()
+        slug = request.form.get("slug", "").strip().lower()
+        email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
+        website = request.form.get("website", "").strip()
+        started = request.form.get("form_started", "").strip()
 
-        if not name:
-            error = "Company name is required."
-        elif not slug:
-            error = "A subdomain is required."
-        elif not _valid_slug(slug):
-            error = "Subdomain must be lowercase letters, numbers and hyphens (2–32 chars)."
-        elif get_tenant_by_slug(slug) and not _slug_belongs_to_email(slug, email if "@" in (email or "") else ""):
-            error = f"The subdomain '{slug}' is already taken. Please choose another."
-        elif not email or "@" not in email:
-            error = "A valid email address is required."
-        elif get_tenant_by_owner_email(email):
-            error = "An account already exists for that email address."
-        elif len(password) < 8:
-            error = "Password must be at least 8 characters."
+        allowed, reset_in = check_rate_limit(ip, "public-signup", max_attempts=5, window=900)
+        if not allowed:
+            error = f"Too many signup attempts. Try again in {reset_in // 60 + 1} minutes."
+        elif website:
+            error = "We could not process that signup. Please try again."
         else:
+            try:
+                started_ts = int(started)
+            except Exception:
+                started_ts = 0
+            elapsed = int(_utc_now().timestamp()) - started_ts if started_ts else 0
+            if started_ts <= 0 or elapsed < SIGNUP_MIN_FILL_SECONDS:
+                error = "We could not process that signup. Please try again."
+
+        if not error:
+            if not name:
+                error = "Company name is required."
+            elif not slug:
+                error = "A subdomain is required."
+            elif not _valid_slug(slug):
+                error = "Subdomain must be lowercase letters, numbers and hyphens (2-32 chars)."
+            elif get_tenant_by_slug(slug) and not _slug_belongs_to_email(slug, email if "@" in (email or "") else ""):
+                error = f"The subdomain '{slug}' is already taken. Please choose another."
+            elif not email or "@" not in email:
+                error = "A valid email address is required."
+            elif _is_disposable_email(email):
+                error = "Please use your work email address."
+            elif get_tenant_by_owner_email(email):
+                error = "An account already exists for that email address."
+            elif len(password) < 8:
+                error = "Password must be at least 8 characters."
+
+        if not error:
             _clean_expired_pending()
 
-            # Check if there's already a pending (unexpired) signup for this email
             db = get_platform_db()
             now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
             existing = db.execute(
@@ -106,7 +155,6 @@ def signup():
             ).fetchone()
 
             if existing:
-                # Resend — update the token so it's fresh
                 token = secrets.token_urlsafe(32)
                 expires = (_utc_now() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
                 db.execute(
@@ -124,14 +172,16 @@ def signup():
             db.commit()
             db.close()
 
-            sent = send_signup_verification_email(email, name, token)
+            send_signup_verification_email(email, name, token)
 
-            return render_template("signup_verify_sent.html",
-                                   email=email,
-                                   smtp_enabled=bool(Config.SMTP_HOST),
-                                   dev_token=token if not Config.SMTP_HOST else None)
+            return render_template(
+                "signup_verify_sent.html",
+                email=email,
+                smtp_enabled=bool(Config.SMTP_HOST),
+                dev_token=token if not Config.SMTP_HOST else None,
+            )
 
-    return render_template("signup.html", error=error)
+    return render_template("signup.html", error=error, form_started=form_started)
 
 
 @bp.route("/verify-signup/<token>")

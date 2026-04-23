@@ -220,6 +220,12 @@ def run_migrations_only():
             );
             CREATE INDEX IF NOT EXISTS idx_docs_category ON docs(category_id, active, title);
             CREATE INDEX IF NOT EXISTS idx_docs_status ON docs(status, active);
+            CREATE TABLE IF NOT EXISTS low_stock_alert_state (
+                product_id    INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+                location_id   INTEGER REFERENCES locations(id) ON DELETE CASCADE,
+                last_alerted  TEXT NOT NULL,
+                PRIMARY KEY (product_id, location_id)
+            );
         """)
         _run_data_repairs(db)
         db.commit()
@@ -647,6 +653,12 @@ def _init_db_conn(db):
             created_at  TEXT NOT NULL,
             updated_at  TEXT NOT NULL,
             active      INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS low_stock_alert_state (
+            product_id    INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            location_id   INTEGER REFERENCES locations(id) ON DELETE CASCADE,
+            last_alerted  TEXT NOT NULL,
+            PRIMARY KEY (product_id, location_id)
         );
         CREATE INDEX IF NOT EXISTS idx_docs_category ON docs(category_id, active, title);
         CREATE INDEX IF NOT EXISTS idx_docs_status ON docs(status, active);
