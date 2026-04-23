@@ -2132,11 +2132,10 @@ def test_public_demo_request_skips_csrf_and_bare_domain_landing(app):
 def test_homepage_has_core_seo_meta_tags(app):
     response = app.test_client().get("/", base_url="http://countdepot.com")
     body = response.get_data(as_text=True)
-    title = "CountDepot - Inventory Management for Any Industry"
+    title = "CountDepot - Barcode Inventory Management Software for Any Team"
     description = (
-        "Track assets, scan barcodes, and generate financial reports. "
-        "Inventory management that adapts to your industry. "
-        "Free tier available, no credit card required."
+        "Barcode inventory management software for tracking assets, scanning items, "
+        "managing reservations, and monitoring stock by site. Start a 30-day free trial."
     )
 
     assert response.status_code == 200
@@ -2280,7 +2279,7 @@ def test_repair_shop_seo_page_has_phase_two_content(app):
 
     assert response.status_code == 200
     assert "repair shops workflow" in body
-    assert "From messy tracking to a clear operating system." in body
+    assert "How inventory management for repair shops works in a real team." in body
     assert "Reserve inventory before a job starts" in body
     assert "Phone repair shop tracking screens" in body
     assert "Questions repair shops ask before replacing spreadsheets." in body
@@ -2298,7 +2297,10 @@ def test_generic_seo_pages_do_not_show_repair_shop_phase_two_content(app):
     assert response.status_code == 200
     assert "repair shops workflow" not in body
     assert "SOPs and team docs" in body
-    assert '"@type": "FAQPage"' not in body
+    assert '"@type": "FAQPage"' in body
+    assert "Questions nonprofits ask before replacing spreadsheets." in body
+    assert "Can CountDepot track both serialized items and quantity-based inventory?" in body
+    assert "Phone repair shop tracking screens" not in body
 
 
 def test_google_analytics_tag_is_present_once_on_public_and_app_pages(app, tenant):
