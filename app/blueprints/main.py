@@ -10,6 +10,7 @@ from app.db import query, execute
 from app.helpers import (login_required, perm_required, admin_required,
                          check_rate_limit, log_action, ALL_PERMISSIONS, PERM_KEYS)
 from app.seo_pages import seo_page_for_slug, seo_slugs
+from app.resources import RESOURCE_GUIDES, resource_page_for_slug
 
 bp = Blueprint("main", __name__)
 
@@ -102,7 +103,9 @@ def robots_txt():
 @bp.route("/sitemap")
 def sitemap_xml():
     base = request.url_root.rstrip("/")
-    urls = [base + "/"] + [base + "/" + slug for slug in seo_slugs()]
+    urls = [base + "/", base + "/resources"]
+    urls += [base + "/" + slug for slug in seo_slugs()]
+    urls += [base + "/resources/" + slug for slug in RESOURCE_GUIDES.keys()]
     body = '<?xml version="1.0" encoding="UTF-8"?>\n'
     body += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     for url in urls:
@@ -111,6 +114,30 @@ def sitemap_xml():
     response = make_response(body)
     response.headers["Content-Type"] = "application/xml; charset=utf-8"
     return response
+
+
+@bp.route("/resources")
+def resources_hub_page():
+    canonical_url = request.url_root.rstrip("/") + "/resources"
+    guides = []
+    for slug, page in RESOURCE_GUIDES.items():
+        guides.append({
+            "slug": slug,
+            "title": page["hero_title"],
+            "summary": page["summary"],
+            "eyebrow": page["eyebrow"],
+            "read_time": page["read_time"],
+        })
+    return render_template("resources_hub.html", guides=guides, canonical_url=canonical_url)
+
+
+@bp.route("/resources/<path:slug>")
+def resource_article_page(slug):
+    page = resource_page_for_slug(slug)
+    if not page:
+        return redirect(url_for("auth.login_page"))
+    canonical_url = request.url_root.rstrip("/") + "/resources/" + slug.strip("/")
+    return render_template("resource_article.html", page=page, canonical_url=canonical_url)
 
 
 @bp.route("/<path:slug>")

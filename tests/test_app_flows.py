@@ -2268,6 +2268,29 @@ def test_public_seo_pages_render_on_bare_domain(app):
         assert "Start free trial" in body
 
 
+def test_resources_hub_renders_on_bare_domain(app):
+    response = app.test_client().get("/resources", base_url="http://countdepot.com")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "CountDepot Resources" in body
+    assert "Real buyer guides, not fake filler pages." in body
+    assert 'href="/resources/inventory-management-software-vs-spreadsheets"' in body
+
+
+def test_resource_article_renders_on_bare_domain(app):
+    response = app.test_client().get(
+        "/resources/inventory-management-software-vs-spreadsheets",
+        base_url="http://countdepot.com",
+    )
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Inventory management software vs. spreadsheets" in body
+    assert "Where spreadsheets usually break" in body
+    assert '<link rel="canonical" href="http://countdepot.com/resources/inventory-management-software-vs-spreadsheets">' in body
+
+
 def test_repair_shop_seo_page_has_phase_two_content(app):
     client = app.test_client()
 
@@ -2340,7 +2363,10 @@ def test_landing_page_promotes_available_and_planned_integrations(app):
 
     assert response.status_code == 200
     assert '<nav class="site-nav">' in body
-    assert '<div class="nav-links">\n    <a href="#features">Features</a>\n    <a href="#how">How it works</a>\n    <a href="#pricing">Pricing</a>' in body
+    assert '<a href="#features">Features</a>' in body
+    assert '<a href="#how">How it works</a>' in body
+    assert '<a href="/resources">Resources</a>' in body
+    assert '<a href="#pricing">Pricing</a>' in body
     assert '<div class="nav-actions">\n    <a href="#signin" class="nav-link-signin">Sign in</a>\n    <a href="/signup" class="nav-cta">Start free trial</a>' in body
     assert "\nnav{" not in body
     assert "footer-seo" not in body

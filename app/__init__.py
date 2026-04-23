@@ -118,6 +118,7 @@ def create_app():
                 abort(403)
 
         from app.seo_pages import seo_page_for_slug
+        from app.resources import resource_page_for_slug
         path_slug = request.path.strip("/")
 
         # These routes bypass tenant resolution entirely
@@ -130,6 +131,8 @@ def create_app():
                 or request.path == "/robots.txt"
                 or request.path == "/sitemap.xml"
                 or request.path == "/sitemap"
+                or request.path == "/resources"
+                or resource_page_for_slug(path_slug.removeprefix("resources/"))
                 or seo_page_for_slug(path_slug)
                 or request.path.startswith("/static/")
                 or request.path.startswith("/signup")

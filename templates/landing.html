@@ -197,7 +197,7 @@ body{
   color:var(--muted2);font-size:14px;font-weight:500;
   text-decoration:none;transition:color .2s;
 }
-.nav-links a:hover{color:var(--text)}
+.nav-links a:hover,.nav-links a.active{color:var(--text)}
 .nav-actions{display:flex;align-items:center;gap:12px}
 .nav-cta{
   background:var(--blue);color:#fff;
@@ -957,6 +957,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   <div class="nav-links">
     <a href="#features">Features</a>
     <a href="#how">How it works</a>
+    <a href="/resources">Resources</a>
     <a href="#pricing">Pricing</a>
   </div>
   <div class="nav-actions">
@@ -1352,21 +1353,24 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 <section id="resources" style="padding:80px 24px;background:var(--bg)">
   <div class="container">
     <div class="section-label">Resources</div>
-    <h2 class="section-title">Helpful pages for teams comparing inventory management software.</h2>
-    <p class="section-sub">These supporting pages give buyers more context on replacing spreadsheets, choosing inventory software, and picking a workflow that fits their industry.</p>
+    <h2 class="section-title">Actual buyer guides your team can read and use.</h2>
+    <p class="section-sub">These are real documents, not filler pages. Use them to compare software, explain the switch internally, and choose a workflow that fits your operation.</p>
     <div class="seo-links-grid">
-      <a class="seo-link-card" href="/free-inventory-management">
+      <a class="seo-link-card" href="/resources/inventory-management-software-vs-spreadsheets">
         <h3>Inventory management software vs. spreadsheets</h3>
-        <p>See why teams move from manual tracking to barcode inventory management when stock, checkouts, and locations start slipping.</p>
+        <p>Read the breakdown of where spreadsheets fail first and what a proper inventory workflow fixes.</p>
       </a>
-      <a class="seo-link-card" href="/inventory-management-for-it">
+      <a class="seo-link-card" href="/resources/how-it-teams-track-inventory-across-locations">
         <h3>How IT teams track inventory across locations</h3>
-        <p>See a practical example of asset tracking, site-based stock control, and barcode workflows for high-accountability environments.</p>
+        <p>See a filled-out operational workflow for multi-site inventory, reservations, and device accountability.</p>
       </a>
-      <a class="seo-link-card" href="/affordable-inventory-management">
+      <a class="seo-link-card" href="/resources/what-to-look-for-in-inventory-management-software">
         <h3>What to look for in inventory management software</h3>
-        <p>Compare the features that matter most: scanning, reservations, reports, permissions, and low-stock visibility by location.</p>
+        <p>Use the buyer checklist for scanning, reservations, locations, permissions, and reporting.</p>
       </a>
+    </div>
+    <div style="margin-top:24px;text-align:center">
+      <a href="/resources" class="btn-secondary">Open all resources</a>
     </div>
   </div>
 </section>
