@@ -98,6 +98,44 @@
         "bestRating": "5"
       },
       "reviewBody": "We replaced three separate spreadsheets with CountDepot. Warranty tracking, checkout logs, and financial reports are all connected."
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://countdepot.com/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is barcode inventory management software?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Barcode inventory management software helps teams track items, scan them during check-in or check-out, manage locations, and monitor stock levels without relying on spreadsheets."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is CountDepot good for small businesses and growing teams?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. CountDepot is built for practical inventory control, with scanning, reservations, reporting, and permissions for teams that need more than spreadsheets without buying a heavy enterprise platform."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can CountDepot track inventory across multiple locations?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. CountDepot can track stock by site, room, shelf, or storage area, and low-stock visibility can be evaluated by location instead of only by a global total."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can workers use barcode scanning from a phone?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. CountDepot includes a mobile-friendly browser workflow so teams can scan, search, check items in or out, and reserve inventory without requiring a separate app-store install."
+          }
+        }
+      ]
     }
   ]
 }
@@ -765,6 +803,62 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   margin:40px auto 0;
   max-width:1040px;
 }
+.seo-links-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:20px;
+  margin-top:44px;
+}
+.seo-link-card{
+  display:block;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:24px;
+  transition:transform .2s,border-color .2s,background .2s;
+}
+.seo-link-card:hover{
+  transform:translateY(-3px);
+  border-color:rgba(200,179,253,.28);
+  background:#1c2740;
+}
+.seo-link-card h3{
+  font-size:17px;
+  font-weight:700;
+  margin-bottom:10px;
+  letter-spacing:-0.3px;
+}
+.seo-link-card p{
+  font-size:14px;
+  line-height:1.7;
+  color:var(--muted2);
+}
+.faq-grid{
+  display:grid;
+  gap:14px;
+  margin-top:44px;
+  max-width:900px;
+  margin-left:auto;
+  margin-right:auto;
+}
+.faq-item{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:22px 24px;
+  text-align:left;
+}
+.faq-item h3{
+  font-size:17px;
+  font-weight:700;
+  margin-bottom:8px;
+  letter-spacing:-0.2px;
+}
+.faq-item p{
+  font-size:14px;
+  line-height:1.75;
+  color:var(--muted2);
+}
 .review-card{
   background:var(--card);
   border:1px solid var(--border);
@@ -781,6 +875,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
   .steps{grid-template-columns:repeat(2,minmax(0,1fr))}
   .pricing-grid{grid-template-columns:1fr;max-width:520px;margin-left:auto;margin-right:auto}
   .reviews-grid{grid-template-columns:1fr;max-width:520px}
+  .seo-links-grid{grid-template-columns:1fr}
 }
 
 @media(max-width:768px){
@@ -1058,8 +1153,8 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 <section id="features">
   <div class="container">
     <div class="section-label">Features</div>
-    <h2 class="section-title">Everything your team needs.<br>Nothing you don't.</h2>
-    <p class="section-sub">Built for businesses who are tired of spreadsheets and overpriced enterprise software.</p>
+    <h2 class="section-title">Barcode inventory management software with the features teams actually use.</h2>
+    <p class="section-sub">Built for businesses replacing spreadsheets with practical inventory management software, barcode scanning, reservations, and reporting.</p>
 
     <div class="features-grid">
       <div class="feature">
@@ -1225,8 +1320,8 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 <section id="how">
   <div class="container">
     <div class="section-label">How it works</div>
-    <h2 class="section-title">Up and running in minutes.</h2>
-    <p class="section-sub">No technical setup required. Sign up, pick your industry, and start tracking in minutes.</p>
+    <h2 class="section-title">How barcode inventory management works in CountDepot.</h2>
+    <p class="section-sub">No technical setup required. Sign up, pick your industry, and start tracking inventory, scanning items, and organizing stock in minutes.</p>
 
     <div class="steps">
       <div class="step">
@@ -1249,6 +1344,29 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
         <h3>Invite your team</h3>
         <p>Add team members and set their permissions. Everyone works from the same live inventory, in real time.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- SEO SUPPORTING LINKS -->
+<section id="resources" style="padding:80px 24px;background:var(--bg)">
+  <div class="container">
+    <div class="section-label">Resources</div>
+    <h2 class="section-title">Helpful pages for teams comparing inventory management software.</h2>
+    <p class="section-sub">These supporting pages give buyers more context on replacing spreadsheets, choosing inventory software, and picking a workflow that fits their industry.</p>
+    <div class="seo-links-grid">
+      <a class="seo-link-card" href="/free-inventory-management">
+        <h3>Inventory management software vs. spreadsheets</h3>
+        <p>See why teams move from manual tracking to barcode inventory management when stock, checkouts, and locations start slipping.</p>
+      </a>
+      <a class="seo-link-card" href="/inventory-management-for-it">
+        <h3>How IT teams track inventory across locations</h3>
+        <p>See a practical example of asset tracking, site-based stock control, and barcode workflows for high-accountability environments.</p>
+      </a>
+      <a class="seo-link-card" href="/affordable-inventory-management">
+        <h3>What to look for in inventory management software</h3>
+        <p>Compare the features that matter most: scanning, reservations, reports, permissions, and low-stock visibility by location.</p>
+      </a>
     </div>
   </div>
 </section>
@@ -1421,6 +1539,33 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
             <button onclick="openDemoRequest()" class="btn-secondary" style="padding:12px 24px;background:none">Request a live walkthrough</button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" style="padding:80px 24px;background:var(--bg2)">
+  <div class="container">
+    <div class="section-label">FAQ</div>
+    <h2 class="section-title">Questions buyers ask before choosing inventory management software.</h2>
+    <p class="section-sub">This section gives the homepage more search depth while answering the most common questions from teams comparing barcode inventory management tools.</p>
+    <div class="faq-grid">
+      <div class="faq-item">
+        <h3>What is barcode inventory management software?</h3>
+        <p>Barcode inventory management software helps teams track items, scan them during check-in or check-out, manage locations, and monitor stock levels without relying on spreadsheets.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Is CountDepot good for small businesses and growing teams?</h3>
+        <p>Yes. CountDepot is built for practical inventory control, with scanning, reservations, reporting, and permissions for teams that need more than spreadsheets without buying a heavy enterprise platform.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Can CountDepot track inventory across multiple locations?</h3>
+        <p>Yes. CountDepot can track stock by site, room, shelf, or storage area, and low-stock visibility can be evaluated by location instead of only by a global total.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Can workers use barcode scanning from a phone?</h3>
+        <p>Yes. CountDepot includes a mobile-friendly browser workflow so teams can scan, search, check items in or out, and reserve inventory without requiring a separate app-store install.</p>
       </div>
     </div>
   </div>
