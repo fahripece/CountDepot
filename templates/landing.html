@@ -811,26 +811,90 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
 }
 .seo-link-card{
   display:block;
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:18px;
-  padding:24px;
-  transition:transform .2s,border-color .2s,background .2s;
+  color:var(--text);
+  text-decoration:none;
+  background:linear-gradient(145deg,rgba(23,32,51,.96),rgba(15,22,40,.96));
+  border:1px solid rgba(200,179,253,.12);
+  border-radius:22px;
+  padding:26px;
+  min-height:220px;
+  box-shadow:0 18px 50px rgba(0,0,0,.18);
+  transition:transform .2s,border-color .2s,background .2s,box-shadow .2s;
 }
 .seo-link-card:hover{
   transform:translateY(-3px);
-  border-color:rgba(200,179,253,.28);
-  background:#1c2740;
+  border-color:rgba(200,179,253,.32);
+  background:linear-gradient(145deg,#1c2740,#15223a);
+  box-shadow:0 24px 70px rgba(0,0,0,.24);
+}
+.seo-link-kicker{
+  display:inline-flex;
+  align-items:center;
+  padding:6px 12px;
+  margin-bottom:14px;
+  border-radius:999px;
+  background:rgba(100,66,214,.16);
+  border:1px solid rgba(200,179,253,.24);
+  color:var(--accent);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.7px;
+  text-transform:uppercase;
 }
 .seo-link-card h3{
-  font-size:17px;
+  color:var(--text);
+  text-decoration:none;
+  font-size:22px;
   font-weight:700;
-  margin-bottom:10px;
-  letter-spacing:-0.3px;
+  line-height:1.18;
+  margin-bottom:12px;
+  letter-spacing:-0.4px;
 }
 .seo-link-card p{
-  font-size:14px;
-  line-height:1.7;
+  color:var(--muted2);
+  text-decoration:none;
+  font-size:15px;
+  line-height:1.75;
+}
+.seo-link-footer{
+  margin-top:18px;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  color:#dbe6ff;
+  font-size:13px;
+  font-weight:800;
+  letter-spacing:.2px;
+}
+.seo-link-card *{
+  text-decoration:none!important;
+}
+.resources-cta{
+  margin-top:24px;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:14px;
+  flex-wrap:wrap;
+}
+.resources-note{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.6;
+  text-align:center;
+  max-width:520px;
+  margin:0 auto;
+}
+.resources-shell{
+  margin-top:44px;
+  padding:14px;
+  border-radius:30px;
+  border:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));
+  box-shadow:0 28px 80px rgba(0,0,0,.16);
+}
+.resources-shell .seo-links-grid{
+  margin-top:0;
   color:var(--muted2);
 }
 .faq-grid{
@@ -1355,23 +1419,32 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
     <div class="section-label">Resources</div>
     <h2 class="section-title">Actual buyer guides your team can read and use.</h2>
     <p class="section-sub">These are real documents, not filler pages. Use them to compare software, explain the switch internally, and choose a workflow that fits your operation.</p>
-    <div class="seo-links-grid">
-      <a class="seo-link-card" href="/resources/inventory-management-software-vs-spreadsheets">
-        <h3>Inventory management software vs. spreadsheets</h3>
-        <p>Read the breakdown of where spreadsheets fail first and what a proper inventory workflow fixes.</p>
-      </a>
-      <a class="seo-link-card" href="/resources/how-it-teams-track-inventory-across-locations">
-        <h3>How IT teams track inventory across locations</h3>
-        <p>See a filled-out operational workflow for multi-site inventory, reservations, and device accountability.</p>
-      </a>
-      <a class="seo-link-card" href="/resources/what-to-look-for-in-inventory-management-software">
-        <h3>What to look for in inventory management software</h3>
-        <p>Use the buyer checklist for scanning, reservations, locations, permissions, and reporting.</p>
-      </a>
+    <div class="resources-shell">
+      <div class="seo-links-grid">
+        <a class="seo-link-card" href="/resources/inventory-management-software-vs-spreadsheets">
+          <span class="seo-link-kicker">Guide</span>
+          <h3>Inventory management software vs. spreadsheets</h3>
+          <p>Read the breakdown of where spreadsheets fail first and what a proper inventory workflow fixes.</p>
+          <span class="seo-link-footer">Read guide -></span>
+        </a>
+        <a class="seo-link-card" href="/resources/how-it-teams-track-inventory-across-locations">
+          <span class="seo-link-kicker">Workflow</span>
+          <h3>How IT teams track inventory across locations</h3>
+          <p>See a filled-out operational workflow for multi-site inventory, reservations, and device accountability.</p>
+          <span class="seo-link-footer">Open workflow -></span>
+        </a>
+        <a class="seo-link-card" href="/resources/what-to-look-for-in-inventory-management-software">
+          <span class="seo-link-kicker">Buyer Guide</span>
+          <h3>What to look for in inventory management software</h3>
+          <p>Use the buyer checklist for scanning, reservations, locations, permissions, and reporting.</p>
+          <span class="seo-link-footer">View checklist -></span>
+        </a>
+      </div>
     </div>
-    <div style="margin-top:24px;text-align:center">
+    <div class="resources-cta">
       <a href="/resources" class="btn-secondary">Open all resources</a>
     </div>
+    <p class="resources-note">Built as real support content for buyers and teams evaluating CountDepot, not just SEO filler links.</p>
   </div>
 </section>
 
