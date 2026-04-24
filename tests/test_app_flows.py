@@ -8,7 +8,7 @@ from flask import session
 
 from config import Config
 from app.helpers import PERM_KEYS, hash_pw, verify_pw
-from app.blueprints.auth import login_page
+from app.blueprints.auth import auto_login, login_page
 from app.blueprints.main import admin_page, categories_page, docs_page, forecasting_page, integrations_page, inventory, products_page
 from app.blueprints.api import (
     api_add_reservation,
@@ -254,6 +254,62 @@ def test_email_2fa_enable_requires_verification_code(app, client, tenant, monkey
     assert verify_res.status_code == 200
     assert verify_payload == {"ok": True, "enabled": True}
     assert enabled == 1
+
+
+def test_auto_login_requires_email_otp_when_enabled(app, tenant, monkeypatch):
+    from app.platform import get_platform_db
+    import importlib
+
+    sent = {}
+
+    def fake_send_email(to, subject, html, text):
+        sent["to"] = to
+        sent["subject"] = subject
+        sent["html"] = html
+        sent["text"] = text
+        return True
+
+    monkeypatch.setattr(Config, "SMTP_HOST", "smtp.example.com", raising=False)
+    mailer = importlib.import_module("app.mailer")
+    monkeypatch.setattr(mailer, "send_email", fake_send_email)
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "UPDATE users SET two_fa_enabled=1, totp_enabled=0, totp_secret=NULL, must_change_password=0 WHERE id=1"
+    )
+    db.commit()
+    db.close()
+
+    pdb = get_platform_db()
+    pdb.execute(
+        "INSERT INTO cross_login_tokens (tenant_slug,user_id,token,expires_at,created_at,used) VALUES (?,?,?,?,?,0)",
+        [tenant["slug"], 1, "cross-token-2fa", "2099-01-01 00:00:00", "2026-04-24 00:00:00"],
+    )
+    pdb.commit()
+    pdb.close()
+
+    with app.test_request_context(
+        "/auto-login?token=cross-token-2fa",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        response = _as_response(app, app.preprocess_request() or auto_login())
+        saved_session = dict(session)
+
+    body = response.get_data(as_text=True)
+    otp_db = sqlite3.connect(tenant["db_path"])
+    otp_row = otp_db.execute(
+        "SELECT otp FROM login_otp WHERE user_id=1 AND used=0 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    otp_db.close()
+
+    assert response.status_code == 200
+    assert "Two-factor verification" in body
+    assert saved_session["pending_2fa_method"] == "email"
+    assert saved_session["pending_2fa_user_id"] == 1
+    assert sent["to"] == tenant["email"]
+    assert sent["subject"] == "Your CountDepot login code"
+    assert otp_row is not None
 
 
 def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):

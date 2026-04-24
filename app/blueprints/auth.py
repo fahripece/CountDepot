@@ -549,6 +549,56 @@ def auto_login():
     if not user:
         return redirect(url_for("auth.login_page"))
 
+    # Enforce the same 2FA gate used by the normal tenant login flow.
+    totp_enabled = user["totp_enabled"] if "totp_enabled" in user.keys() else 0
+    two_fa = user["two_fa_enabled"] if "two_fa_enabled" in user.keys() else 0
+    email = user["email"] if "email" in user.keys() else None
+    ip = request.remote_addr or "unknown"
+    from config import Config as _Cfg
+    if totp_enabled and user.get("totp_secret"):
+        session.clear()
+        session["pending_2fa_user_id"] = user["id"]
+        session["pending_2fa_method"] = "totp"
+        log_auth_event("2FA_TOTP_CHALLENGE", username=user["username"], ip=ip,
+                       tenant=tenant_slug, detail="via cross-login token")
+        return render_template("verify_2fa.html", method="totp")
+    if two_fa:
+        if not email:
+            log_auth_event("2FA_BLOCKED_NO_EMAIL", username=user["username"], ip=ip,
+                           tenant=tenant_slug, detail="via cross-login token")
+            return render_template(
+                "login.html",
+                error="Two-factor authentication is enabled for this account, but no email address is set."
+            ), 403
+        if not _Cfg.SMTP_HOST:
+            log_auth_event("2FA_BLOCKED_NO_SMTP", username=user["username"], ip=ip,
+                           tenant=tenant_slug, detail="via cross-login token")
+            return render_template(
+                "login.html",
+                error="Two-factor authentication is enabled for this account, but email delivery is not configured on this server. Contact your admin."
+            ), 503
+        import random
+        from app.mailer import send_email as _send_email
+        otp = f"{random.randint(0, 999999):06d}"
+        expires_at = (_utc_now() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
+        execute("UPDATE login_otp SET used=1 WHERE user_id=? AND used=0", [user["id"]])
+        execute("INSERT INTO login_otp (user_id,otp,expires_at) VALUES (?,?,?)",
+                [user["id"], otp, expires_at])
+        _send_email(
+            email,
+            "Your CountDepot login code",
+            f"<p style='font-family:sans-serif'>Your one-time login code is:</p>"
+            f"<p style='font-family:monospace;font-size:32px;font-weight:700;letter-spacing:8px'>{otp}</p>"
+            f"<p style='font-family:sans-serif;font-size:12px;color:#888'>Expires in 10 minutes. If you didn't request this, ignore it.</p>",
+            f"Your CountDepot login code: {otp}\nExpires in 10 minutes."
+        )
+        session.clear()
+        session["pending_2fa_user_id"] = user["id"]
+        session["pending_2fa_method"] = "email"
+        log_auth_event("2FA_SENT", username=user["username"], ip=ip,
+                       tenant=tenant_slug, detail="via cross-login token")
+        return render_template("verify_2fa.html", method="email")
+
     perms  = get_user_perms(user["id"], user["role"],
                             user["permissions"] if "permissions" in user.keys() else "")
     sess = _build_session(user, perms)
