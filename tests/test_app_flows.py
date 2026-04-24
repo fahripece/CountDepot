@@ -321,6 +321,33 @@ def test_auto_login_requires_email_otp_when_enabled(app, tenant, monkeypatch):
     assert otp_row is not None
 
 
+def test_auto_login_redirects_to_safe_next_target(app, tenant):
+    from app.platform import get_platform_db
+
+    pdb = get_platform_db()
+    pdb.execute(
+        "INSERT INTO cross_login_tokens (tenant_slug,user_id,token,expires_at,created_at,used) VALUES (?,?,?,?,?,0)",
+        [tenant["slug"], 1, "cross-token-next", "2099-01-01 00:00:00", "2026-04-24 00:00:00"],
+    )
+    pdb.commit()
+    pdb.close()
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute("UPDATE users SET must_change_password=0 WHERE id=1")
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/auto-login?token=cross-token-next&next=/billing/start?plan=pro&period=monthly",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        response = _as_response(app, app.preprocess_request() or auto_login())
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/billing/start?plan=pro&period=monthly"
+
+
 def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
     db = sqlite3.connect(tenant["db_path"])
     db.row_factory = sqlite3.Row
@@ -2253,6 +2280,18 @@ def test_signup_page_has_seo_meta_and_submit_event(app):
     assert 'name="website"' in body
 
 
+def test_signup_page_preserves_selected_paid_plan(app):
+    response = app.test_client().get(
+        "/signup?selected_plan=pro&selected_period=yearly",
+        base_url="http://countdepot.com",
+    )
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'name="selected_plan" value="pro"' in body
+    assert 'name="selected_period" value="yearly"' in body
+
+
 def test_signup_blocks_honeypot_bot_submission(app):
     client = app.test_client()
     get_response = client.get("/signup", base_url="http://countdepot.com")
@@ -2327,6 +2366,47 @@ def test_create_tenant_free_plan_is_active_without_trial_end(app):
     assert row["plan"] == "free"
     assert row["subscription_status"] == "active"
     assert row["trial_ends_at"] is None
+
+
+def test_paid_signup_verification_redirects_to_checkout_flow(app, monkeypatch):
+    from app.platform import get_platform_db
+
+    monkeypatch.setattr(Config, "APP_DOMAIN", "countdepot.com", raising=False)
+    monkeypatch.setattr("app.blueprints.signup.send_welcome_email", lambda *args, **kwargs: True)
+    monkeypatch.setattr("app.blueprints.signup.send_signup_verification_email", lambda *args, **kwargs: True)
+
+    db = get_platform_db()
+    db.execute(
+        """
+        INSERT INTO pending_signups
+        (name, slug, email, password_hash, selected_plan, selected_period, token, created_at, expires_at, used)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        """,
+        [
+            "Plan Co",
+            "planco",
+            "owner@planco.com",
+            hash_pw("Password1!"),
+            "pro",
+            "yearly",
+            "verify-pro-token",
+            "2026-04-24 00:00:00",
+            "2099-01-01 00:00:00",
+        ],
+    )
+    db.commit()
+    db.close()
+
+    response = app.test_client().get(
+        "/verify-signup/verify-pro-token",
+        base_url="http://countdepot.com",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    location = response.headers["Location"]
+    assert location.startswith("https://planco.countdepot.com/auto-login?token=")
+    assert "next=/billing/start%3Fplan%3Dpro%26period%3Dyearly" in location
 
 
 def test_free_plan_blocks_adding_second_user(app, tenant):

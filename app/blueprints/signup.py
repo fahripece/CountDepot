@@ -17,6 +17,7 @@ import re
 import os
 import secrets
 import sqlite3
+from urllib.parse import quote
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, render_template, request, redirect, url_for
@@ -26,6 +27,7 @@ from app.blueprints.platform import _bootstrap_tenant_db
 from app.mailer              import send_signup_verification_email, send_welcome_email
 from app.helpers             import hash_pw, check_rate_limit
 from config                  import Config
+from app.stripe_billing      import PLAN_ORDER
 
 bp = Blueprint("signup", __name__)
 
@@ -95,6 +97,23 @@ def _is_disposable_email(email):
     return _email_domain(email) in DISPOSABLE_EMAIL_DOMAINS
 
 
+def _selected_plan_and_period():
+    selected_plan = (request.values.get("selected_plan") or "free").strip().lower()
+    selected_period = (request.values.get("selected_period") or "monthly").strip().lower()
+    if selected_plan not in {"free", *PLAN_ORDER}:
+        selected_plan = "free"
+    if selected_period not in ("monthly", "yearly"):
+        selected_period = "monthly"
+    return selected_plan, selected_period
+
+
+def _workspace_base_url(slug):
+    host = request.host.split(":")[0]
+    if "localhost" in host or "127.0.0.1" in host:
+        return f"http://{slug}.{host}"
+    return f"https://{slug}.{Config.APP_DOMAIN}"
+
+
 @bp.route("/signup", methods=["GET", "POST"])
 def signup():
     if not Config.SIGNUP_ENABLED:
@@ -102,6 +121,7 @@ def signup():
 
     error = None
     form_started = int(_utc_now().timestamp())
+    selected_plan, selected_period = _selected_plan_and_period()
 
     if request.method == "POST":
         ip = request.remote_addr or "unknown"
@@ -158,16 +178,16 @@ def signup():
                 token = secrets.token_urlsafe(32)
                 expires = (_utc_now() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
                 db.execute(
-                    "UPDATE pending_signups SET token=?, expires_at=?, slug=?, name=?, password_hash=? WHERE id=?",
-                    [token, expires, slug, name, hash_pw(password), existing["id"]]
+                    "UPDATE pending_signups SET token=?, expires_at=?, slug=?, name=?, password_hash=?, selected_plan=?, selected_period=? WHERE id=?",
+                    [token, expires, slug, name, hash_pw(password), selected_plan, selected_period, existing["id"]]
                 )
             else:
                 token = secrets.token_urlsafe(32)
                 expires = (_utc_now() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
                 db.execute(
-                    "INSERT INTO pending_signups (name, slug, email, password_hash, token, created_at, expires_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    [name, slug, email, hash_pw(password), token, now, expires]
+                    "INSERT INTO pending_signups (name, slug, email, password_hash, selected_plan, selected_period, token, created_at, expires_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    [name, slug, email, hash_pw(password), selected_plan, selected_period, token, now, expires]
                 )
             db.commit()
             db.close()
@@ -177,11 +197,18 @@ def signup():
             return render_template(
                 "signup_verify_sent.html",
                 email=email,
+                selected_plan=selected_plan,
                 smtp_enabled=bool(Config.SMTP_HOST),
                 dev_token=token if not Config.SMTP_HOST else None,
             )
 
-    return render_template("signup.html", error=error, form_started=form_started)
+    return render_template(
+        "signup.html",
+        error=error,
+        form_started=form_started,
+        selected_plan=selected_plan,
+        selected_period=selected_period,
+    )
 
 
 @bp.route("/verify-signup/<token>")
@@ -234,6 +261,8 @@ def verify_signup(token):
     name  = row["name"]
     email = row["email"]
     phash = row["password_hash"]
+    selected_plan = (row["selected_plan"] or "free").strip().lower() if "selected_plan" in row.keys() else "free"
+    selected_period = (row["selected_period"] or "monthly").strip().lower() if "selected_period" in row.keys() else "monthly"
 
     # Slug might already exist (e.g. manually created by platform admin, or double-click on link)
     if get_tenant_by_slug(slug):
@@ -293,7 +322,23 @@ def verify_signup(token):
     # Welcome email
     send_welcome_email(email, name, slug, temp_password=None, verify_token=None)
 
-    workspace_url = f"https://{slug}.{Config.APP_DOMAIN}"
+    workspace_url = _workspace_base_url(slug)
+    if selected_plan in PLAN_ORDER:
+        token_val = secrets.token_urlsafe(32)
+        now = _utc_now()
+        expires_at = (now + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+        pdb = get_platform_db()
+        pdb.execute(
+            "INSERT INTO cross_login_tokens (tenant_slug,user_id,token,expires_at,created_at) VALUES (?,?,?,?,?)",
+            [slug, 1, token_val, expires_at, now.strftime("%Y-%m-%d %H:%M:%S")],
+        )
+        pdb.commit()
+        pdb.close()
+        return redirect(
+            f"{workspace_url}/auto-login?token={token_val}&next="
+            f"{quote(f'/billing/start?plan={selected_plan}&period={selected_period}', safe='/')}"
+        )
+
     return render_template("signup_success.html",
                            name=name,
                            slug=slug,
@@ -328,6 +373,7 @@ def resend_signup_verify():
     # Always show the same page (don't leak whether email exists)
     return render_template("signup_verify_sent.html",
                            email=email,
+                           selected_plan=(row["selected_plan"] or "free") if row and "selected_plan" in row.keys() else "free",
                            smtp_enabled=bool(Config.SMTP_HOST),
                            dev_token=None,
                            resent=True)

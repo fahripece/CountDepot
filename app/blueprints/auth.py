@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+from urllib.parse import unquote
+
 from flask import Blueprint, render_template, request, session, redirect, url_for, g, jsonify
 
 import secrets as _secrets
@@ -35,6 +37,23 @@ def _build_session(user, perms):
     if not tour_done:
         sess["show_intro_tour"] = True
     return sess
+
+
+def _safe_next_target(raw_target):
+    target = (raw_target or "").strip()
+    if not target.startswith("/"):
+        return None
+    if target.startswith("//"):
+        return None
+    return target
+
+
+def _request_next_target():
+    raw_target = request.args.get("next", "")
+    raw_query = request.query_string.decode("utf-8", errors="ignore")
+    if "next=" in raw_query:
+        raw_target = unquote(raw_query.split("next=", 1)[1])
+    return _safe_next_target(raw_target)
 
 
 def check_session_expiry():
@@ -153,7 +172,7 @@ def login_page():
                     [user["id"], user["username"], ip, request.user_agent.string, "ok", now_str])
             log_auth_event("LOGIN_OK", username=user["username"], ip=ip,
                            tenant=getattr(g, "tenant_slug", ""))
-            return redirect(url_for("main.inventory"))
+            return redirect(_safe_next_target(session.pop("post_login_redirect", None)) or url_for("main.inventory"))
         error = "Invalid username or password."
         execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
                 [None, username, ip, request.user_agent.string, "fail",
@@ -204,7 +223,7 @@ def change_password():
             log_auth_event("PW_CHANGE", username=session.get("username", ""),
                            ip=request.remote_addr or "",
                            tenant=getattr(g, "tenant_slug", ""))
-            return redirect(url_for("main.inventory"))
+            return redirect(_safe_next_target(session.pop("post_login_redirect", None)) or url_for("main.inventory"))
     return render_template("change_password.html", error=error)
 
 
@@ -518,6 +537,7 @@ def cross_forgot_password():
 def auto_login():
     """Consume a cross-login token issued by /_cross-login and start a session."""
     token = request.args.get("token", "").strip()
+    next_target = _request_next_target()
     if not token:
         return redirect(url_for("auth.login_page"))
 
@@ -559,6 +579,8 @@ def auto_login():
         session.clear()
         session["pending_2fa_user_id"] = user["id"]
         session["pending_2fa_method"] = "totp"
+        if next_target:
+            session["post_login_redirect"] = next_target
         log_auth_event("2FA_TOTP_CHALLENGE", username=user["username"], ip=ip,
                        tenant=tenant_slug, detail="via cross-login token")
         return render_template("verify_2fa.html", method="totp")
@@ -595,6 +617,8 @@ def auto_login():
         session.clear()
         session["pending_2fa_user_id"] = user["id"]
         session["pending_2fa_method"] = "email"
+        if next_target:
+            session["post_login_redirect"] = next_target
         log_auth_event("2FA_SENT", username=user["username"], ip=ip,
                        tenant=tenant_slug, detail="via cross-login token")
         return render_template("verify_2fa.html", method="email")
@@ -604,12 +628,14 @@ def auto_login():
     sess = _build_session(user, perms)
     session.clear()
     session.update(sess)
+    if next_target:
+        session["post_login_redirect"] = next_target
     execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
                     [_utc_now().strftime("%Y-%m-%d %H:%M:%S"), sess["session_token"], user["id"]])
     log_auth_event("LOGIN_OK", username=user["username"],
                    ip=request.remote_addr or "", tenant=tenant_slug,
                    detail="via cross-login token")
-    return redirect(url_for("main.inventory"))
+    return redirect(_safe_next_target(session.pop("post_login_redirect", None)) or url_for("main.inventory"))
 
 
 @bp.route("/auth/google")

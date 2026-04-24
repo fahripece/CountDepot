@@ -160,6 +160,39 @@ def billing_success():
     return render_template("billing_success.html")
 
 
+@bp.route("/billing/start")
+@login_required
+@admin_required
+def billing_start():
+    if not Config.STRIPE_SECRET_KEY:
+        return redirect(url_for("billing.billing_page"))
+
+    plan = (request.args.get("plan") or "").strip()
+    period = (request.args.get("period") or "monthly").strip()
+    if plan not in PLAN_ORDER or period not in ("monthly", "yearly"):
+        return redirect(url_for("billing.billing_page"))
+
+    pid = price_id_for(plan, period)
+    if not pid:
+        return redirect(url_for("billing.billing_page"))
+
+    tenant = dict(_tenant_row(g.tenant_slug))
+    cid = _ensure_stripe_customer(tenant)
+    if not cid:
+        return redirect(url_for("billing.billing_page"))
+
+    domain = Config.APP_DOMAIN
+    base = f"https://{g.tenant_slug}.{domain}"
+    session_obj, err = create_checkout_session(
+        cid, pid, g.tenant_slug,
+        success_url=f"{base}/billing/success",
+        cancel_url=f"{base}/billing",
+    )
+    if not session_obj:
+        return redirect(url_for("billing.billing_page"))
+    return redirect(session_obj.url)
+
+
 # ── Customer portal ───────────────────────────────────────────────────────────
 
 @bp.route("/billing/portal")

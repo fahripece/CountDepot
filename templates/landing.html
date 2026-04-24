@@ -623,6 +623,8 @@ section{padding:100px 24px}
 }
 .plan-price{
   display:flex;align-items:baseline;gap:4px;
+  flex-wrap:nowrap;
+  white-space:nowrap;
   margin-bottom:4px;
 }
 .plan-price .amount{
@@ -632,7 +634,10 @@ section{padding:100px 24px}
   color:var(--text);
 }
 .plan-price .period{font-size:14px;color:var(--muted);font-weight:300}
-.plan-annual{font-size:13px;color:var(--accent);margin-bottom:24px;font-weight:400}
+.plan-annual{
+  font-size:13px;color:var(--accent);margin-bottom:24px;font-weight:400;
+  white-space:nowrap;
+}
 .plan-divider{height:1px;background:var(--border);margin-bottom:24px}
 .plan-features{list-style:none;display:flex;flex-direction:column;gap:12px;margin-bottom:32px}
 .plan-features li{
@@ -1489,11 +1494,11 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
           <li>Reservations and check-in / check-out</li>
           <li>Mobile web access</li>
         </ul>
-        <a href="/signup" class="plan-cta plan-cta-outline">Start free</a>
+        <a href="/signup" class="plan-cta plan-cta-outline">Create free workspace</a>
       </div>
 
       <div class="plan">
-        <div class="plan-name">Standard</div>
+      <div class="plan-name">Starter</div>
         <div class="plan-price">
           <span class="amount" data-monthly="20" data-annual="17">$20</span>
           <span class="period">/mo</span>
@@ -1509,7 +1514,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
           <li>Financial reports</li>
           <li>Email support</li>
         </ul>
-        <a href="/signup" class="plan-cta plan-cta-outline">Start free</a>
+        <a href="/signup?selected_plan=starter&selected_period=monthly" class="plan-cta plan-cta-outline">Choose Starter</a>
       </div>
 
       <div class="plan featured">
@@ -1530,7 +1535,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
           <li>Advanced reporting</li>
           <li>Excel import / export</li>
         </ul>
-        <a href="/signup" class="plan-cta plan-cta-solid">Start free</a>
+        <a href="/signup?selected_plan=pro&selected_period=monthly" class="plan-cta plan-cta-solid">Choose Pro</a>
       </div>
 
       <div class="plan">
@@ -1550,7 +1555,7 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
           <li>Custom onboarding</li>
           <li>API access</li>
         </ul>
-        <a href="/signup" class="plan-cta plan-cta-outline">Start free</a>
+        <a href="/signup?selected_plan=enterprise&selected_period=monthly" class="plan-cta plan-cta-outline">Choose Enterprise</a>
       </div>
 
     </div>

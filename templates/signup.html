@@ -65,6 +65,8 @@ a.signin:hover{text-decoration:underline}
     <form method="POST" onsubmit="if(typeof gtag==='function'){gtag('event','signup_submit',{page_location:window.location.href});}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="form_started" value="{{ form_started }}">
+      <input type="hidden" name="selected_plan" value="{{ selected_plan or 'free' }}">
+      <input type="hidden" name="selected_period" value="{{ selected_period or 'monthly' }}">
       <div class="hp" aria-hidden="true">
         <label for="website-field">Website</label>
         <input id="website-field" name="website" type="text" tabindex="-1" autocomplete="off">

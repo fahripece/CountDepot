@@ -82,6 +82,8 @@ def init_platform_db():
             slug          TEXT NOT NULL,
             email         TEXT NOT NULL,
             password_hash TEXT NOT NULL,
+            selected_plan TEXT,
+            selected_period TEXT,
             token         TEXT NOT NULL UNIQUE,
             created_at    TEXT NOT NULL,
             expires_at    TEXT NOT NULL,
@@ -116,6 +118,11 @@ def init_platform_db():
         db.execute("ALTER TABLE tenants ADD COLUMN cancelled_at TEXT")
     if "free_access" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN free_access INTEGER NOT NULL DEFAULT 0")
+    pending_cols = [r[1] for r in db.execute("PRAGMA table_info(pending_signups)").fetchall()]
+    if "selected_plan" not in pending_cols:
+        db.execute("ALTER TABLE pending_signups ADD COLUMN selected_plan TEXT")
+    if "selected_period" not in pending_cols:
+        db.execute("ALTER TABLE pending_signups ADD COLUMN selected_period TEXT")
     db.execute(
         "UPDATE tenants SET plan='free', subscription_status='active', trial_ends_at=NULL, "
         "trial_expired_at=NULL, scheduled_delete_at=NULL "
