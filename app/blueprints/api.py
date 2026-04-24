@@ -268,6 +268,140 @@ def api_integrations_catalog_test(connector_key):
     })
 
 
+@bp.route("/api/integrations/health")
+@login_required
+@admin_required
+def api_integrations_health():
+    from app.integration_catalog import catalog_with_status
+
+    def _item(key, name, state, mode, message, extra=None):
+        return {
+            "key": key,
+            "name": name,
+            "state": state,
+            "mode": mode,
+            "message": message,
+            "extra": extra or {},
+        }
+
+    live_checks = []
+
+    try:
+        from app.woocommerce_integration import test_connection as _woo_test
+        _woo_test()
+        live_checks.append(_item("woocommerce", "WooCommerce", "pass", "live_api", "Live API connection succeeded."))
+    except Exception as e:
+        msg = str(e)
+        live_checks.append(_item("woocommerce", "WooCommerce", "not_ready" if "missing required fields" in msg.lower() else "fail", "live_api", msg))
+
+    try:
+        from app.shopify_integration import shopify_get_credentials, shopify_get_locations
+        creds = shopify_get_credentials()
+        if not creds.get("connected"):
+            live_checks.append(_item("shopify", "Shopify", "not_ready", "live_api", "Shopify is not connected."))
+        else:
+            locs = shopify_get_locations()
+            live_checks.append(_item("shopify", "Shopify", "pass", "live_api", f"Live API connection succeeded. {len(locs)} location(s) returned."))
+    except Exception as e:
+        live_checks.append(_item("shopify", "Shopify", "fail", "live_api", str(e)))
+
+    try:
+        from app.ebay import ebay_get_credentials, ebay_get_policies
+        creds = ebay_get_credentials()
+        if not creds.get("connected"):
+            live_checks.append(_item("ebay", "eBay", "not_ready", "live_api", "eBay is not connected."))
+        else:
+            policies = ebay_get_policies()
+            count = sum(len(policies.get(bucket, [])) for bucket in ("fulfillment", "payment", "return"))
+            live_checks.append(_item("ebay", "eBay", "pass", "live_api", f"Live API connection succeeded. {count} policy record(s) returned."))
+    except Exception as e:
+        live_checks.append(_item("ebay", "eBay", "fail", "live_api", str(e)))
+
+    try:
+        from app.accounting import qb_get_credentials, qb_test_connection
+        creds = qb_get_credentials()
+        if not creds.get("connected"):
+            live_checks.append(_item("quickbooks", "QuickBooks Online", "not_ready", "live_api", "QuickBooks is not connected."))
+        else:
+            result = qb_test_connection()
+            live_checks.append(_item("quickbooks", "QuickBooks Online", "pass", "live_api", f"Live API connection succeeded for {result.get('company_name', 'QuickBooks company')}.", result))
+    except Exception as e:
+        live_checks.append(_item("quickbooks", "QuickBooks Online", "fail", "live_api", str(e)))
+
+    try:
+        from app.accounting import xero_get_credentials, xero_test_connection
+        creds = xero_get_credentials()
+        if not creds.get("connected"):
+            live_checks.append(_item("xero", "Xero", "not_ready", "live_api", "Xero is not connected."))
+        else:
+            result = xero_test_connection()
+            live_checks.append(_item("xero", "Xero", "pass", "live_api", f"Live API connection succeeded for {result.get('tenant_name', 'Xero tenant')}.", result))
+    except Exception as e:
+        live_checks.append(_item("xero", "Xero", "fail", "live_api", str(e)))
+
+    try:
+        from app.accounting import zoho_get_credentials, zoho_test_connection
+        creds = zoho_get_credentials()
+        if not creds.get("connected"):
+            live_checks.append(_item("zoho", "Zoho Books", "not_ready", "live_api", "Zoho Books is not connected."))
+        else:
+            result = zoho_test_connection()
+            live_checks.append(_item("zoho", "Zoho Books", "pass", "live_api", f"Live API connection succeeded for {result.get('organization_name', 'Zoho Books organization')}.", result))
+    except Exception as e:
+        live_checks.append(_item("zoho", "Zoho Books", "fail", "live_api", str(e)))
+
+    catalog_checks = []
+    for group in catalog_with_status():
+        for connector in group["connectors"]:
+            if connector["key"] in {"woocommerce"}:
+                continue
+            if connector.get("enabled"):
+                state = "configured"
+                message = "Connector is enabled and configured, but no live API health check is implemented yet."
+            elif connector.get("configured"):
+                state = "configured"
+                message = "Connector settings are saved, but the connector is not enabled."
+            else:
+                state = "not_ready"
+                message = "Missing required fields: " + ", ".join(connector["missing_fields"]) if connector.get("missing_fields") else "Connector is not configured."
+            catalog_checks.append({
+                "key": connector["key"],
+                "name": connector["name"],
+                "group": group["name"],
+                "state": state,
+                "mode": "config_only",
+                "message": message,
+            })
+
+    messenger_checks = []
+    for key, name, setting_key in (
+        ("slack", "Slack webhooks", "slack_webhook_url"),
+        ("teams", "Microsoft Teams webhooks", "teams_webhook_url"),
+    ):
+        row = query("SELECT value FROM settings WHERE key=?", [setting_key], one=True)
+        configured = bool(row and row["value"])
+        messenger_checks.append({
+            "key": key,
+            "name": name,
+            "state": "configured" if configured else "not_ready",
+            "mode": "manual_outbound_test",
+            "message": "Configured. Use the explicit test action because this sends a real outbound message." if configured else "Webhook URL is not configured.",
+        })
+
+    return jsonify({
+        "ok": True,
+        "summary": {
+            "live_passed": sum(1 for item in live_checks if item["state"] == "pass"),
+            "live_failed": sum(1 for item in live_checks if item["state"] == "fail"),
+            "live_not_ready": sum(1 for item in live_checks if item["state"] == "not_ready"),
+            "config_only_total": len(catalog_checks),
+        },
+        "live_checks": live_checks,
+        "catalog_checks": catalog_checks,
+        "messenger_checks": messenger_checks,
+    })
+
+
 @bp.route("/api/integrations/woocommerce/test", methods=["POST"])
 @login_required
 @admin_required

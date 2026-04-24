@@ -32,6 +32,7 @@ from app.blueprints.api import (
     api_integrations_catalog,
     api_integrations_catalog_save,
     api_integrations_catalog_test,
+    api_integrations_health,
     api_doc_categories,
     api_doc_category_add,
     api_docs_list,
@@ -2517,6 +2518,44 @@ def test_integrations_page_uses_single_page_scroll_layout(app, tenant):
     assert 'class="integrations-page"' in body
     assert "integrations-main-scroll" in body
     assert "flex:1;overflow-y:auto;padding:20px 24px" not in body
+    assert "Integration health" in body
+    assert "Run Health Checks" in body
+
+
+def test_integrations_health_reports_live_and_config_only_states(app, tenant, monkeypatch):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    monkeypatch.setattr("app.woocommerce_integration.test_connection", lambda: {"ok": True})
+    monkeypatch.setattr("app.shopify_integration.shopify_get_credentials", lambda: {"connected": True})
+    monkeypatch.setattr("app.shopify_integration.shopify_get_locations", lambda: [{"id": "1", "name": "Main"}])
+    monkeypatch.setattr("app.ebay.ebay_get_credentials", lambda: {"connected": False})
+    monkeypatch.setattr("app.accounting.qb_get_credentials", lambda: {"connected": False})
+    monkeypatch.setattr("app.accounting.xero_get_credentials", lambda: {"connected": False})
+    monkeypatch.setattr("app.accounting.zoho_get_credentials", lambda: {"connected": False})
+
+    with app.test_request_context(
+        "/api/integrations/health",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_integrations_health())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    live = {item["key"]: item for item in data["live_checks"]}
+    assert live["woocommerce"]["state"] == "pass"
+    assert live["shopify"]["state"] == "pass"
+    assert live["ebay"]["state"] == "not_ready"
+    assert live["quickbooks"]["state"] == "not_ready"
+    assert data["summary"]["live_passed"] >= 2
+
+    catalog = {item["key"]: item for item in data["catalog_checks"]}
+    assert catalog["etsy"]["mode"] == "config_only"
+    assert catalog["etsy"]["state"] == "not_ready"
 
 
 def test_docs_page_and_api_support_permissioned_sops(app, tenant):

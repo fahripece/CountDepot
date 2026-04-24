@@ -7,6 +7,21 @@
 </div>
 
 <div class="integrations-page">
+  <div class="int-card">
+    <div class="int-card-head">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#0f172a">Integration health</div>
+        <div style="font-size:12px;color:#64748b">Live API checks where supported, configuration-only status where CountDepot only stores connector settings.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span id="integration-health-summary" class="int-badge disconnected">Not run yet</span>
+        <button class="btn btn-secondary btn-sm" id="integration-health-btn" onclick="loadIntegrationHealth()">Run Health Checks</button>
+      </div>
+    </div>
+    <div style="border-top:1px solid #e5e3de;padding:18px 20px">
+      <div id="integration-health-panel" style="color:#94a3b8;font-size:13px">Run the health checks to see which integrations are actually live versus only configured.</div>
+    </div>
+  </div>
 
   <!-- Amazon Business card -->
   <div class="int-card" id="amz-card">
@@ -234,6 +249,19 @@
 .connector-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
 .connector-toggle{display:flex;align-items:center;gap:7px;font-size:12px;color:#475569;margin-top:10px}
 .connector-result{display:none;margin-top:10px;padding:9px 12px;border-radius:8px;font-size:12px}
+.health-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+.health-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:14px}
+.health-card h4{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px}
+.health-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.health-state{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
+.health-state.pass{background:#dcfce7;color:#166534}
+.health-state.fail{background:#fee2e2;color:#991b1b}
+.health-state.not_ready{background:#f1f5f9;color:#475569}
+.health-state.configured{background:#ede9fe;color:#5b21b6}
+.health-mode{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px}
+.health-message{font-size:12px;color:#64748b;line-height:1.55}
+.health-section-title{font-size:12px;font-weight:800;color:#334155;text-transform:uppercase;letter-spacing:.5px;margin:18px 0 8px}
+@media(max-width:900px){.health-grid{grid-template-columns:1fr}}
 @media(max-width:900px){.connector-grid{grid-template-columns:1fr}.int-card-head{align-items:flex-start;flex-direction:column}}
 </style>
 
@@ -254,6 +282,53 @@ function esc(s){
 function safeExternalUrl(s){
   const url = String(s || '');
   return /^https:\/\//i.test(url) ? url : '#';
+}
+
+function renderHealthCards(items){
+  if(!items.length) return '<div style="color:#94a3b8;font-size:13px">No items in this section.</div>';
+  return `<div class="health-grid">${items.map(item => `
+    <div class="health-card">
+      <div class="health-meta">
+        <h4>${esc(item.name)}</h4>
+        <span class="health-state ${esc(item.state)}">${esc(String(item.state || '').replace('_',' '))}</span>
+      </div>
+      <div class="health-mode">${esc(String(item.mode || '').replace(/_/g,' '))}</div>
+      <div class="health-message">${esc(item.message || '')}</div>
+    </div>
+  `).join('')}</div>`;
+}
+
+async function loadIntegrationHealth(){
+  const panel=document.getElementById('integration-health-panel');
+  const badge=document.getElementById('integration-health-summary');
+  const btn=document.getElementById('integration-health-btn');
+  if(panel) panel.innerHTML='<div style="color:#64748b;font-size:13px">Running integration health checks…</div>';
+  if(btn){btn.disabled=true;btn.textContent='Checking…';}
+  const data=await fetch('/api/integrations/health').then(r=>r.json()).catch(()=>({ok:false,msg:'Health checks failed to load.'}));
+  if(btn){btn.disabled=false;btn.textContent='Run Health Checks';}
+  if(!data.ok){
+    if(badge){badge.className='int-badge disconnected';badge.textContent='Health check failed';}
+    if(panel) panel.innerHTML=`<div style="color:#b91c1c;font-size:13px">${esc(data.msg||'Could not run integration health checks.')}</div>`;
+    return;
+  }
+  const summary=data.summary||{};
+  if(badge){
+    badge.className=`int-badge ${summary.live_failed?'disconnected':(summary.live_passed?'connected':'ready')}`;
+    badge.textContent=`${summary.live_passed||0} passed · ${summary.live_failed||0} failed · ${summary.live_not_ready||0} not ready`;
+  }
+  if(panel){
+    panel.innerHTML=`
+      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:8px">
+        This separates real live checks from saved connector settings. A configured catalog connector does not mean the underlying sync is fully implemented in CountDepot yet.
+      </div>
+      <div class="health-section-title">Live API checks</div>
+      ${renderHealthCards(data.live_checks||[])}
+      <div class="health-section-title">Manual outbound tests</div>
+      ${renderHealthCards(data.messenger_checks||[])}
+      <div class="health-section-title">Configuration-only connectors</div>
+      ${renderHealthCards(data.catalog_checks||[])}
+    `;
+  }
 }
 
 async function loadConnectorCatalog(){
@@ -569,6 +644,7 @@ async function startDistPunchout(key,name){
 }
 loadDistributors();
 loadConnectorCatalog();
+loadIntegrationHealth();
 </script>
 
 <!-- Distributor Punch-out -->

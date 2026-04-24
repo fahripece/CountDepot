@@ -212,6 +212,20 @@ def qb_disconnect():
         _set_setting(key, "")
 
 
+def qb_test_connection():
+    creds = qb_get_credentials()
+    if not creds.get("connected"):
+        raise RuntimeError("QuickBooks is not connected")
+    if not creds.get("realm_id"):
+        raise RuntimeError("QuickBooks realm ID is missing")
+    result = _qb_request("GET", f"/companyinfo/{creds['realm_id']}")
+    info = result.get("CompanyInfo") or {}
+    return {
+        "company_name": info.get("CompanyName") or info.get("LegalName") or "QuickBooks company",
+        "realm_id": creds["realm_id"],
+    }
+
+
 # ── Xero ──────────────────────────────────────────────────────────────────────
 
 XERO_AUTH_URL  = "https://login.xero.com/identity/connect/authorize"
@@ -367,6 +381,27 @@ def xero_sync_po(po_id):
 def xero_disconnect():
     for key in ("xero_access_token", "xero_refresh_token", "xero_token_expiry", "xero_tenant_id"):
         _set_setting(key, "")
+
+
+def xero_test_connection():
+    creds = xero_get_credentials()
+    if not creds.get("connected"):
+        raise RuntimeError("Xero is not connected")
+    token = xero_ensure_fresh_token()
+    tenants = xero_get_tenants(token)
+    tenant_id = creds.get("tenant_id", "")
+    if tenant_id:
+        for tenant in tenants:
+            if tenant.get("tenantId") == tenant_id:
+                return {
+                    "tenant_id": tenant_id,
+                    "tenant_name": tenant.get("tenantName") or "Xero tenant",
+                }
+        raise RuntimeError("Configured Xero tenant is no longer available")
+    return {
+        "tenant_id": "",
+        "tenant_name": tenants[0].get("tenantName") if tenants else "Xero connection",
+    }
 
 
 # Zoho Books
@@ -581,3 +616,23 @@ def zoho_disconnect():
     for key in ("zoho_access_token", "zoho_refresh_token", "zoho_token_expiry",
                 "zoho_organization_id", "zoho_organization_name"):
         _set_setting(key, "")
+
+
+def zoho_test_connection():
+    creds = zoho_get_credentials()
+    if not creds.get("connected"):
+        raise RuntimeError("Zoho Books is not connected")
+    orgs = zoho_get_organizations()
+    org_id = creds.get("organization_id", "")
+    if org_id:
+        for org in orgs:
+            if str(org.get("organization_id")) == str(org_id):
+                return {
+                    "organization_id": org_id,
+                    "organization_name": org.get("name") or creds.get("organization_name") or "Zoho Books organization",
+                }
+        raise RuntimeError("Configured Zoho organization is no longer available")
+    return {
+        "organization_id": "",
+        "organization_name": orgs[0].get("name") if orgs else "Zoho Books connection",
+    }
