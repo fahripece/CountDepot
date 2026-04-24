@@ -198,6 +198,13 @@ def run_migrations_only():
             );
             CREATE INDEX IF NOT EXISTS idx_integration_refs_provider
                 ON integration_refs(provider, entity_type, entity_id);
+            CREATE TABLE IF NOT EXISTS forecast_settings (
+                product_id            INTEGER PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
+                lead_days_override    INTEGER,
+                safety_stock_override INTEGER DEFAULT 0,
+                enabled               INTEGER NOT NULL DEFAULT 1,
+                updated_at            TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS doc_categories (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 name        TEXT UNIQUE NOT NULL,
@@ -634,6 +641,13 @@ def _init_db_conn(db):
         );
         CREATE INDEX IF NOT EXISTS idx_integration_refs_provider
             ON integration_refs(provider, entity_type, entity_id);
+        CREATE TABLE IF NOT EXISTS forecast_settings (
+            product_id            INTEGER PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
+            lead_days_override    INTEGER,
+            safety_stock_override INTEGER DEFAULT 0,
+            enabled               INTEGER NOT NULL DEFAULT 1,
+            updated_at            TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS doc_categories (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             name        TEXT UNIQUE NOT NULL,

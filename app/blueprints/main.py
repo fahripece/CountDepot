@@ -422,6 +422,13 @@ def low_stock_page():
         categories=query("SELECT * FROM categories ORDER BY name"))
 
 
+@bp.route("/forecasting")
+@login_required
+@perm_required("view_dashboard")
+def forecasting_page():
+    return render_template("forecasting.html")
+
+
 @bp.route("/audit")
 @login_required
 @perm_required("view_audit")

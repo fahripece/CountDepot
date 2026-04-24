@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}Forecasting (Beta) · CountDepot{% endblock %}
+{% block content %}
+<div class="topbar">
+  <span class="topbar-title">Forecasting</span>
+  <span class="forecast-beta-badge">Beta</span>
+  <span class="topbar-sub" id="forecastSummaryText" style="margin-left:8px"></span>
+  <div style="position:relative;flex:1;max-width:300px;margin-left:8px">
+    <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:13px;height:13px;color:#94a3b8;pointer-events:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input id="forecastSearch" class="input" style="padding-left:30px" placeholder="Search products or sites..." oninput="applyForecastFilters()">
+  </div>
+  <div class="topbar-right">
+    <select id="forecastSiteFilter" class="select" style="width:190px" onchange="applyForecastFilters()">
+      <option value="">All sites</option>
+    </select>
+    <div class="forecast-segment">
+      <button class="forecast-segment-btn active" data-mode="risky" onclick="setForecastMode('risky', this)">Risky first</button>
+      <button class="forecast-segment-btn" data-mode="all" onclick="setForecastMode('all', this)">All forecasted products</button>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="loadForecasting()">Refresh</button>
+  </div>
+</div>
+
+<div class="forecasting-page">
+  <div id="forecastStats" class="forecast-stats"></div>
+  <div class="forecast-note">
+    Trend-aware beta. Forecasts blend the last 90 days with the same period last year when enough history exists. Low-history products fall back to a simple moving average and are labeled clearly.
+  </div>
+  <div id="forecastTableWrap" class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Product / Site</th>
+          <th>Usage</th>
+          <th>Stock</th>
+          <th>Timing</th>
+          <th>Reorder</th>
+          <th>Model</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="forecastRows">
+        <tr class="empty-row"><td colspan="7">Loading forecasting data...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+.forecasting-page{padding:20px 24px 32px;display:grid;gap:16px}
+.forecast-beta-badge{display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;border-radius:999px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:800;letter-spacing:.45px;text-transform:uppercase}
+.forecast-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.forecast-stat{background:linear-gradient(180deg,#fff 0%,#fafaf8 100%);border:1px solid #e5e3de;border-radius:16px;padding:16px 18px}
+.forecast-stat-label{font-size:11px;font-weight:800;letter-spacing:.45px;text-transform:uppercase;color:#64748b}
+.forecast-stat-value{font-size:28px;font-weight:800;line-height:1.05;color:#0f172a;margin-top:8px}
+.forecast-stat-sub{font-size:12px;color:#64748b;margin-top:6px;line-height:1.45}
+.forecast-stat-value.critical{color:#b91c1c}
+.forecast-stat-value.watch{color:#d97706}
+.forecast-stat-value.healthy{color:#15803d}
+.forecast-note{background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:12px 14px;color:#1e40af;font-size:12.5px;line-height:1.65}
+.forecast-segment{display:inline-flex;background:#fff;border:1px solid #e5e3de;border-radius:999px;padding:3px;gap:3px}
+.forecast-segment-btn{border:none;background:transparent;padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700;color:#64748b;cursor:pointer}
+.forecast-segment-btn.active{background:#111827;color:#fff}
+.forecast-risk{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.35px;text-transform:uppercase}
+.forecast-risk.critical{background:#fee2e2;color:#991b1b}
+.forecast-risk.watch{background:#fef3c7;color:#92400e}
+.forecast-risk.healthy{background:#dcfce7;color:#166534}
+.forecast-chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.forecast-chip{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;border:1px solid #e2e8f0;background:#f8fafc;color:#475569;font-size:11px;font-weight:600}
+.forecast-product-name{font-size:13px;font-weight:800;color:#0f172a}
+.forecast-product-meta{font-size:11.5px;color:#64748b;margin-top:3px}
+.forecast-site{font-size:11px;font-weight:700;color:#4338ca;background:#eef2ff;padding:3px 8px;border-radius:999px;display:inline-flex;margin-top:8px}
+.forecast-model-note{font-size:11.5px;color:#64748b;line-height:1.55;max-width:320px}
+.forecast-action-row{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.forecast-link{display:inline-flex;align-items:center;justify-content:center;padding:7px 10px;border-radius:8px;border:1px solid #d7d3cb;background:#fff;color:#334155;font-size:11px;font-weight:700;text-decoration:none}
+.forecast-empty{padding:48px 24px;text-align:center;color:#64748b}
+@media(max-width:1100px){.forecast-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.forecasting-page{padding:16px}.forecast-stats{grid-template-columns:1fr}.topbar{flex-wrap:wrap}.topbar-right{width:100%;justify-content:flex-start;flex-wrap:wrap}}
+</style>
+
+<script>
+let forecastData = [];
+let forecastMode = 'risky';
+
+function esc(value){
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function money(value){
+  if(value === null || value === undefined || value === '') return '-';
+  const num = Number(value);
+  return Number.isFinite(num) ? `$${num.toFixed(2)}` : '-';
+}
+
+function formatDays(value){
+  if(value === null || value === undefined) return 'Stable';
+  if(value <= 0) return 'Now';
+  return `${Number(value).toFixed(value < 10 ? 1 : 0)} days`;
+}
+
+function setForecastMode(mode, btn){
+  forecastMode = mode;
+  document.querySelectorAll('.forecast-segment-btn').forEach(el => el.classList.remove('active'));
+  btn.classList.add('active');
+  applyForecastFilters();
+}
+
+function renderForecastStats(summary){
+  const stats = [
+    {label:'Critical risk', value:summary.critical || 0, sub:'Products already low or projected to hit threshold within 7 days.', tone:'critical'},
+    {label:'Watch list', value:summary.watch || 0, sub:'Products that need attention inside the next 30 days.', tone:'watch'},
+    {label:'PO ready', value:summary.po_ready || 0, sub:'Rows that already have a preferred vendor and reorder quantity.', tone:'healthy'},
+    {label:'Sites covered', value:summary.sites || 0, sub:`Default lead time: ${summary.default_lead_days || 14} days unless vendor or product overrides exist.`, tone:''},
+  ];
+  document.getElementById('forecastStats').innerHTML = stats.map(stat => `
+    <div class="forecast-stat">
+      <div class="forecast-stat-label">${esc(stat.label)}</div>
+      <div class="forecast-stat-value ${esc(stat.tone)}">${esc(stat.value)}</div>
+      <div class="forecast-stat-sub">${esc(stat.sub)}</div>
+    </div>
+  `).join('');
+  document.getElementById('forecastSummaryText').textContent =
+    `${summary.critical || 0} critical · ${summary.watch || 0} watch · ${summary.healthy || 0} healthy`;
+}
+
+function populateSiteFilter(rows){
+  const select = document.getElementById('forecastSiteFilter');
+  const current = select.value;
+  const sites = [...new Map(rows.map(row => [`${row.location_id ?? 'null'}::${row.location_name}`, row.location_name])).entries()];
+  select.innerHTML = '<option value="">All sites</option>' + sites.map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join('');
+  if([...select.options].some(opt => opt.value === current)) select.value = current;
+}
+
+function forecastRow(row){
+  const chips = [
+    `<span class="forecast-risk ${esc(row.risk)}">${esc(row.risk)}</span>`,
+    row.low_history ? '<span class="forecast-chip">Low history fallback</span>' : '',
+    row.vendor_name ? `<span class="forecast-chip">${esc(row.vendor_name)}</span>` : '<span class="forecast-chip">No preferred vendor</span>',
+  ].join('');
+  return `
+    <tr>
+      <td>
+        <div class="forecast-product-name">${esc(row.product_name)}</div>
+        <div class="forecast-product-meta">${esc([row.manufacturer, row.model].filter(Boolean).join(' · ') || 'No manufacturer/model set')}</div>
+        <div class="forecast-site">${esc(row.location_name)}</div>
+        <div class="forecast-chip-row">${chips}</div>
+      </td>
+      <td>
+        <div><strong>${esc(row.avg_daily_usage)}</strong> / day</div>
+        <div class="forecast-product-meta">30d: ${esc(row.usage_last_30_days)} · 90d: ${esc(row.usage_last_90_days)}</div>
+        <div class="forecast-product-meta">Last-year seasonal window: ${esc(row.usage_last_year_window)}</div>
+      </td>
+      <td>
+        <div><strong>${esc(row.available_units)}</strong> available</div>
+        <div class="forecast-product-meta">${esc(row.total_units)} total · ${esc(row.reserved_units)} reserved · ${esc(row.checked_out_units)} checked out</div>
+        <div class="forecast-product-meta">Threshold: ${esc(row.low_stock_threshold)}</div>
+      </td>
+      <td>
+        <div><strong>Low stock:</strong> ${esc(formatDays(row.days_until_low))}</div>
+        <div class="forecast-product-meta"><strong>Zero stock:</strong> ${esc(formatDays(row.days_until_zero))}</div>
+      </td>
+      <td>
+        <div><strong>${esc(row.recommended_reorder_qty)}</strong> recommended</div>
+        <div class="forecast-product-meta">Lead: ${esc(row.lead_days)} days · Safety: ${esc(row.safety_units)} units</div>
+        <div class="forecast-product-meta">MOQ: ${esc(row.min_order_qty)} · Unit cost: ${esc(money(row.unit_price))}</div>
+      </td>
+      <td>
+        <div class="forecast-model-note">${esc(row.model_note)}</div>
+      </td>
+      <td>
+        <div class="forecast-action-row">
+          <a class="forecast-link" href="${esc(row.view_product_url)}">View product</a>
+          ${row.create_po_ready ? `<button class="btn btn-primary btn-sm" onclick="createForecastPO(${Number(row.product_id)})">Create PO</button>` : ''}
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function applyForecastFilters(){
+  const q = document.getElementById('forecastSearch').value.trim().toLowerCase();
+  const site = document.getElementById('forecastSiteFilter').value;
+  let rows = [...forecastData];
+  if(forecastMode === 'risky'){
+    rows = rows.filter(row => row.risk !== 'healthy');
+  }
+  if(site){
+    rows = rows.filter(row => `${row.location_id ?? 'null'}::${row.location_name}` === site);
+  }
+  if(q){
+    rows = rows.filter(row =>
+      [row.product_name, row.location_name, row.vendor_name, row.manufacturer, row.model]
+        .filter(Boolean)
+        .some(value => String(value).toLowerCase().includes(q))
+    );
+  }
+
+  const tbody = document.getElementById('forecastRows');
+  if(!rows.length){
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="7"><div class="forecast-empty">No forecast rows match the current filters.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(forecastRow).join('');
+}
+
+async function loadForecasting(){
+  document.getElementById('forecastRows').innerHTML = '<tr class="empty-row"><td colspan="7">Loading forecasting data...</td></tr>';
+  const data = await fetch('/api/forecasting').then(r => r.json()).catch(() => ({ok:false,msg:'Could not load forecasting data.'}));
+  if(!data.ok){
+    document.getElementById('forecastRows').innerHTML = `<tr class="empty-row"><td colspan="7">${esc(data.msg || 'Could not load forecasting data.')}</td></tr>`;
+    return;
+  }
+  forecastData = data.rows || [];
+  renderForecastStats(data.summary || {});
+  populateSiteFilter(forecastData);
+  applyForecastFilters();
+}
+
+async function createForecastPO(productId){
+  const row = forecastData.find(item => Number(item.product_id) === Number(productId));
+  if(!row || !row.create_po_ready) return;
+  const confirmed = window.confirm(`Create a draft PO for ${row.recommended_reorder_qty}x "${row.product_name}" from ${row.vendor_name}?`);
+  if(!confirmed) return;
+  const payload = {
+    lines: [{
+      product_id: row.product_id,
+      vendor_id: row.vendor_id,
+      description: row.product_name,
+      vendor_sku: row.vendor_sku || null,
+      qty_ordered: row.recommended_reorder_qty,
+      unit_cost: row.unit_price || 0,
+    }]
+  };
+  const csrf = document.cookie.match(/csrf_token=([^;]+)/);
+  const headers = {'Content-Type':'application/json'};
+  if(csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf[1]);
+  const data = await fetch('/api/procurement/pos/from-low-stock', {
+    method:'POST',
+    headers,
+    body: JSON.stringify(payload),
+  }).then(r => r.json()).catch(() => ({ok:false,msg:'Could not create draft PO.'}));
+  if(!data.ok){
+    window.alert(data.msg || 'Could not create draft PO.');
+    return;
+  }
+  if(data.pos && data.pos[0] && data.pos[0].id){
+    window.location.href = `/procurement/${data.pos[0].id}`;
+  }
+}
+
+loadForecasting();
+</script>
+{% endblock %}

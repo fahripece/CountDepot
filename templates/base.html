@@ -438,6 +438,12 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <span>Low Stock</span>
         <span class="nb" id="alert-badge" style="display:none;background:#b91c1c">0</span>
       </a>
+      {% if 'view_dashboard' in user_perms or session.get('role') == 'admin' %}
+      <a href="/forecasting" class="navlink {% if request.path == '/forecasting' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 7-8"/><path d="M14 7h6v6"/></svg>
+        <span>Forecasting (Beta)</span>
+      </a>
+      {% endif %}
       <a href="/checked-out" class="navlink {% if request.path == '/checked-out' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
         <span>Out / Deployed</span>

@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import math
 import sqlite3
 import threading
 import time
@@ -28,6 +29,264 @@ def _utc_now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _forecast_setting_int(key, default):
+    row = query("SELECT value FROM settings WHERE key=?", [key], one=True)
+    if not row or row["value"] in (None, ""):
+        return default
+    try:
+        return int(float(row["value"]))
+    except (TypeError, ValueError):
+        return default
+
+
+def _forecast_stock_rows():
+    loc_sql, loc_args = location_filter_sql("i")
+    reserved_sql, reserved_args = location_filter_sql("ri")
+    rows = query(f"""
+        WITH base AS (
+            SELECT DISTINCT i.product_id, i.location_id
+            FROM items i
+            WHERE i.active=1
+              AND COALESCE(i.retired,0)=0
+              AND COALESCE(i.sold,0)=0
+              {loc_sql}
+        ),
+        reserved AS (
+            SELECT ri.product_id,
+                   ri.location_id,
+                   SUM(COALESCE(r.qty_remaining, r.qty_reserved, 1)) AS reserved_units
+            FROM item_reservations r
+            JOIN items ri ON ri.id = r.item_id
+            WHERE ri.active=1
+              AND COALESCE(ri.retired,0)=0
+              AND COALESCE(ri.sold,0)=0
+              AND COALESCE(r.cancelled,0)=0
+              AND COALESCE(r.fulfilled,0)=0
+              AND COALESCE(r.qty_remaining, r.qty_reserved, 1) > 0
+              {reserved_sql}
+            GROUP BY ri.product_id, ri.location_id
+        )
+        SELECT p.id AS product_id,
+               p.name AS product_name,
+               p.manufacturer,
+               p.model,
+               p.low_stock_threshold,
+               b.location_id,
+               COALESCE(l.name, 'Unassigned') AS location_name,
+               SUM(CASE WHEN i.qty IS NOT NULL THEN COALESCE(i.qty,0) ELSE 1 END) AS total_units,
+               SUM(CASE
+                     WHEN i.qty IS NOT NULL THEN MAX(0, COALESCE(i.qty,0) - COALESCE(i.qty_out,0))
+                     WHEN COALESCE(i.checked_out,0)=0 THEN 1
+                     ELSE 0
+                   END) AS physical_available_units,
+               SUM(CASE
+                     WHEN i.qty IS NOT NULL THEN COALESCE(i.qty_out,0)
+                     WHEN COALESCE(i.checked_out,0)=1 THEN 1
+                     ELSE 0
+                   END) AS checked_out_units,
+               COALESCE(r.reserved_units, 0) AS reserved_units,
+               pv.vendor_id,
+               d.name AS vendor_name,
+               pv.vendor_sku,
+               pv.unit_price,
+               COALESCE(vc.min_order_qty, 1) AS min_order_qty,
+               COALESCE(vc.lead_days, 0) AS vendor_lead_days,
+               fs.lead_days_override,
+               COALESCE(fs.safety_stock_override, 0) AS safety_stock_override,
+               COALESCE(fs.enabled, 1) AS forecast_enabled
+        FROM base b
+        JOIN products p ON p.id=b.product_id
+        LEFT JOIN locations l ON l.id=b.location_id
+        LEFT JOIN items i ON i.product_id=p.id
+            AND ((i.location_id=b.location_id) OR (i.location_id IS NULL AND b.location_id IS NULL))
+            AND i.active=1
+            AND COALESCE(i.retired,0)=0
+            AND COALESCE(i.sold,0)=0
+        LEFT JOIN reserved r ON r.product_id=p.id
+            AND ((r.location_id=b.location_id) OR (r.location_id IS NULL AND b.location_id IS NULL))
+        LEFT JOIN product_vendors pv ON pv.product_id=p.id AND pv.preferred=1 AND pv.active=1
+        LEFT JOIN distributors d ON d.id=pv.vendor_id
+        LEFT JOIN vendor_catalog vc ON vc.vendor_id=pv.vendor_id
+            AND vc.vendor_sku = pv.vendor_sku AND vc.active=1
+        LEFT JOIN forecast_settings fs ON fs.product_id=p.id
+        WHERE p.active=1
+          AND COALESCE(fs.enabled, 1)=1
+        GROUP BY p.id, b.location_id
+        ORDER BY location_name, p.name
+    """, loc_args + reserved_args)
+    return [dict(r) for r in rows]
+
+
+def _forecast_usage_events(since_date_iso):
+    events = {}
+
+    def _add(product_id, location_id, event_date, qty):
+        if not product_id or not event_date or qty <= 0:
+            return
+        key = (int(product_id), location_id)
+        bucket = events.setdefault(key, {})
+        bucket[event_date] = bucket.get(event_date, 0) + qty
+
+    sold_sql, sold_args = location_filter_sql("i")
+    sold_rows = query(f"""
+        SELECT i.product_id, i.location_id, i.sold_date AS event_date, COUNT(*) AS qty
+        FROM items i
+        WHERE i.product_id IS NOT NULL
+          AND COALESCE(i.sold,0)=1
+          AND i.sold_date IS NOT NULL
+          AND i.sold_date >= ?
+          {sold_sql}
+        GROUP BY i.product_id, i.location_id, i.sold_date
+    """, [since_date_iso] + sold_args)
+    for row in sold_rows:
+        _add(row["product_id"], row["location_id"], row["event_date"], int(row["qty"] or 0))
+
+    res_sql, res_args = location_filter_sql("i")
+    reservation_rows = query(f"""
+        SELECT i.product_id,
+               i.location_id,
+               substr(r.fulfilled_at, 1, 10) AS event_date,
+               SUM(COALESCE(r.qty_reserved, 1)) AS qty
+        FROM item_reservations r
+        JOIN items i ON i.id=r.item_id
+        WHERE i.product_id IS NOT NULL
+          AND COALESCE(r.fulfilled,0)=1
+          AND r.fulfilled_at IS NOT NULL
+          AND substr(r.fulfilled_at, 1, 10) >= ?
+          {res_sql}
+        GROUP BY i.product_id, i.location_id, substr(r.fulfilled_at, 1, 10)
+    """, [since_date_iso] + res_args)
+    for row in reservation_rows:
+        _add(row["product_id"], row["location_id"], row["event_date"], int(row["qty"] or 0))
+
+    qty_sql, qty_args = location_filter_sql("i")
+    qty_rows = query(f"""
+        SELECT a.item_id,
+               i.product_id,
+               i.location_id,
+               substr(a.ts, 1, 10) AS event_date,
+               a.before_state,
+               a.after_state,
+               a.detail
+        FROM audit_log a
+        JOIN items i ON i.id=a.item_id
+        WHERE a.action='QTY_REMOVE'
+          AND i.product_id IS NOT NULL
+          AND substr(a.ts, 1, 10) >= ?
+          {qty_sql}
+        ORDER BY a.ts DESC
+    """, [since_date_iso] + qty_args)
+    for row in qty_rows:
+        qty = 0
+        try:
+            before = json.loads(row["before_state"] or "{}")
+            after = json.loads(row["after_state"] or "{}")
+            qty = max(0, int(after.get("qty_out") or 0) - int(before.get("qty_out") or 0))
+        except Exception:
+            qty = 0
+        if qty <= 0:
+            detail = row["detail"] or ""
+            match = __import__("re").search(r"-([0-9]+)", detail)
+            if match:
+                qty = int(match.group(1))
+        _add(row["product_id"], row["location_id"], row["event_date"], qty)
+
+    return events
+
+
+def _forecast_metrics(stock_row, daily_usage, today):
+    recent_90_cutoff = today - timedelta(days=89)
+    recent_30_cutoff = today - timedelta(days=29)
+    yearly_cutoff = today - timedelta(days=364)
+    seasonal_start = today - timedelta(days=454)
+    seasonal_end = today - timedelta(days=365)
+
+    recent_90 = 0
+    recent_30 = 0
+    yearly_total = 0
+    seasonal_90 = 0
+
+    for day, qty in daily_usage.items():
+        if day >= recent_90_cutoff:
+            recent_90 += qty
+        if day >= recent_30_cutoff:
+            recent_30 += qty
+        if day >= yearly_cutoff:
+            yearly_total += qty
+        if seasonal_start <= day <= seasonal_end:
+            seasonal_90 += qty
+
+    history_days = len(daily_usage)
+    history_units = sum(daily_usage.values())
+    low_history = history_days < 6 or history_units < 10
+
+    trend_rate = (recent_90 / 90.0) if recent_90 else ((recent_30 / 30.0) if recent_30 else 0.0)
+    yearly_rate = (yearly_total / 365.0) if yearly_total else 0.0
+    seasonal_rate = (seasonal_90 / 90.0) if seasonal_90 >= 10 else 0.0
+
+    if trend_rate <= 0 and yearly_rate > 0:
+        blended_rate = yearly_rate
+        model_note = "Using simple moving average from the last year."
+    elif seasonal_rate > 0:
+        blended_rate = (trend_rate * 0.7) + (seasonal_rate * 0.3)
+        model_note = "Blending the last 90 days with the same period last year."
+    else:
+        blended_rate = trend_rate
+        model_note = "Using the last 90 days of demand."
+
+    if low_history and blended_rate > 0:
+        model_note = "Low-history fallback: using the best available moving average."
+    elif blended_rate <= 0:
+        model_note = "No demand recorded yet. Forecast stays neutral until usage appears."
+
+    available_units = max(0, int(stock_row["physical_available_units"] or 0) - int(stock_row["reserved_units"] or 0))
+    total_units = int(stock_row["total_units"] or 0)
+    reserved_units = int(stock_row["reserved_units"] or 0)
+    checked_out_units = int(stock_row["checked_out_units"] or 0)
+    threshold = int(stock_row["low_stock_threshold"] or 0)
+    lead_days = int(stock_row.get("lead_days_override") or 0) or int(stock_row.get("vendor_lead_days") or 0) or _forecast_setting_int("forecast_default_lead_days", 14)
+    safety_override = int(stock_row.get("safety_stock_override") or 0)
+    safety_units = max(safety_override, threshold, int(math.ceil(blended_rate * 7)) if blended_rate > 0 else threshold)
+    lead_demand_units = int(math.ceil(blended_rate * lead_days)) if blended_rate > 0 else 0
+    reorder_qty = max(0, int(math.ceil(lead_demand_units + safety_units - available_units)))
+    moq = max(1, int(stock_row.get("min_order_qty") or 1))
+    if reorder_qty > 0:
+        reorder_qty = int(math.ceil(reorder_qty / moq) * moq)
+
+    if blended_rate > 0:
+        days_until_low = None if available_units <= threshold else max(0, round((available_units - threshold) / blended_rate, 1))
+        days_until_zero = round(available_units / blended_rate, 1)
+    else:
+        days_until_low = None
+        days_until_zero = None
+
+    if available_units <= threshold or (days_until_low is not None and days_until_low <= 7):
+        risk = "critical"
+    elif (days_until_low is not None and days_until_low <= 30) or reorder_qty > 0:
+        risk = "watch"
+    else:
+        risk = "healthy"
+
+    return {
+        "avg_daily_usage": round(blended_rate, 2),
+        "usage_last_30_days": recent_30,
+        "usage_last_90_days": recent_90,
+        "usage_last_year_window": seasonal_90,
+        "total_units": total_units,
+        "available_units": available_units,
+        "reserved_units": reserved_units,
+        "checked_out_units": checked_out_units,
+        "days_until_low": days_until_low,
+        "days_until_zero": days_until_zero,
+        "recommended_reorder_qty": reorder_qty,
+        "lead_days": lead_days,
+        "safety_units": safety_units,
+        "model_note": model_note,
+        "low_history": low_history,
+        "risk": risk,
+    }
+
+
 @bp.route("/api/user/intro-tour-complete", methods=["POST"])
 @login_required
 def api_user_intro_tour_complete():
@@ -36,6 +295,61 @@ def api_user_intro_tour_complete():
             [now, session.get("user_id")])
     session["show_intro_tour"] = False
     return jsonify({"ok": True})
+
+
+@bp.route("/api/forecasting")
+@login_required
+@perm_required("view_dashboard")
+def api_forecasting():
+    today = _date.today()
+    usage_events = _forecast_usage_events((today - timedelta(days=455)).isoformat())
+    rows = []
+    for stock_row in _forecast_stock_rows():
+        if int(stock_row.get("forecast_enabled") or 1) != 1:
+            continue
+        key = (int(stock_row["product_id"]), stock_row["location_id"])
+        daily_usage = {
+            _date.fromisoformat(day): qty
+            for day, qty in usage_events.get(key, {}).items()
+            if day
+        }
+        metrics = _forecast_metrics(stock_row, daily_usage, today)
+        row = {
+            "product_id": stock_row["product_id"],
+            "product_name": stock_row["product_name"],
+            "manufacturer": stock_row.get("manufacturer"),
+            "model": stock_row.get("model"),
+            "location_id": stock_row.get("location_id"),
+            "location_name": stock_row.get("location_name") or "Unassigned",
+            "low_stock_threshold": int(stock_row.get("low_stock_threshold") or 0),
+            "vendor_id": stock_row.get("vendor_id"),
+            "vendor_name": stock_row.get("vendor_name"),
+            "vendor_sku": stock_row.get("vendor_sku"),
+            "unit_price": stock_row.get("unit_price"),
+            "min_order_qty": max(1, int(stock_row.get("min_order_qty") or 1)),
+            "view_product_url": f"/products?q={stock_row['product_name']}",
+            **metrics,
+        }
+        row["create_po_ready"] = bool(row["vendor_id"] and row["recommended_reorder_qty"] > 0)
+        rows.append(row)
+
+    rows.sort(key=lambda r: (
+        0 if r["risk"] == "critical" else 1 if r["risk"] == "watch" else 2,
+        r["days_until_low"] if r["days_until_low"] is not None else 999999,
+        r["days_until_zero"] if r["days_until_zero"] is not None else 999999,
+        r["location_name"].lower(),
+        r["product_name"].lower(),
+    ))
+
+    summary = {
+        "critical": sum(1 for r in rows if r["risk"] == "critical"),
+        "watch": sum(1 for r in rows if r["risk"] == "watch"),
+        "healthy": sum(1 for r in rows if r["risk"] == "healthy"),
+        "po_ready": sum(1 for r in rows if r["create_po_ready"]),
+        "sites": len({(r["location_id"], r["location_name"]) for r in rows}),
+        "default_lead_days": _forecast_setting_int("forecast_default_lead_days", 14),
+    }
+    return jsonify({"ok": True, "summary": summary, "rows": rows, "beta": True})
 
 
 DEFAULT_DOC_CATEGORIES = [

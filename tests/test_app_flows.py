@@ -9,7 +9,7 @@ from flask import session
 from config import Config
 from app.helpers import PERM_KEYS, hash_pw, verify_pw
 from app.blueprints.auth import login_page
-from app.blueprints.main import admin_page, categories_page, docs_page, integrations_page, inventory, products_page
+from app.blueprints.main import admin_page, categories_page, docs_page, forecasting_page, integrations_page, inventory, products_page
 from app.blueprints.api import (
     api_add_reservation,
     api_cat_add,
@@ -33,6 +33,7 @@ from app.blueprints.api import (
     api_integrations_catalog_save,
     api_integrations_catalog_test,
     api_integrations_health,
+    api_forecasting,
     api_doc_categories,
     api_doc_category_add,
     api_docs_list,
@@ -2580,6 +2581,93 @@ def test_integrations_health_reports_live_and_config_only_states(app, tenant, mo
     assert data["activity"]
     assert data["activity"][0]["timestamp"] >= data["activity"][-1]["timestamp"]
     assert {item["source"] for item in data["activity"]} >= {"Accounting sync", "Webhook delivery"}
+
+
+def test_forecasting_page_renders_beta_shell(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/forecasting",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or forecasting_page())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Forecasting" in body
+    assert "Beta" in body
+    assert "Risky first" in body
+    assert "All forecasted products" in body
+
+
+def test_forecasting_api_returns_site_aware_rows(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute("INSERT INTO locations (name, active, created_at) VALUES ('Warehouse A', 1, datetime('now'))")
+    site_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    db.execute("INSERT INTO distributors (name) VALUES ('Primary Vendor')")
+    vendor_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    db.execute(
+        "INSERT INTO products (name, low_stock_threshold, active, created_at) VALUES (?,?,1,datetime('now'))",
+        ["Forecast Widget", 4],
+    )
+    product_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    db.execute(
+        "INSERT INTO items (product_id, name, location_id, qty, qty_out, active, created_at) VALUES (?,?,?,?,?,1,datetime('now'))",
+        [product_id, "Forecast Widget", site_id, 10, 3],
+    )
+    item_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    db.execute(
+        "INSERT INTO product_vendors (product_id, vendor_id, vendor_sku, unit_price, preferred, active) VALUES (?,?,?,?,1,1)",
+        [product_id, vendor_id, "FW-001", 12.5],
+    )
+    db.execute(
+        "INSERT INTO vendor_catalog (vendor_id, product_name, vendor_sku, unit_price, min_order_qty, lead_days, active, updated_at) VALUES (?,?,?,?,?,?,1,datetime('now'))",
+        [vendor_id, "Forecast Widget", "FW-001", 12.5, 2, 5],
+    )
+    db.execute(
+        "INSERT INTO item_reservations (item_id, reserved_by, reserved_from, reserved_to, purpose, qty_reserved, qty_remaining, fulfilled, created_by, created_at) VALUES (?,?,?,?,?,?,?,0,?,datetime('now'))",
+        [item_id, "Client A", "2026-04-24", "2026-04-30", "Job hold", 2, 2, "admin"],
+    )
+    db.execute(
+        "INSERT INTO audit_log (ts, action, item_id, item_name, before_state, after_state, username) VALUES (?,?,?,?,?,?,?)",
+        ["2026-04-20 10:00:00", "QTY_REMOVE", item_id, "Forecast Widget", json.dumps({"qty": 10, "qty_out": 0}), json.dumps({"qty": 10, "qty_out": 3}), "admin"],
+    )
+    db.execute(
+        "INSERT INTO forecast_settings (product_id, lead_days_override, safety_stock_override, enabled, updated_at) VALUES (?,?,?,?,?)",
+        [product_id, 9, 6, 1, "2026-04-24 10:00:00"],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/forecasting",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_forecasting())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["beta"] is True
+    assert data["summary"]["default_lead_days"] >= 1
+    row = next(r for r in data["rows"] if r["product_id"] == product_id)
+    assert row["location_name"] == "Warehouse A"
+    assert row["reserved_units"] == 2
+    assert row["available_units"] == 5
+    assert row["avg_daily_usage"] > 0
+    assert row["lead_days"] == 9
+    assert row["recommended_reorder_qty"] >= 2
+    assert row["create_po_ready"] is True
 
 
 def test_docs_page_and_api_support_permissioned_sops(app, tenant):
