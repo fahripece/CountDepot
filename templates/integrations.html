@@ -7,23 +7,6 @@
 </div>
 
 <div class="integrations-page">
-  <div class="int-card">
-    <div class="int-card-head">
-      <div>
-        <div style="font-size:15px;font-weight:700;color:#0f172a">Integration health</div>
-        <div style="font-size:12px;color:#64748b">Live API checks where supported, configuration-only status where CountDepot only stores connector settings.</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span id="integration-health-summary" class="int-badge disconnected">Not run yet</span>
-        <button class="btn btn-secondary btn-sm" id="integration-health-btn" onclick="loadIntegrationHealth()">Run Health Checks</button>
-      </div>
-    </div>
-    <div style="border-top:1px solid #e5e3de;padding:18px 20px">
-      <div id="integration-overview-grid" class="overview-grid" style="display:none"></div>
-      <div id="integration-health-panel" style="color:#94a3b8;font-size:13px">Run the health checks to see which integrations are actually live versus only configured.</div>
-    </div>
-  </div>
-
   <div style="margin:22px 0 14px">
     <div style="font-size:17px;font-weight:800;color:#0f172a">Native integrations</div>
     <div style="font-size:12.5px;color:#64748b;margin-top:4px;max-width:760px;line-height:1.6">
@@ -228,6 +211,29 @@
   </div>
   <div id="connector-catalog">
     <div style="color:#94a3b8;font-size:13px">Loading integration catalog...</div>
+  </div>
+
+  <div style="margin:24px 0 14px">
+    <div style="font-size:17px;font-weight:800;color:#0f172a">Integration health</div>
+    <div style="font-size:12.5px;color:#64748b;margin-top:4px;max-width:760px;line-height:1.6">
+      Diagnostics live down here so the setup flow stays front-loaded. Run health checks after you finish connecting the systems you actually plan to use.
+    </div>
+  </div>
+  <div class="int-card">
+    <div class="int-card-head">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#0f172a">Live health checks</div>
+        <div style="font-size:12px;color:#64748b">Live API checks where supported, configuration-only status where CountDepot only stores connector settings.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span id="integration-health-summary" class="int-badge disconnected">Not run yet</span>
+        <button class="btn btn-secondary btn-sm" id="integration-health-btn" onclick="loadIntegrationHealth()">Run Health Checks</button>
+      </div>
+    </div>
+    <div style="border-top:1px solid #e5e3de;padding:18px 20px">
+      <div id="integration-overview-grid" class="overview-grid" style="display:none"></div>
+      <div id="integration-health-panel" style="color:#94a3b8;font-size:13px">Run the health checks to see which integrations are actually live versus only configured.</div>
+    </div>
   </div>
 
 </div>
