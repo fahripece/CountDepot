@@ -2299,6 +2299,43 @@ def test_resource_article_renders_on_bare_domain(app):
     assert 'href="/resources/what-to-look-for-in-inventory-management-software"' in body
 
 
+def test_inventory_management_resource_article_renders_on_bare_domain(app):
+    response = app.test_client().get(
+        "/resources/inventory-management",
+        base_url="http://countdepot.com",
+    )
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Inventory management: what it is, how it works, and how to improve it" in body
+    assert "What inventory management actually means" in body
+    assert "How to improve inventory management" in body
+    assert '<link rel="canonical" href="http://countdepot.com/resources/inventory-management">' in body
+    assert '"@type": "Article"' in body
+    assert 'href="/resources/what-to-look-for-in-inventory-management-software"' in body
+
+
+def test_homepage_links_to_inventory_management_resource(app):
+    response = app.test_client().get("/", base_url="http://countdepot.com")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'href="/resources/inventory-management"' in body
+    assert "Inventory management: what it is, how it works, and how to improve it" in body
+
+
+def test_seo_landing_links_to_inventory_management_resource(app):
+    response = app.test_client().get(
+        "/inventory-management-for-repair-shops",
+        base_url="http://countdepot.com",
+    )
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'href="/resources/inventory-management"' in body
+    assert "Inventory management guide" in body
+
+
 def test_public_marketing_pages_do_not_render_img_tags_without_alt(app):
     client = app.test_client()
     for path in (

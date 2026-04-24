@@ -1,4 +1,121 @@
 RESOURCE_GUIDES = {
+    "inventory-management": {
+        "title": "Inventory Management: What It Is, How It Works, and How to Improve It | CountDepot Resources",
+        "meta_description": "Learn what inventory management is, how the process works, and how growing teams improve accuracy, visibility, and control.",
+        "eyebrow": "Pillar Guide",
+        "hero_title": "Inventory management: what it is, how it works, and how to improve it",
+        "hero_subtitle": "A practical guide for teams that need a cleaner process, better visibility, and fewer inventory mistakes as operations grow.",
+        "read_time": "11 min read",
+        "summary": "Inventory management is the operating system behind how a team receives stock, stores it, finds it, moves it, reserves it, counts it, and reorders it. The goal is not just to know what exists. It is to know what is available right now, where it is, who is using it, what is already committed, and what needs attention before it causes delay or waste. The process matters in every industry because inventory problems usually show up first as operational friction: missing items, rushed purchasing, delayed jobs, or staff losing time just trying to confirm what is in stock.",
+        "sections": [
+            {
+                "title": "What inventory management actually means",
+                "body": [
+                    "Inventory management is the process of controlling how stock and tracked items enter the business, move through it, and leave it. That includes receiving, storage, assignment, checkout, reservation, counting, restocking, and retirement.",
+                    "Many teams think inventory management only means counting what is on a shelf. In practice, the process is wider than that. A useful inventory system should answer basic operating questions quickly: what is available now, what is already reserved, what is checked out, what is low, and where each item is located.",
+                    "That is why inventory management sits at the intersection of operations, accountability, and purchasing. When it works well, the team moves faster because they trust the data. When it works poorly, workers start building side processes to compensate."
+                ],
+                "bullets": [
+                    "Track what inventory exists",
+                    "Track where it is stored",
+                    "Track whether it is available, reserved, or in use",
+                    "Track when stock should be reordered"
+                ],
+            },
+            {
+                "title": "Why inventory management matters",
+                "body": [
+                    "The value of inventory management is not abstract. It shows up in fewer delays, fewer duplicate purchases, fewer missing items, and less time wasted searching for answers.",
+                    "Teams often notice the need for better inventory management after a series of small failures. A technician cannot find the part they expected. A site runs out even though the total company count looked healthy. A reserved item is used by someone else because there was no visible reservation workflow. Those are not isolated mistakes. They are symptoms of an inventory process that is too loose for the business.",
+                    "Good inventory management creates control without forcing the team into a slow workflow. The process should reduce friction, not add it. That is why scanning, site visibility, clear statuses, and permissions matter more than oversized dashboards."
+                ],
+                "bullets": [
+                    "Reduce stockouts and emergency purchasing",
+                    "Improve accountability for shared items",
+                    "Increase confidence in operational decisions",
+                    "Make purchasing and replenishment more predictable"
+                ],
+            },
+            {
+                "title": "The core inventory management workflow",
+                "body": [
+                    "Most inventory operations follow the same lifecycle. First, stock is received and recorded. Then it is assigned a location, category, and identifying details such as serial number or SKU. After that, the team needs to be able to search it, move it, reserve it, use it, and count it accurately over time.",
+                    "The strongest workflows keep those actions connected. If receiving happens in one place, reservations in another, and checkout in a third disconnected process, accuracy starts drifting. A practical system keeps the data and the action in the same place.",
+                    "The workflow also needs to distinguish between item types. Serialized items, quantity-tracked stock, shared equipment, and consumables do not all behave the same way. A good inventory process reflects that instead of forcing every item into one generic model."
+                ],
+                "bullets": [
+                    "Receive and verify inventory",
+                    "Store it at a site, shelf, room, or bin",
+                    "Search, scan, reserve, and check it in or out",
+                    "Count and review inventory regularly"
+                ],
+            },
+            {
+                "title": "Where inventory management breaks down",
+                "body": [
+                    "The first breakdown is usually trust. Inventory technically exists in a system, but the team still does not believe the answer without checking manually. Once that happens, the process is already losing value.",
+                    "The second breakdown is visibility. A global total might look fine while a specific site is empty. Or a quantity may seem available even though part of it is already reserved for future work.",
+                    "The third breakdown is process inconsistency. Different workers use different naming rules, skip fields, or delay updates until the end of the day. The result is a database that looks complete on the surface but is unreliable where it matters.",
+                    "These failures are why teams outgrow spreadsheets and basic trackers. The issue is rarely that the team has no system. It is that the system is no longer strong enough for the operating pace."
+                ],
+                "bullets": [
+                    "Data is technically present but not trusted",
+                    "Availability and reserved stock are not separated",
+                    "Low-stock logic is too generic",
+                    "Workers fall back to side notes or messages"
+                ],
+            },
+            {
+                "title": "How to improve inventory management",
+                "body": [
+                    "Improving inventory management starts with narrowing the process to what the team actually does every day. That means standardizing product records, required fields, naming, and locations first. Clean setup makes every later action more reliable.",
+                    "Next, remove friction from the highest-frequency actions. Teams should be able to search, scan, check out, reserve, and update quantities quickly. If those actions are awkward, people work around the tool and accuracy drops.",
+                    "Finally, make visibility site-aware and action-aware. Available, reserved, and total quantities should be obvious. Low-stock alerts should reflect the location that is at risk. Permissions should match the user role so the system stays simple for people who only need a narrow view.",
+                    "The goal is not to make the process complicated. It is to make the correct action easier than the incorrect one."
+                ],
+                "bullets": [
+                    "Standardize categories, product templates, and required fields",
+                    "Use barcode workflows where speed matters",
+                    "Track sites and availability separately",
+                    "Add permissions and SOPs around the same workflow"
+                ],
+            },
+            {
+                "title": "What to look for in inventory management software",
+                "body": [
+                    "Once the process is clear, software evaluation becomes easier. The right platform should support how your team actually works, not just offer a long feature list.",
+                    "For most teams, the practical shortlist includes fast item lookup, barcode scanning, location-aware inventory, reservations, check-in and check-out history, permission-based views, and reporting that answers operational questions.",
+                    "That is why buyers should test software against a real scenario instead of a generic demo. Add a product, assign locations, reserve part of the stock, check items out, and confirm that the system still shows availability clearly. If it fails there, the rest of the feature set does not matter much."
+                ],
+                "bullets": [
+                    "Fast add, search, and scan workflows",
+                    "Per-site visibility and low-stock logic",
+                    "Reservation support with clear available counts",
+                    "Audit history and permission-based access"
+                ],
+            },
+            {
+                "title": "Common questions about inventory management",
+                "body": [
+                    "A common question is whether inventory management is only for retail or warehouses. It is not. The same process matters anywhere teams need to track parts, tools, devices, supplies, shared equipment, or serialized assets.",
+                    "Another common question is when to move beyond spreadsheets. The answer is usually when inventory movement affects revenue, customer delivery, technician time, compliance, or internal accountability. That is the point where weak process starts becoming expensive.",
+                    "A third question is whether inventory management should focus on counts or workflow. The answer is workflow first. Accurate counts are the outcome of a process people can actually follow under pressure."
+                ],
+                "bullets": [
+                    "Inventory management applies far beyond retail",
+                    "Spreadsheets stop working when operational stakes rise",
+                    "Workflow quality drives data quality"
+                ],
+            },
+        ],
+        "cta_title": "Turn inventory management into a reliable operating process",
+        "cta_copy": "CountDepot helps teams manage inventory with scanning, reservations, site-based visibility, and practical day-to-day workflows instead of disconnected spreadsheets.",
+        "related_slugs": [
+            "what-to-look-for-in-inventory-management-software",
+            "inventory-management-software-vs-spreadsheets",
+            "how-it-teams-track-inventory-across-locations",
+        ],
+    },
     "inventory-management-software-vs-spreadsheets": {
         "title": "Inventory Management Software vs. Spreadsheets | CountDepot Resources",
         "meta_description": "Compare spreadsheets versus inventory management software for barcode scanning, locations, reservations, and audit history.",
