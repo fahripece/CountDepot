@@ -268,7 +268,7 @@ def verify_signup(token):
     db.close()
 
     # Create tenant + DB
-    create_tenant(slug, name, "starter", owner_email=email)
+    create_tenant(slug, name, "free", owner_email=email)
     _bootstrap_tenant_db(slug, None, admin_email=email, pre_hashed_password=phash)
 
     # Clear must_change_password (they chose their own password)
@@ -277,14 +277,6 @@ def verify_signup(token):
     conn.execute("UPDATE users SET must_change_password=0 WHERE email=?", [email])
     conn.commit()
     conn.close()
-
-    # Set 30-day trial
-    trial_ends = (_utc_now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
-    pdb = get_platform_db()
-    pdb.execute("UPDATE tenants SET subscription_status='trial', trial_ends_at=? WHERE slug=?",
-                [trial_ends, slug])
-    pdb.commit()
-    pdb.close()
 
     # Stripe customer (optional)
     try:

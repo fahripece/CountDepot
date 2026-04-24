@@ -98,8 +98,10 @@ def billing_page():
     from app.db import query
     user_count = query("SELECT COUNT(*) FROM users", one=True)[0]
     item_count = query("SELECT COUNT(*) FROM items WHERE active=1 AND sold=0", one=True)[0]
+    site_count = query("SELECT COUNT(*) FROM locations WHERE COALESCE(active,1)=1", one=True)[0]
     max_users  = current_plan["max_users"]
     max_items  = current_plan["max_items"]
+    max_sites  = current_plan.get("max_sites")
 
     return render_template("billing.html",
         tenant=tenant, status=status, plan_key=plan_key,
@@ -107,6 +109,7 @@ def billing_page():
         plans=PLANS, plan_order=PLAN_ORDER,
         user_count=user_count, max_users=max_users,
         item_count=item_count, max_items=max_items,
+        site_count=site_count, max_sites=max_sites,
         stripe_ok=stripe_ok,
         stripe_pub_key=Config.STRIPE_PUBLISHABLE_KEY)
 

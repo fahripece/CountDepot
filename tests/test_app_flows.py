@@ -45,6 +45,7 @@ from app.blueprints.api import (
     api_item_woocommerce_list,
     api_woocommerce_sync_orders,
     api_set_user_locations,
+    api_add_location,
     api_toggle_2fa,
     api_verify_2fa_setup,
     api_alerts,
@@ -73,11 +74,19 @@ def _login(app, tenant, email=None, password=None):
 
 def _seed_logged_in_client(client, tenant):
     expires_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat()
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "UPDATE users SET session_token=?, must_change_password=0 WHERE id=1",
+        ["live"],
+    )
+    db.commit()
+    db.close()
     with client.session_transaction() as sess:
         sess["user_id"] = 1
         sess["username"] = "admin"
         sess["role"] = "admin"
         sess["permissions"] = ",".join(PERM_KEYS)
+        sess["session_token"] = "live"
         sess["expires_at"] = expires_at
         sess["location_ids"] = []
         sess["_csrf_token"] = "test-csrf-token"
@@ -413,6 +422,7 @@ def test_low_stock_alerts_are_scoped_per_site(app, client, tenant):
         session["username"] = "admin"
         session["role"] = "admin"
         session["permissions"] = ",".join(PERM_KEYS)
+        session["session_token"] = "live"
         session["expires_at"] = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat()
         session["location_ids"] = []
         res = _as_response(app, app.preprocess_request() or api_alerts())
@@ -423,6 +433,7 @@ def test_low_stock_alerts_are_scoped_per_site(app, client, tenant):
         session["username"] = "admin"
         session["role"] = "admin"
         session["permissions"] = ",".join(PERM_KEYS)
+        session["session_token"] = "live"
         session["expires_at"] = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat()
         session["location_ids"] = []
         site_b_res = _as_response(app, app.preprocess_request() or api_alerts())
@@ -2193,7 +2204,7 @@ def test_homepage_has_core_seo_meta_tags(app):
     title = "CountDepot - Barcode Inventory Management Software for Any Team"
     description = (
         "Barcode inventory management software for tracking assets, scanning items, "
-        "managing reservations, and monitoring stock by site. Start a 30-day free trial."
+        "managing reservations, and monitoring stock by site. Free plan covers 250 items for 1 user across 2 sites."
     )
 
     assert response.status_code == 200
@@ -2230,11 +2241,11 @@ def test_signup_page_has_seo_meta_and_submit_event(app):
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "<title>Start Free Inventory Management Trial | CountDepot</title>" in body
+    assert "<title>Start Free Inventory Management Software | CountDepot</title>" in body
     assert body.count("<title>") == 1
     assert (
         '<meta name="description" content="Create your CountDepot workspace in under a minute. '
-        'Start a 30-day free inventory management trial with barcode scanning and no credit card required.">'
+        'Start free with core workflows for 1 user, 2 sites, 250 items, barcode scanning, and no credit card required.">'
     ) in body
     assert '<link rel="canonical" href="https://countdepot.com/signup">' in body
     assert "signup_submit" in body
@@ -2299,6 +2310,109 @@ def test_signup_rejects_disposable_email_domains(app):
     assert "Please use your work email address." in html
 
 
+def test_create_tenant_free_plan_is_active_without_trial_end(app):
+    from app.platform import create_tenant, get_platform_db
+
+    with app.app_context():
+        create_tenant("freebie", "Freebie Co", "free", owner_email="owner@example.com")
+
+    db = get_platform_db()
+    row = db.execute(
+        "SELECT plan, subscription_status, trial_ends_at FROM tenants WHERE slug=?",
+        ["freebie"],
+    ).fetchone()
+    db.close()
+
+    assert row is not None
+    assert row["plan"] == "free"
+    assert row["subscription_status"] == "active"
+    assert row["trial_ends_at"] is None
+
+
+def test_free_plan_blocks_adding_second_user(app, tenant):
+    from app.platform import get_platform_db
+
+    pdb = get_platform_db()
+    pdb.execute(
+        "UPDATE tenants SET plan='free', subscription_status='active', trial_ends_at=NULL, onboarded=1 WHERE slug=?",
+        [tenant["slug"]],
+    )
+    pdb.commit()
+    pdb.close()
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute("UPDATE users SET session_token='live', must_change_password=0 WHERE id=1")
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/user/add",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"email": "worker@example.com", "role": "worker"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update({
+            "user_id": 1,
+            "username": "admin",
+            "role": "admin",
+            "permissions": ",".join(PERM_KEYS),
+            "_csrf_token": "test-csrf-token",
+            "session_token": "live",
+            "expires_at": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat(),
+            "location_ids": [],
+        })
+        response = _as_response(app, app.preprocess_request() or api_user_add())
+
+    body = response.get_json()
+    assert response.status_code == 200
+    assert body["ok"] is False
+    assert "User limit reached" in body["msg"]
+
+
+def test_free_plan_blocks_third_site(app, tenant):
+    from app.platform import get_platform_db
+
+    pdb = get_platform_db()
+    pdb.execute(
+        "UPDATE tenants SET plan='free', subscription_status='active', trial_ends_at=NULL, onboarded=1 WHERE slug=?",
+        [tenant["slug"]],
+    )
+    pdb.commit()
+    pdb.close()
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute("INSERT INTO locations (name, active, created_at) VALUES ('Site A', 1, datetime('now'))")
+    db.execute("INSERT INTO locations (name, active, created_at) VALUES ('Site B', 1, datetime('now'))")
+    db.execute("UPDATE users SET session_token='live', must_change_password=0 WHERE id=1")
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/locations",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"name": "Site C"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update({
+            "user_id": 1,
+            "username": "admin",
+            "role": "admin",
+            "permissions": ",".join(PERM_KEYS),
+            "_csrf_token": "test-csrf-token",
+            "session_token": "live",
+            "expires_at": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat(),
+            "location_ids": [],
+        })
+        response = _as_response(app, app.preprocess_request() or api_add_location())
+
+    body = response.get_json()
+    assert response.status_code == 200
+    assert body["ok"] is False
+    assert "site slot" in body["msg"].lower()
+
+
 def test_www_countdepot_redirects_to_apex(app):
     response = app.test_client().get(
         "/inventory-management-for-repair-shops?utm_source=test",
@@ -2323,7 +2437,7 @@ def test_public_seo_pages_render_on_bare_domain(app):
         assert page["keyword"] in body
         assert page["title"] in body
         assert f'href="http://countdepot.com/{slug}"' in body
-        assert "Start free trial" in body
+        assert "Start free" in body
 
 
 def test_resources_hub_renders_on_bare_domain(app):
@@ -2483,7 +2597,7 @@ def test_landing_page_promotes_available_and_planned_integrations(app):
     assert '<a href="#how">How it works</a>' in body
     assert '<a href="/resources">Resources</a>' in body
     assert '<a href="#pricing">Pricing</a>' in body
-    assert '<div class="nav-actions">\n    <a href="#signin" class="nav-link-signin">Sign in</a>\n    <a href="/signup" class="nav-cta">Start free trial</a>' in body
+    assert '<div class="nav-actions">\n    <a href="#signin" class="nav-link-signin">Sign in</a>\n    <a href="/signup" class="nav-cta">Start free</a>' in body
     assert "\nnav{" not in body
     assert "footer-seo" not in body
     assert "Repair shops" not in body
@@ -3531,7 +3645,7 @@ def test_platform_dashboard_renders_owner_metrics(app):
     assert "$600" in body
     assert "Free/Partner" in body
     assert "2026-04-12" in body
-    assert "Expired trial ready for deletion" in body
+    assert "Expired access ready for deletion" in body
     assert "Ready for deletion" in body
     assert "Cancellations and churn notes" in body
     assert "Too expensive" in body

@@ -1174,6 +1174,24 @@ def _check_item_limit_count(count):
     return True, None
 
 
+def _check_site_limit_count(count=1):
+    from flask import g
+    from app.stripe_billing import PLANS
+
+    plan_key = g.tenant.get("plan", "starter") if hasattr(g, "tenant") and g.tenant else "starter"
+    plan_cfg = PLANS.get(plan_key, PLANS["starter"])
+    max_sites = plan_cfg.get("max_sites")
+    if max_sites is None:
+        return True, None
+
+    current = query("SELECT COUNT(*) FROM locations WHERE COALESCE(active,1)=1", one=True)[0]
+    if current + count > max_sites:
+        remaining = max(0, max_sites - current)
+        return False, (f"Only {remaining} site slot(s) remain on the {plan_cfg['name']} plan. "
+                       f"Upgrade your plan to add more sites.")
+    return True, None
+
+
 def _existing_serial_conflicts(product_id, serials):
     conflicts = []
     for serial in serials:
@@ -2468,6 +2486,9 @@ def api_add_location():
     name = (d.get("name") or "").strip()
     if not name:
         return jsonify({"ok": False, "msg": "Name required"})
+    allowed, limit_msg = _check_site_limit_count(1)
+    if not allowed:
+        return jsonify({"ok": False, "msg": limit_msg})
     try:
         lid = execute("INSERT INTO locations (name,description,email,created_at) VALUES (?,?,?,?)",
                       [name, d.get("description",""), (d.get("email") or "").strip(),
@@ -6382,6 +6403,9 @@ def _resolve_site(site_id, new_site_name):
         existing = query("SELECT id FROM locations WHERE LOWER(name)=LOWER(?)", [name], one=True)
         if existing:
             return existing["id"]
+        allowed, limit_msg = _check_site_limit_count(1)
+        if not allowed:
+            raise ValueError(limit_msg)
         now = _utc_now().isoformat()
         return execute("INSERT INTO locations (name, created_at) VALUES (?, ?)", [name, now])
     return None
@@ -7137,7 +7161,10 @@ def api_invoice_commit():
     """Commit a parsed invoice import. Creates qty-tracked items for matched rows."""
     d = request.json or {}
     rows    = d.get("rows", [])
-    site_id = _resolve_site(d.get("site_id"), d.get("new_site_name"))
+    try:
+        site_id = _resolve_site(d.get("site_id"), d.get("new_site_name"))
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)})
     ref     = (d.get("reference") or "").strip() or None
     vendor  = (d.get("vendor") or "").strip() or None
     notes   = (d.get("notes") or "").strip() or None
@@ -7531,7 +7558,10 @@ def _api_inventory_parse_inner():
 def api_inventory_commit():
     d = request.json or {}
     rows         = d.get("rows", [])
-    site_id      = _resolve_site(d.get("site_id"), d.get("new_site_name"))
+    try:
+        site_id = _resolve_site(d.get("site_id"), d.get("new_site_name"))
+    except ValueError as e:
+        return jsonify({"ok": False, "msg": str(e)})
     notes_global = (d.get("notes") or "").strip() or None
 
     if not rows:
@@ -7670,7 +7700,10 @@ def api_inventory_commit():
         row_site_id = site_id
         row_site = r.get("site_value")
         if row_site and row_site.strip():
-            resolved = _resolve_site(None, row_site.strip())
+            try:
+                resolved = _resolve_site(None, row_site.strip())
+            except ValueError as e:
+                return jsonify({"ok": False, "msg": str(e)})
             if resolved:
                 row_site_id = resolved
 

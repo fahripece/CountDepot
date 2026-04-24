@@ -634,8 +634,8 @@ def sync_item_task(item_id, item_name, missing_fields):
 # ── Plan limits ───────────────────────────────────────────────────────────────
 
 PLAN_LIMITS = {
-    "free":     {"items": 100, "users": 1,  "label": "Free"},
-    "starter":  {"items": 500, "users": 3,  "label": "Starter"},
+    "free":     {"items": 250, "users": 1,  "label": "Free"},
+    "starter":  {"items": None, "users": 5,  "label": "Starter"},
     "standard": {"items": None, "users": None, "label": "Standard"},
     "trial":    {"items": None, "users": None, "label": "Trial"},
     "enterprise": {"items": None, "users": None, "label": "Enterprise"},

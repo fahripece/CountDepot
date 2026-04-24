@@ -93,6 +93,7 @@ tr:hover td{background:#1a2947}
 .badge-active{background:#14532d;color:#86efac}
 .badge-suspended{background:#450a0a;color:#fca5a5}
 .badge-standard{background:#1e3a5f;color:#93c5fd}
+.badge-starter{background:#1e3a5f;color:#93c5fd}
 .badge-pro{background:#2e1065;color:#c4b5fd}
 .badge-enterprise{background:#1a2e1a;color:#4ade80}
 .badge-free{background:#1a3a2a;color:#34d399}
@@ -186,12 +187,16 @@ tr:hover td{background:#1a2947}
       <div class="card-lbl">Total tenants</div>
     </div>
     <div class="card">
-      <div class="card-val green">{{ count_active }}</div>
-      <div class="card-lbl">Active (paying)</div>
+      <div class="card-val green">{{ count_paying }}</div>
+      <div class="card-lbl">Paying tenants</div>
+    </div>
+    <div class="card">
+      <div class="card-val">{{ count_free }}</div>
+      <div class="card-lbl">Free / partner</div>
     </div>
     <div class="card">
       <div class="card-val amber">{{ count_trial }}</div>
-      <div class="card-lbl">On trial</div>
+      <div class="card-lbl">Trials / pilots</div>
     </div>
     <div class="card">
       <div class="card-val {% if count_overdue > 0 %}red{% endif %}">{{ count_overdue }}</div>
@@ -229,7 +234,7 @@ tr:hover td{background:#1a2947}
       <div class="panel-title">CEO Command Center</div>
       <div class="metric-row">
         <div class="mini-metric"><div class="mini-val">${{ arpa }}</div><div class="mini-lbl">ARPA / month</div></div>
-        <div class="mini-metric"><div class="mini-val">{{ trial_ending|length }}</div><div class="mini-lbl">Trials ending 7d</div></div>
+        <div class="mini-metric"><div class="mini-val">{{ trial_ending|length }}</div><div class="mini-lbl">Trials/pilots ending 7d</div></div>
         <div class="mini-metric"><div class="mini-val">{{ at_risk|length }}</div><div class="mini-lbl">At-risk tenants</div></div>
         <div class="mini-metric"><div class="mini-val">{{ expansion_candidates|length }}</div><div class="mini-lbl">Expansion candidates</div></div>
       </div>
@@ -273,7 +278,7 @@ tr:hover td{background:#1a2947}
           <th>Slug</th>
           <th>Plan</th>
           <th>Subscription</th>
-          <th>Trial ends</th>
+          <th>Access ends</th>
           <th>Health</th>
           <th>Stats</th>
           <th>Last login</th>
@@ -294,8 +299,8 @@ tr:hover td{background:#1a2947}
             <td><span class="slug">{{ t.slug }}</span></td>
             <td><span class="badge badge-{{ t.plan }}">{{ t.plan }}</span></td>
             <td>
-              <span class="badge sub-{{ t.subscription_status or 'trial' }}">
-                {{ t.subscription_status or 'trial' }}
+              <span class="badge sub-{{ t.subscription_status or 'active' }}">
+                {{ t.subscription_status or 'active' }}
               </span>
               {% if t.is_free_access %}
               <span class="badge sub-active" style="margin-left:4px">Free/Partner</span>
@@ -334,6 +339,7 @@ tr:hover td{background:#1a2947}
               <span class="stat">
                 <strong>{{ t.stats.items }}</strong> items ·
                 <strong>{{ t.stats.users }}</strong> users ·
+                <strong>{{ t.stats.sites }}</strong> sites ·
                 <strong>{{ t.stats.audit_30d }}</strong> 30d events ·
                 <strong>{{ t.stats.db_size_kb }}</strong> KB
               </span>
@@ -342,7 +348,7 @@ tr:hover td{background:#1a2947}
             <td>
               <div class="actions">
                 <button class="btn btn-muted btn-xs"
-                  onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'trial' }}','{{ (t.trial_ends_at or '')[:10] }}',{{ t.notes|tojson if t.notes else 'null' }},{{ t.cancellation_reason|tojson if t.cancellation_reason else 'null' }},{{ 1 if t.is_free_access else 0 }})">
+                  onclick="openBilling('{{ t.slug }}','{{ t.name }}','{{ t.subscription_status or 'active' }}','{{ (t.trial_ends_at or '')[:10] }}',{{ t.notes|tojson if t.notes else 'null' }},{{ t.cancellation_reason|tojson if t.cancellation_reason else 'null' }},{{ 1 if t.is_free_access else 0 }})">
                   Billing
                 </button>
                 <button class="btn btn-green btn-xs"
@@ -400,7 +406,7 @@ tr:hover td{background:#1a2947}
   <div class="tab-panel" id="tab-growth">
     <div class="cards">
       <div class="card"><div class="card-val green">${{ estimated_mrr }}</div><div class="card-lbl">MRR from paying tenants</div></div>
-      <div class="card"><div class="card-val">{{ trial_ending|length }}</div><div class="card-lbl">Trials ending soon</div></div>
+      <div class="card"><div class="card-val">{{ trial_ending|length }}</div><div class="card-lbl">Trials/pilots ending soon</div></div>
       <div class="card"><div class="card-val amber">{{ inactive|length }}</div><div class="card-lbl">Inactive / never logged in</div></div>
       <div class="card"><div class="card-val red">{{ cancellations|length }}</div><div class="card-lbl">Cancelled customers</div></div>
     </div>
@@ -550,11 +556,12 @@ tr:hover td{background:#1a2947}
       </div>
       <div class="field">
         <label>Plan</label>
-        <select id="t-plan">
-          <option value="standard">Standard</option>
-          <option value="pro">Pro</option>
-          <option value="enterprise">Enterprise</option>
-        </select>
+          <select id="t-plan">
+            <option value="free">Free</option>
+            <option value="starter">Starter</option>
+            <option value="pro">Pro</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
       </div>
       <div class="field">
         <label>Admin email</label>
@@ -590,7 +597,8 @@ tr:hover td{background:#1a2947}
         <div class="field">
           <label>Plan</label>
           <select name="plan" id="edit-plan">
-            <option value="standard">Standard</option>
+            <option value="free">Free</option>
+            <option value="starter">Starter</option>
             <option value="pro">Pro</option>
             <option value="enterprise">Enterprise</option>
           </select>
@@ -618,14 +626,14 @@ tr:hover td{background:#1a2947}
           <label>Subscription status</label>
           <select name="subscription_status" id="billing-status">
             <option value="trial">Trial</option>
-            <option value="active">Active (paying)</option>
+            <option value="active">Active</option>
             <option value="overdue">Overdue</option>
             <option value="expired">Expired</option>
             <option value="cancelled">Cancelled</option>
           </select>
         </div>
         <div class="field">
-          <label>Trial / access ends</label>
+          <label>Access end date</label>
           <input name="trial_ends_at" id="billing-trial-ends" type="date">
           <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
             <button type="button" class="btn btn-muted btn-xs" onclick="addDays(7)">+7 days</button>
@@ -683,8 +691,9 @@ tr:hover td{background:#1a2947}
         <div class="field">
           <label>Upgrade to plan</label>
           <select name="plan" id="grant-free-plan">
-            <option value="standard">Standard</option>
-            <option value="pro" selected>Pro</option>
+            <option value="free">Free</option>
+            <option value="starter" selected>Starter</option>
+            <option value="pro">Pro</option>
             <option value="enterprise">Enterprise</option>
           </select>
         </div>
@@ -880,7 +889,7 @@ let _billingTrialBase = '';
 function openBilling(slug, name, status, trialEnds, notes, cancelReason, freeAccess) {
   document.getElementById('billing-title').textContent = 'Billing — ' + name;
   document.getElementById('billing-form').action = '/_platform/tenant/' + slug + '/billing';
-  document.getElementById('billing-status').value = status || 'trial';
+  document.getElementById('billing-status').value = status || 'active';
   document.getElementById('billing-trial-ends').value = trialEnds || '';
   document.getElementById('billing-notes').value = notes || '';
   document.getElementById('billing-cancel-reason').value = cancelReason || '';

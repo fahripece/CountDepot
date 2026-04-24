@@ -10,17 +10,38 @@ from config import Config
 # ── Plan definitions ──────────────────────────────────────────────────────────
 
 PLANS = {
+    "free": {
+        "name":       "Free",
+        "max_users":  1,
+        "max_items":  250,
+        "max_sites":  2,
+        "monthly":    0,
+        "yearly":     0,
+        "excel":      False,
+        "api_access": False,
+        "features":   [
+            "1 user",
+            "2 sites",
+            "250 items",
+            "Core workflows only",
+            "Barcode scanning",
+            "Reservations and check-in / check-out",
+            "Mobile web access",
+        ],
+    },
     "starter": {
         "name":       "Starter",
         "max_users":  5,
-        "max_items":  500,
+        "max_items":  None,
+        "max_sites":  5,
         "monthly":    20,
         "yearly":     200,
         "excel":      False,
         "api_access": False,
         "features":   [
             "5 users",
-            "500 items",
+            "5 sites",
+            "Unlimited items",
             "All core features",
             "Barcode scanning",
             "Financial reports",
@@ -31,12 +52,14 @@ PLANS = {
         "name":       "Pro",
         "max_users":  15,
         "max_items":  None,   # unlimited
+        "max_sites":  20,
         "monthly":    50,
         "yearly":     500,
         "excel":      True,
         "api_access": False,
         "features":   [
             "15 users",
+            "20 sites",
             "Unlimited items",
             "Everything in Starter",
             "Priority support",
@@ -48,6 +71,7 @@ PLANS = {
         "name":       "Enterprise",
         "max_users":  None,   # unlimited
         "max_items":  None,   # unlimited
+        "max_sites":  None,
         "monthly":    80,
         "yearly":     800,
         "excel":      True,

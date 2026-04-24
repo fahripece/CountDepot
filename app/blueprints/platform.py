@@ -135,7 +135,7 @@ def _tenant_stats(slug):
     db_path = os.path.join(Config.TENANTS_DIR, slug, "inventory.db")
     if not os.path.exists(db_path):
         return {
-            "items": 0, "users": 0, "db_size_kb": 0, "last_login": None,
+            "items": 0, "users": 0, "sites": 0, "db_size_kb": 0, "last_login": None,
             "active_sessions": 0, "sold_revenue": 0, "sold_profit": 0,
             "checkout_30d": 0, "audit_30d": 0, "last_activity": None,
         }
@@ -145,6 +145,7 @@ def _tenant_stats(slug):
         user_cols = _tenant_db_cols(db, "users")
         items = _scalar(db, "SELECT COUNT(*) FROM items WHERE active=1", default=0)
         users = _scalar(db, "SELECT COUNT(*) FROM users", default=0)
+        sites = _scalar(db, "SELECT COUNT(*) FROM locations WHERE COALESCE(active,1)=1", default=0)
         active_sessions = (
             _scalar(db, "SELECT COUNT(*) FROM users WHERE session_token IS NOT NULL AND session_token!=''", default=0)
             if "session_token" in user_cols else 0
@@ -170,7 +171,7 @@ def _tenant_stats(slug):
         audit_30d = _scalar(db, "SELECT COUNT(*) FROM audit_log WHERE ts >= datetime('now','-30 days')", default=0)
         last_activity = _scalar(db, "SELECT MAX(ts) FROM audit_log", default=None)
     except Exception:
-        items = users = 0
+        items = users = sites = 0
         active_sessions = checkout_30d = audit_30d = 0
         sold_revenue = sold_profit = 0
         last_login = last_activity = None
@@ -183,6 +184,7 @@ def _tenant_stats(slug):
     return {
         "items": items,
         "users": users,
+        "sites": sites,
         "db_size_kb": size_kb,
         "last_login": last_login,
         "active_sessions": active_sessions,
@@ -357,7 +359,7 @@ def _enrich_tenant(t):
     if status == "cancelled":
         t["lifecycle"] = "Churned"
     elif status == "trial":
-        t["lifecycle"] = "Trial"
+        t["lifecycle"] = "Trial/Pilot"
     elif t["estimated_mrr"] > 0:
         t["lifecycle"] = "Paying"
     elif t["is_free_access"]:
@@ -509,7 +511,8 @@ def dashboard():
     total_items   = sum(t["stats"]["items"] for t in tenants)
     total_users   = sum(t["stats"]["users"] for t in tenants)
     total_kb      = sum(t["stats"]["db_size_kb"] for t in tenants)
-    count_active  = sum(1 for t in tenants if t["active"] and t.get("subscription_status") == "active")
+    count_paying  = sum(1 for t in tenants if t["active"] and t.get("subscription_status") == "active" and t["estimated_mrr"] > 0)
+    count_free    = sum(1 for t in tenants if t["active"] and t.get("subscription_status") == "active" and t["is_free_access"])
     count_trial   = sum(1 for t in tenants if t["active"] and t.get("subscription_status") == "trial")
     count_overdue = sum(1 for t in tenants if t.get("subscription_status") == "overdue")
     count_cancelled = sum(1 for t in tenants if t.get("subscription_status") == "cancelled")
@@ -525,20 +528,20 @@ def dashboard():
     deletion_due = [t for t in tenants if t.get("is_deletion_due")]
     expansion_candidates = sorted(
         [t for t in tenants if t.get("subscription_status") == "active"
-         and t.get("plan") == "starter" and (t["stats"]["users"] >= 4 or t["stats"]["items"] >= 400)],
-        key=lambda row: (row["stats"]["users"], row["stats"]["items"]),
+         and t.get("plan") == "starter" and (t["stats"]["users"] >= 4 or t["stats"].get("sites", 0) >= 4)],
+        key=lambda row: (row["stats"]["users"], row["stats"].get("sites", 0)),
         reverse=True,
     )
     action_items = []
     for t in trial_ending[:8]:
-        action_items.append({"priority": "high", "label": "Trial ending",
+        action_items.append({"priority": "high", "label": "Trial/pilot ending",
                              "tenant": t, "detail": f"{t['trial_days_left']} day(s) left"})
     for t in [x for x in tenants if x.get("subscription_status") == "overdue"][:8]:
         action_items.append({"priority": "high", "label": "Payment overdue",
                              "tenant": t, "detail": "Collect payment or pause access"})
     for t in deletion_due[:8]:
-        action_items.append({"priority": "high", "label": "Expired trial ready for deletion",
-                             "tenant": t, "detail": "Trial grace period ended; confirm delete or extend/reactivate"})
+        action_items.append({"priority": "high", "label": "Expired access ready for deletion",
+                             "tenant": t, "detail": "Grace period ended; confirm delete or extend/reactivate"})
     for t in [x for x in at_risk if x.get("subscription_status") not in ("overdue", "expired")][:8]:
         action_items.append({"priority": "med", "label": "Usage risk",
                              "tenant": t, "detail": ", ".join(t["risk_flags"][:2]) or "Low health score"})
@@ -547,7 +550,8 @@ def dashboard():
                            total_items=total_items,
                            total_users=total_users,
                            total_kb=total_kb,
-                           count_active=count_active,
+                           count_paying=count_paying,
+                           count_free=count_free,
                            count_trial=count_trial,
                            count_overdue=count_overdue,
                            count_cancelled=count_cancelled,
@@ -573,7 +577,7 @@ def tenant_new():
     if request.method == "POST":
         name  = request.form.get("name",  "").strip()
         slug  = request.form.get("slug",  "").strip().lower()
-        plan  = request.form.get("plan",  "standard")
+        plan  = request.form.get("plan",  "free")
         admin_pw = request.form.get("admin_password", "").strip()
 
         admin_email = request.form.get("admin_email", "").strip().lower()
@@ -678,7 +682,7 @@ def tenant_activate(slug):
 @platform_login_required
 def tenant_edit(slug):
     name = request.form.get("name", "").strip()
-    plan = request.form.get("plan", "standard")
+    plan = request.form.get("plan", "free")
     if name:
         db = get_platform_db()
         db.execute("UPDATE tenants SET name=?, plan=? WHERE slug=?", [name, plan, slug])

@@ -18,16 +18,16 @@
 <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;gap:12px">
   <span style="width:36px;height:36px;border-radius:8px;background:#fef9c3;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
   <div>
-    <div style="font-weight:600;color:#92400e">Free trial — {{ trial_days }} day{{ 's' if trial_days != 1 else '' }} remaining</div>
-    <div style="font-size:13px;color:#b45309;margin-top:2px">Subscribe below to keep access after your trial ends. No charge until the trial expires.</div>
+    <div style="font-weight:600;color:#92400e">Workspace access active</div>
+    <div style="font-size:13px;color:#b45309;margin-top:2px">Upgrade below when you need more seats, sites, or paid-plan capacity.</div>
   </div>
 </div>
 {% elif status in ('expired', 'canceled') %}
 <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;gap:12px">
   <span style="width:36px;height:36px;border-radius:8px;background:#fee2e2;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></span>
   <div>
-    <div style="font-weight:600;color:#b91c1c">Your trial has ended — access is restricted</div>
-    <div style="font-size:13px;color:#dc2626;margin-top:2px">Choose a plan below to restore full access immediately.</div>
+    <div style="font-weight:600;color:#b91c1c">Paid access is inactive</div>
+    <div style="font-size:13px;color:#dc2626;margin-top:2px">Choose a paid plan below to restore full access immediately.</div>
   </div>
 </div>
 {% elif status == 'overdue' %}
@@ -36,6 +36,14 @@
   <div>
     <div style="font-weight:600;color:#b91c1c">Payment overdue</div>
     <div style="font-size:13px;color:#dc2626;margin-top:2px">Your last payment failed. <a href="/billing/portal" style="color:#dc2626;font-weight:600">Update your payment method →</a></div>
+  </div>
+</div>
+{% elif status == 'active' and plan_key == 'free' %}
+<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;gap:12px">
+  <span style="width:36px;height:36px;border-radius:8px;background:#fef9c3;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+  <div>
+    <div style="font-weight:600;color:#92400e">Free workspace active</div>
+    <div style="font-size:13px;color:#b45309;margin-top:2px">You are on the free entry plan. Upgrade below when you need more seats, sites, or paid-plan capacity.</div>
   </div>
 </div>
 {% elif status == 'active' %}
@@ -62,6 +70,12 @@
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Items</div>
       <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace">
         {{ item_count }}{% if max_items %}<span style="font-size:14px;color:var(--muted)"> / {{ max_items }}</span>{% else %}<span style="font-size:14px;color:var(--muted)"> / ∞</span>{% endif %}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Sites</div>
+      <div style="font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace">
+        {{ site_count }}{% if max_sites %}<span style="font-size:14px;color:var(--muted)"> / {{ max_sites }}</span>{% else %}<span style="font-size:14px;color:var(--muted)"> / ∞</span>{% endif %}
       </div>
     </div>
     <div>
@@ -136,3 +150,4 @@ async function startCheckout(plan, period) {
 }
 </script>
 {% endblock %}
+

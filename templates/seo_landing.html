@@ -46,9 +46,9 @@
       "description": {{ page.description|tojson }},
       "offers": {
         "@type": "Offer",
-        "price": "20",
+        "price": "0",
         "priceCurrency": "USD",
-        "description": "Starter pricing with a 30-day free trial."
+        "description": "Free plan covers 250 items for 1 user across 2 sites, with paid plans starting at $20 per month."
       }
     },
     {
@@ -133,7 +133,7 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
   </div>
   <div class="nav-actions">
     <a class="nav-link-signin" href="/login">Sign in</a>
-    <a class="nav-cta" href="/signup">Start free trial</a>
+    <a class="nav-cta" href="/signup">Start free</a>
   </div>
 </nav>
 
@@ -143,16 +143,16 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
     <h1>{{ page.hero }}</h1>
     <p class="hero-sub">{{ page.description }}</p>
     <div class="hero-actions">
-      <a class="btn-primary" href="/signup">Start 30-day free trial</a>
+      <a class="btn-primary" href="/signup">Start free</a>
       <a class="btn-secondary" href="/#pricing">See pricing</a>
     </div>
-    <div class="hero-note">No credit card required. Built for practical inventory control, not enterprise complexity.</div>
+    <div class="hero-note">Free plan covers core workflows for 1 user across 2 sites and 250 items. Upgrade only when you need more scale.</div>
   </div>
 </header>
 
 <div class="stats" aria-label="CountDepot highlights">
-  <div class="stat"><div class="stat-val">30-day</div><div class="stat-label">free trial</div></div>
-  <div class="stat"><div class="stat-val">$20</div><div class="stat-label">starter pricing</div></div>
+    <div class="stat"><div class="stat-val">Free</div><div class="stat-label">1 user / 2 sites / 250 items</div></div>
+  <div class="stat"><div class="stat-val">$20</div><div class="stat-label">paid plans start</div></div>
   <div class="stat"><div class="stat-val">Mobile</div><div class="stat-label">scanner workflow</div></div>
   <div class="stat"><div class="stat-val">SOPs</div><div class="stat-label">docs included</div></div>
 </div>
@@ -342,9 +342,9 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
 <section class="trial-section">
   <div class="trial-inner">
     <h2>Try CountDepot for <span class="gradient-text">{{ page.audience }}</span>.</h2>
-    <p>Start with a 30-day free trial, no credit card required.</p>
+    <p>Start free with 1 user, 2 sites, and 250 items, then upgrade when the team needs more capacity.</p>
     <div class="hero-actions">
-      <a class="btn-primary" href="/signup">Start free trial</a>
+      <a class="btn-primary" href="/signup">Start free</a>
       <a class="btn-secondary" href="/#pricing">Compare plans</a>
     </div>
     <div class="trial-note">Built for {{ page.keyword }}.</div>
@@ -359,3 +359,4 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
 </footer>
 </body>
 </html>
+

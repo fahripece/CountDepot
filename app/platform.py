@@ -27,13 +27,13 @@ def init_platform_db():
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             slug        TEXT UNIQUE NOT NULL,
             name        TEXT NOT NULL,
-            plan        TEXT NOT NULL DEFAULT 'standard',
+            plan        TEXT NOT NULL DEFAULT 'free',
             sector      TEXT NOT NULL DEFAULT '',
             onboarded   INTEGER NOT NULL DEFAULT 0,
             active      INTEGER NOT NULL DEFAULT 1,
             created_at  TEXT NOT NULL,
             owner_email TEXT,
-            subscription_status TEXT NOT NULL DEFAULT 'trial',
+            subscription_status TEXT NOT NULL DEFAULT 'active',
             trial_ends_at TEXT,
             trial_expired_at TEXT,
             scheduled_delete_at TEXT,
@@ -116,6 +116,12 @@ def init_platform_db():
         db.execute("ALTER TABLE tenants ADD COLUMN cancelled_at TEXT")
     if "free_access" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN free_access INTEGER NOT NULL DEFAULT 0")
+    db.execute(
+        "UPDATE tenants SET plan='free', subscription_status='active', trial_ends_at=NULL, "
+        "trial_expired_at=NULL, scheduled_delete_at=NULL "
+        "WHERE subscription_status='trial' AND COALESCE(stripe_subscription_id,'')='' "
+        "AND COALESCE(free_access,0)=0"
+    )
     db.commit()
     db.close()
 
@@ -142,15 +148,16 @@ def get_tenant_by_owner_email(email):
     return row
 
 
-def create_tenant(slug, name, plan="trial", owner_email=None):
+def create_tenant(slug, name, plan="free", owner_email=None):
     """Create a new tenant and their data directory."""
     db  = get_platform_db()
     now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
-    trial_ends = (_utc_now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    subscription_status = "active" if plan == "free" else "trial"
+    trial_ends = None if plan == "free" else (_utc_now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     db.execute(
         "INSERT INTO tenants (slug, name, plan, sector, onboarded, active, created_at, "
         "owner_email, subscription_status, trial_ends_at) VALUES (?,?,?,'',0,1,?,?,?,?)",
-        [slug, name, plan, now, owner_email, "trial", trial_ends]
+        [slug, name, plan, now, owner_email, subscription_status, trial_ends]
     )
     db.commit()
     db.close()
