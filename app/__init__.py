@@ -326,15 +326,16 @@ def create_app():
         #  - unsafe-inline required for script/style due to extensive inline JS/CSS
         #  - cdnjs: JsBarcode, Chart.js; fonts.googleapis/gstatic: IBM Plex
         #  - googletagmanager/google-analytics: Google Analytics tag + collection
+        #  - clarity.ms / scripts.clarity.ms / b.clarity.ms: Microsoft Clarity
         #  - js.stripe.com: Stripe checkout frames
         #  - data: blob: needed for item photo uploads / label rendering
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://js.stripe.com https://www.googletagmanager.com; "
+            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://js.stripe.com https://www.googletagmanager.com https://www.clarity.ms https://scripts.clarity.ms; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: blob: https: https://www.google-analytics.com https://stats.g.doubleclick.net; "
-            "connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://stats.g.doubleclick.net; "
+            "connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://stats.g.doubleclick.net https://www.clarity.ms https://scripts.clarity.ms https://b.clarity.ms; "
             "frame-src https://js.stripe.com; "
             "object-src 'none'; "
             "base-uri 'self'; "
