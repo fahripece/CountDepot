@@ -19,7 +19,15 @@
       </div>
     </div>
     <div style="border-top:1px solid #e5e3de;padding:18px 20px">
+      <div id="integration-overview-grid" class="overview-grid" style="display:none"></div>
       <div id="integration-health-panel" style="color:#94a3b8;font-size:13px">Run the health checks to see which integrations are actually live versus only configured.</div>
+    </div>
+  </div>
+
+  <div style="margin:22px 0 14px">
+    <div style="font-size:17px;font-weight:800;color:#0f172a">Native integrations</div>
+    <div style="font-size:12.5px;color:#64748b;margin-top:4px;max-width:760px;line-height:1.6">
+      These are the integrations with dedicated CountDepot flows today. Use the health checks above to verify real API connectivity before you rely on them operationally.
     </div>
   </div>
 
@@ -253,15 +261,42 @@
 .health-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:14px}
 .health-card h4{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px}
 .health-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.health-title-wrap{display:flex;flex-direction:column;gap:6px}
 .health-state{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
 .health-state.pass{background:#dcfce7;color:#166534}
 .health-state.fail{background:#fee2e2;color:#991b1b}
 .health-state.not_ready{background:#f1f5f9;color:#475569}
 .health-state.configured{background:#ede9fe;color:#5b21b6}
 .health-mode{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px}
+.health-environment{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#f8fafc;color:#475569;font-size:10px;font-weight:700;letter-spacing:.35px;text-transform:uppercase;border:1px solid #e2e8f0;width:max-content}
 .health-message{font-size:12px;color:#64748b;line-height:1.55}
 .health-section-title{font-size:12px;font-weight:800;color:#334155;text-transform:uppercase;letter-spacing:.5px;margin:18px 0 8px}
-@media(max-width:900px){.health-grid{grid-template-columns:1fr}}
+.health-capabilities{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.health-capability{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;font-size:11px;font-weight:600}
+.health-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.health-link{display:inline-flex;align-items:center;justify-content:center;padding:7px 10px;border-radius:8px;border:1px solid #d7d3cb;background:#fff;color:#334155;font-size:11px;font-weight:700;text-decoration:none}
+.overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.overview-card{background:linear-gradient(180deg,#fff 0%,#fafaf8 100%);border:1px solid #e5e3de;border-radius:12px;padding:14px 16px}
+.overview-label{font-size:11px;font-weight:800;letter-spacing:.45px;text-transform:uppercase;color:#64748b}
+.overview-value{font-size:26px;font-weight:800;color:#0f172a;line-height:1.1;margin-top:8px}
+.overview-detail{font-size:12px;color:#64748b;line-height:1.5;margin-top:6px}
+.overview-card.good .overview-value{color:#166534}
+.overview-card.bad .overview-value{color:#991b1b}
+.overview-card.accent .overview-value{color:#5b21b6}
+.activity-list{display:grid;gap:10px;margin-top:12px}
+.activity-row{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid #e5e3de;border-radius:10px;background:#fff}
+.activity-main{display:grid;gap:4px}
+.activity-topline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.activity-source{font-size:10px;font-weight:800;letter-spacing:.45px;text-transform:uppercase;color:#64748b}
+.activity-summary{font-size:13px;font-weight:700;color:#0f172a}
+.activity-detail{font-size:12px;color:#64748b;line-height:1.5}
+.activity-status{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.35px;text-transform:uppercase}
+.activity-status.ok,.activity-status.synced,.activity-status.pass{background:#dcfce7;color:#166534}
+.activity-status.error,.activity-status.fail{background:#fee2e2;color:#991b1b}
+.activity-status.pending,.activity-status.not_ready{background:#f1f5f9;color:#475569}
+.activity-time{font-size:11px;color:#94a3b8;white-space:nowrap}
+@media(max-width:1100px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.health-grid,.overview-grid{grid-template-columns:1fr}.activity-row{flex-direction:column}}
 @media(max-width:900px){.connector-grid{grid-template-columns:1fr}.int-card-head{align-items:flex-start;flex-direction:column}}
 </style>
 
@@ -284,16 +319,63 @@ function safeExternalUrl(s){
   return /^https:\/\//i.test(url) ? url : '#';
 }
 
+function renderOverviewCards(cards){
+  if(!cards || !cards.length) return '';
+  return cards.map(card => `
+    <div class="overview-card ${esc(card.tone || 'neutral')}">
+      <div class="overview-label">${esc(card.label)}</div>
+      <div class="overview-value">${esc(card.value)}</div>
+      <div class="overview-detail">${esc(card.detail || '')}</div>
+    </div>
+  `).join('');
+}
+
+function renderCapabilities(extra){
+  const caps = Array.isArray(extra?.capabilities) ? extra.capabilities : [];
+  if(!caps.length) return '';
+  return `<div class="health-capabilities">${caps.map(cap => `<span class="health-capability">${esc(cap)}</span>`).join('')}</div>`;
+}
+
+function renderHealthActions(item){
+  const actionUrl = item?.extra?.action_url || '';
+  if(!actionUrl) return '';
+  return `<div class="health-actions"><a class="health-link" href="${esc(actionUrl)}">Open setup</a></div>`;
+}
+
 function renderHealthCards(items){
   if(!items.length) return '<div style="color:#94a3b8;font-size:13px">No items in this section.</div>';
   return `<div class="health-grid">${items.map(item => `
     <div class="health-card">
       <div class="health-meta">
-        <h4>${esc(item.name)}</h4>
+        <div class="health-title-wrap">
+          <h4>${esc(item.name)}</h4>
+          ${item?.extra?.environment ? `<span class="health-environment">${esc(item.extra.environment)}</span>` : ''}
+        </div>
         <span class="health-state ${esc(item.state)}">${esc(String(item.state || '').replace('_',' '))}</span>
       </div>
       <div class="health-mode">${esc(String(item.mode || '').replace(/_/g,' '))}</div>
       <div class="health-message">${esc(item.message || '')}</div>
+      ${renderCapabilities(item.extra)}
+      ${renderHealthActions(item)}
+    </div>
+  `).join('')}</div>`;
+}
+
+function renderActivity(items){
+  if(!items || !items.length){
+    return '<div style="color:#94a3b8;font-size:13px">No recent integration activity has been recorded yet.</div>';
+  }
+  return `<div class="activity-list">${items.map(item => `
+    <div class="activity-row">
+      <div class="activity-main">
+        <div class="activity-topline">
+          <span class="activity-source">${esc(item.source)}</span>
+          <span class="activity-status ${esc(String(item.status || '').toLowerCase())}">${esc(item.status || 'status')}</span>
+        </div>
+        <div class="activity-summary">${esc(item.integration)} · ${esc(item.summary || '')}</div>
+        <div class="activity-detail">${esc(item.detail || '')}</div>
+      </div>
+      <div class="activity-time">${esc(item.timestamp || '')}</div>
     </div>
   `).join('')}</div>`;
 }
@@ -302,8 +384,10 @@ async function loadIntegrationHealth(){
   const panel=document.getElementById('integration-health-panel');
   const badge=document.getElementById('integration-health-summary');
   const btn=document.getElementById('integration-health-btn');
+  const overview=document.getElementById('integration-overview-grid');
   if(panel) panel.innerHTML='<div style="color:#64748b;font-size:13px">Running integration health checks…</div>';
   if(btn){btn.disabled=true;btn.textContent='Checking…';}
+  if(overview){overview.style.display='none';overview.innerHTML='';}
   const data=await fetch('/api/integrations/health').then(r=>r.json()).catch(()=>({ok:false,msg:'Health checks failed to load.'}));
   if(btn){btn.disabled=false;btn.textContent='Run Health Checks';}
   if(!data.ok){
@@ -316,10 +400,14 @@ async function loadIntegrationHealth(){
     badge.className=`int-badge ${summary.live_failed?'disconnected':(summary.live_passed?'connected':'ready')}`;
     badge.textContent=`${summary.live_passed||0} passed · ${summary.live_failed||0} failed · ${summary.live_not_ready||0} not ready`;
   }
+  if(overview){
+    overview.innerHTML = renderOverviewCards(summary.cards || []);
+    overview.style.display = overview.innerHTML ? 'grid' : 'none';
+  }
   if(panel){
     panel.innerHTML=`
       <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:8px">
-        This separates real live checks from saved connector settings. A configured catalog connector does not mean the underlying sync is fully implemented in CountDepot yet.
+        This separates real live checks from saved connector settings. A configured catalog connector does not mean the underlying sync is fully implemented in CountDepot yet. Use the environment and capability labels to understand what CountDepot can actually do today versus what is only stored for future work.
       </div>
       <div class="health-section-title">Live API checks</div>
       ${renderHealthCards(data.live_checks||[])}
@@ -327,6 +415,8 @@ async function loadIntegrationHealth(){
       ${renderHealthCards(data.messenger_checks||[])}
       <div class="health-section-title">Configuration-only connectors</div>
       ${renderHealthCards(data.catalog_checks||[])}
+      <div class="health-section-title">Recent activity</div>
+      ${renderActivity(data.activity||[])}
     `;
   }
 }

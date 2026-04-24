@@ -284,71 +284,299 @@ def api_integrations_health():
             "extra": extra or {},
         }
 
+    def _setting(key, default=""):
+        row = query("SELECT value FROM settings WHERE key=?", [key], one=True)
+        if not row or row["value"] in (None, ""):
+            return default
+        return row["value"]
+
+    capability_map = {
+        "woocommerce": ["Test connection", "Order import", "Native sync"],
+        "shopify": ["Test connection", "Location sync", "Order import"],
+        "ebay": ["OAuth", "Policy sync", "Listing workflow"],
+        "quickbooks": ["OAuth", "Purchase order sync", "Bill workflow"],
+        "xero": ["OAuth", "Purchase order sync", "Accounting export"],
+        "zoho": ["OAuth", "Purchase order sync", "Accounting export"],
+        "slack": ["Webhook", "Manual outbound test", "Alerts"],
+        "teams": ["Webhook", "Manual outbound test", "Alerts"],
+        "etsy": ["Credential storage", "Catalog placeholder"],
+        "amazon_seller": ["Credential storage", "Catalog placeholder"],
+        "google_shopping": ["Feed config", "Catalog placeholder"],
+        "shipping_carriers": ["Carrier references", "Catalog placeholder"],
+        "easypost": ["Credential storage", "Catalog placeholder"],
+        "easyship": ["Credential storage", "Catalog placeholder"],
+        "stripe": ["Credential storage", "Catalog placeholder"],
+        "paypal": ["Credential storage", "Catalog placeholder"],
+        "avalara": ["Credential storage", "Catalog placeholder"],
+        "crm_sync": ["Endpoint config", "Catalog placeholder"],
+        "zapier": ["Webhook", "Automation handoff"],
+        "make": ["Webhook", "Automation handoff"],
+        "twilio": ["Credential storage", "Alert routing"],
+    }
+    action_url_map = {
+        "ebay": "/integrations/ebay",
+        "shopify": "/integrations/shopify",
+        "quickbooks": "/integrations/accounting",
+        "xero": "/integrations/accounting",
+        "zoho": "/integrations/accounting",
+    }
+
     live_checks = []
 
     try:
         from app.woocommerce_integration import test_connection as _woo_test
         _woo_test()
-        live_checks.append(_item("woocommerce", "WooCommerce", "pass", "live_api", "Live API connection succeeded."))
+        store_url = _setting("integration_connector:woocommerce", "")
+        live_checks.append(_item(
+            "woocommerce",
+            "WooCommerce",
+            "pass",
+            "live_api",
+            "Live API connection succeeded.",
+            {
+                "capabilities": capability_map["woocommerce"],
+                "environment": "Native WooCommerce API",
+                "action_url": "",
+            },
+        ))
     except Exception as e:
         msg = str(e)
-        live_checks.append(_item("woocommerce", "WooCommerce", "not_ready" if "missing required fields" in msg.lower() else "fail", "live_api", msg))
+        live_checks.append(_item(
+            "woocommerce",
+            "WooCommerce",
+            "not_ready" if "missing required fields" in msg.lower() else "fail",
+            "live_api",
+            msg,
+            {
+                "capabilities": capability_map["woocommerce"],
+                "environment": "Native WooCommerce API",
+                "action_url": "",
+            },
+        ))
 
     try:
         from app.shopify_integration import shopify_get_credentials, shopify_get_locations
         creds = shopify_get_credentials()
         if not creds.get("connected"):
-            live_checks.append(_item("shopify", "Shopify", "not_ready", "live_api", "Shopify is not connected."))
+            live_checks.append(_item(
+                "shopify",
+                "Shopify",
+                "not_ready",
+                "live_api",
+                "Shopify is not connected.",
+                {
+                    "capabilities": capability_map["shopify"],
+                    "environment": creds.get("shop") or "Store not configured",
+                    "action_url": action_url_map["shopify"],
+                },
+            ))
         else:
             locs = shopify_get_locations()
-            live_checks.append(_item("shopify", "Shopify", "pass", "live_api", f"Live API connection succeeded. {len(locs)} location(s) returned."))
+            live_checks.append(_item(
+                "shopify",
+                "Shopify",
+                "pass",
+                "live_api",
+                f"Live API connection succeeded. {len(locs)} location(s) returned.",
+                {
+                    "capabilities": capability_map["shopify"],
+                    "environment": creds.get("shop") or "Shopify store",
+                    "action_url": action_url_map["shopify"],
+                },
+            ))
     except Exception as e:
-        live_checks.append(_item("shopify", "Shopify", "fail", "live_api", str(e)))
+        live_checks.append(_item(
+            "shopify",
+            "Shopify",
+            "fail",
+            "live_api",
+            str(e),
+            {
+                "capabilities": capability_map["shopify"],
+                "environment": "Shopify store",
+                "action_url": action_url_map["shopify"],
+            },
+        ))
 
     try:
         from app.ebay import ebay_get_credentials, ebay_get_policies
         creds = ebay_get_credentials()
         if not creds.get("connected"):
-            live_checks.append(_item("ebay", "eBay", "not_ready", "live_api", "eBay is not connected."))
+            live_checks.append(_item(
+                "ebay",
+                "eBay",
+                "not_ready",
+                "live_api",
+                "eBay is not connected.",
+                {
+                    "capabilities": capability_map["ebay"],
+                    "environment": "Sandbox" if str(creds.get("sandbox", "1")) == "1" else "Production",
+                    "action_url": action_url_map["ebay"],
+                },
+            ))
         else:
             policies = ebay_get_policies()
             count = sum(len(policies.get(bucket, [])) for bucket in ("fulfillment", "payment", "return"))
-            live_checks.append(_item("ebay", "eBay", "pass", "live_api", f"Live API connection succeeded. {count} policy record(s) returned."))
+            live_checks.append(_item(
+                "ebay",
+                "eBay",
+                "pass",
+                "live_api",
+                f"Live API connection succeeded. {count} policy record(s) returned.",
+                {
+                    "capabilities": capability_map["ebay"],
+                    "environment": "Sandbox" if str(creds.get("sandbox", "1")) == "1" else "Production",
+                    "action_url": action_url_map["ebay"],
+                },
+            ))
     except Exception as e:
-        live_checks.append(_item("ebay", "eBay", "fail", "live_api", str(e)))
+        live_checks.append(_item(
+            "ebay",
+            "eBay",
+            "fail",
+            "live_api",
+            str(e),
+            {
+                "capabilities": capability_map["ebay"],
+                "environment": "Sandbox",
+                "action_url": action_url_map["ebay"],
+            },
+        ))
 
     try:
         from app.accounting import qb_get_credentials, qb_test_connection
         creds = qb_get_credentials()
         if not creds.get("connected"):
-            live_checks.append(_item("quickbooks", "QuickBooks Online", "not_ready", "live_api", "QuickBooks is not connected."))
+            live_checks.append(_item(
+                "quickbooks",
+                "QuickBooks Online",
+                "not_ready",
+                "live_api",
+                "QuickBooks is not connected.",
+                {
+                    "capabilities": capability_map["quickbooks"],
+                    "environment": "Sandbox" if str(creds.get("sandbox", "1")) == "1" else "Production",
+                    "action_url": action_url_map["quickbooks"],
+                },
+            ))
         else:
             result = qb_test_connection()
-            live_checks.append(_item("quickbooks", "QuickBooks Online", "pass", "live_api", f"Live API connection succeeded for {result.get('company_name', 'QuickBooks company')}.", result))
+            live_checks.append(_item(
+                "quickbooks",
+                "QuickBooks Online",
+                "pass",
+                "live_api",
+                f"Live API connection succeeded for {result.get('company_name', 'QuickBooks company')}.",
+                {
+                    **result,
+                    "capabilities": capability_map["quickbooks"],
+                    "environment": "Sandbox" if str(creds.get("sandbox", "1")) == "1" else "Production",
+                    "action_url": action_url_map["quickbooks"],
+                },
+            ))
     except Exception as e:
-        live_checks.append(_item("quickbooks", "QuickBooks Online", "fail", "live_api", str(e)))
+        live_checks.append(_item(
+            "quickbooks",
+            "QuickBooks Online",
+            "fail",
+            "live_api",
+            str(e),
+            {
+                "capabilities": capability_map["quickbooks"],
+                "environment": "Sandbox",
+                "action_url": action_url_map["quickbooks"],
+            },
+        ))
 
     try:
         from app.accounting import xero_get_credentials, xero_test_connection
         creds = xero_get_credentials()
         if not creds.get("connected"):
-            live_checks.append(_item("xero", "Xero", "not_ready", "live_api", "Xero is not connected."))
+            live_checks.append(_item(
+                "xero",
+                "Xero",
+                "not_ready",
+                "live_api",
+                "Xero is not connected.",
+                {
+                    "capabilities": capability_map["xero"],
+                    "environment": "Production OAuth",
+                    "action_url": action_url_map["xero"],
+                },
+            ))
         else:
             result = xero_test_connection()
-            live_checks.append(_item("xero", "Xero", "pass", "live_api", f"Live API connection succeeded for {result.get('tenant_name', 'Xero tenant')}.", result))
+            live_checks.append(_item(
+                "xero",
+                "Xero",
+                "pass",
+                "live_api",
+                f"Live API connection succeeded for {result.get('tenant_name', 'Xero tenant')}.",
+                {
+                    **result,
+                    "capabilities": capability_map["xero"],
+                    "environment": "Production OAuth",
+                    "action_url": action_url_map["xero"],
+                },
+            ))
     except Exception as e:
-        live_checks.append(_item("xero", "Xero", "fail", "live_api", str(e)))
+        live_checks.append(_item(
+            "xero",
+            "Xero",
+            "fail",
+            "live_api",
+            str(e),
+            {
+                "capabilities": capability_map["xero"],
+                "environment": "Production OAuth",
+                "action_url": action_url_map["xero"],
+            },
+        ))
 
     try:
         from app.accounting import zoho_get_credentials, zoho_test_connection
         creds = zoho_get_credentials()
         if not creds.get("connected"):
-            live_checks.append(_item("zoho", "Zoho Books", "not_ready", "live_api", "Zoho Books is not connected."))
+            live_checks.append(_item(
+                "zoho",
+                "Zoho Books",
+                "not_ready",
+                "live_api",
+                "Zoho Books is not connected.",
+                {
+                    "capabilities": capability_map["zoho"],
+                    "environment": creds.get("api_base") or "Zoho API",
+                    "action_url": action_url_map["zoho"],
+                },
+            ))
         else:
             result = zoho_test_connection()
-            live_checks.append(_item("zoho", "Zoho Books", "pass", "live_api", f"Live API connection succeeded for {result.get('organization_name', 'Zoho Books organization')}.", result))
+            live_checks.append(_item(
+                "zoho",
+                "Zoho Books",
+                "pass",
+                "live_api",
+                f"Live API connection succeeded for {result.get('organization_name', 'Zoho Books organization')}.",
+                {
+                    **result,
+                    "capabilities": capability_map["zoho"],
+                    "environment": creds.get("api_base") or "Zoho API",
+                    "action_url": action_url_map["zoho"],
+                },
+            ))
     except Exception as e:
-        live_checks.append(_item("zoho", "Zoho Books", "fail", "live_api", str(e)))
+        live_checks.append(_item(
+            "zoho",
+            "Zoho Books",
+            "fail",
+            "live_api",
+            str(e),
+            {
+                "capabilities": capability_map["zoho"],
+                "environment": "Zoho API",
+                "action_url": action_url_map["zoho"],
+            },
+        ))
 
     catalog_checks = []
     for group in catalog_with_status():
@@ -371,6 +599,10 @@ def api_integrations_health():
                 "state": state,
                 "mode": "config_only",
                 "message": message,
+                "extra": {
+                    "capabilities": capability_map.get(connector["key"], ["Credential storage"]),
+                    "environment": group["name"],
+                },
             })
 
     messenger_checks = []
@@ -386,19 +618,114 @@ def api_integrations_health():
             "state": "configured" if configured else "not_ready",
             "mode": "manual_outbound_test",
             "message": "Configured. Use the explicit test action because this sends a real outbound message." if configured else "Webhook URL is not configured.",
+            "extra": {
+                "capabilities": capability_map[key],
+                "environment": "Webhook endpoint",
+            },
         })
+
+    activity = []
+
+    try:
+        rows = query("SELECT provider, entity_type, entity_id, remote_id, status, detail, synced_at FROM accounting_sync_log ORDER BY synced_at DESC, id DESC LIMIT 8")
+        for row in rows:
+            activity.append({
+                "source": "Accounting sync",
+                "integration": str(row["provider"]).title(),
+                "status": row["status"] or "ok",
+                "summary": f"{str(row['entity_type']).replace('_', ' ')} #{row['entity_id']}",
+                "detail": row["detail"] or ("Synced successfully." if row["status"] == "ok" else "Sync failed."),
+                "timestamp": row["synced_at"],
+            })
+    except Exception:
+        pass
+
+    try:
+        rows = query("SELECT provider, entity_type, entity_id, remote_id, remote_url, status, detail, synced_at FROM integration_refs ORDER BY synced_at DESC, id DESC LIMIT 8")
+        for row in rows:
+            activity.append({
+                "source": "Native sync",
+                "integration": str(row["provider"]).title(),
+                "status": row["status"] or "synced",
+                "summary": f"{str(row['entity_type']).replace('_', ' ')} #{row['entity_id']}",
+                "detail": row["detail"] or (f"Remote ID {row['remote_id']}" if row["remote_id"] else "Reference updated."),
+                "timestamp": row["synced_at"],
+            })
+    except Exception:
+        pass
+
+    try:
+        rows = query(
+            "SELECT wl.event_type, wl.status_code, wl.error, wl.delivered_at, w.url "
+            "FROM webhook_log wl JOIN webhooks w ON w.id=wl.webhook_id "
+            "ORDER BY wl.delivered_at DESC, wl.id DESC LIMIT 8"
+        )
+        for row in rows:
+            status_code = row["status_code"]
+            ok = status_code is not None and int(status_code) < 400 and not row["error"]
+            activity.append({
+                "source": "Webhook delivery",
+                "integration": "Webhook",
+                "status": "ok" if ok else "error",
+                "summary": row["event_type"],
+                "detail": row["error"] or f"Delivered to {row['url']} ({status_code or 'no status'}).",
+                "timestamp": row["delivered_at"],
+            })
+    except Exception:
+        pass
+
+    activity.sort(key=lambda item: item.get("timestamp") or "", reverse=True)
+    activity = activity[:12]
+
+    live_passed = sum(1 for item in live_checks if item["state"] == "pass")
+    live_failed = sum(1 for item in live_checks if item["state"] == "fail")
+    live_not_ready = sum(1 for item in live_checks if item["state"] == "not_ready")
+    config_configured = sum(1 for item in catalog_checks if item["state"] == "configured")
+    manual_configured = sum(1 for item in messenger_checks if item["state"] == "configured")
 
     return jsonify({
         "ok": True,
         "summary": {
-            "live_passed": sum(1 for item in live_checks if item["state"] == "pass"),
-            "live_failed": sum(1 for item in live_checks if item["state"] == "fail"),
-            "live_not_ready": sum(1 for item in live_checks if item["state"] == "not_ready"),
+            "live_total": len(live_checks),
+            "live_passed": live_passed,
+            "live_failed": live_failed,
+            "live_not_ready": live_not_ready,
             "config_only_total": len(catalog_checks),
+            "config_only_configured": config_configured,
+            "manual_total": len(messenger_checks),
+            "manual_configured": manual_configured,
+            "activity_total": len(activity),
+            "cards": [
+                {
+                    "label": "Live integrations",
+                    "value": f"{live_passed}/{len(live_checks)}",
+                    "detail": "Passing live API checks",
+                    "tone": "good" if live_passed else "neutral",
+                },
+                {
+                    "label": "Needs attention",
+                    "value": str(live_failed),
+                    "detail": "Live integrations currently failing",
+                    "tone": "bad" if live_failed else "neutral",
+                },
+                {
+                    "label": "Config-only connectors",
+                    "value": f"{config_configured}/{len(catalog_checks)}",
+                    "detail": "Saved connector configs without native health checks",
+                    "tone": "accent" if config_configured else "neutral",
+                },
+                {
+                    "label": "Recent activity",
+                    "value": str(len(activity)),
+                    "detail": "Recent sync and delivery events",
+                    "tone": "neutral",
+                },
+            ],
         },
         "live_checks": live_checks,
         "catalog_checks": catalog_checks,
         "messenger_checks": messenger_checks,
+        "activity": activity,
     })
 
 

@@ -2520,11 +2520,30 @@ def test_integrations_page_uses_single_page_scroll_layout(app, tenant):
     assert "flex:1;overflow-y:auto;padding:20px 24px" not in body
     assert "Integration health" in body
     assert "Run Health Checks" in body
+    assert "Native integrations" in body
+    assert "integration-overview-grid" in body
 
 
 def test_integrations_health_reports_live_and_config_only_states(app, tenant, monkeypatch):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "INSERT INTO accounting_sync_log (provider, entity_type, entity_id, remote_id, status, detail, synced_at) VALUES (?,?,?,?,?,?,?)",
+        ["quickbooks", "purchase_order", 17, "QB-17", "ok", "PO sync succeeded.", "2026-04-24 09:15:00"],
+    )
+    db.execute(
+        "INSERT INTO webhooks (url, events, secret, enabled, created_by, created_at) VALUES (?,?,?,?,?,?)",
+        ["https://hooks.example.test", "item.added", "integration-test", 1, "pytest", "2026-04-24 09:00:00"],
+    )
+    webhook_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    db.execute(
+        "INSERT INTO webhook_log (webhook_id, event_type, payload, status_code, error, delivered_at) VALUES (?,?,?,?,?,?)",
+        [webhook_id, "item.added", "{}", 200, None, "2026-04-24 09:30:00"],
+    )
+    db.commit()
+    db.close()
 
     monkeypatch.setattr("app.woocommerce_integration.test_connection", lambda: {"ok": True})
     monkeypatch.setattr("app.shopify_integration.shopify_get_credentials", lambda: {"connected": True})
@@ -2548,14 +2567,19 @@ def test_integrations_health_reports_live_and_config_only_states(app, tenant, mo
     assert data["ok"] is True
     live = {item["key"]: item for item in data["live_checks"]}
     assert live["woocommerce"]["state"] == "pass"
+    assert "Native sync" in live["woocommerce"]["extra"]["capabilities"]
     assert live["shopify"]["state"] == "pass"
     assert live["ebay"]["state"] == "not_ready"
     assert live["quickbooks"]["state"] == "not_ready"
     assert data["summary"]["live_passed"] >= 2
+    assert any(card["label"] == "Live integrations" for card in data["summary"]["cards"])
 
     catalog = {item["key"]: item for item in data["catalog_checks"]}
     assert catalog["etsy"]["mode"] == "config_only"
     assert catalog["etsy"]["state"] == "not_ready"
+    assert data["activity"]
+    assert data["activity"][0]["timestamp"] >= data["activity"][-1]["timestamp"]
+    assert {item["source"] for item in data["activity"]} >= {"Accounting sync", "Webhook delivery"}
 
 
 def test_docs_page_and_api_support_permissioned_sops(app, tenant):
