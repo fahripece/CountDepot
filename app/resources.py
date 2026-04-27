@@ -506,6 +506,89 @@ RESOURCE_GUIDES = {
         "cta_title": "Keep the process next to the inventory",
         "cta_copy": "CountDepot stores SOPs and team docs in the same system as inventory so the team sees the process when the work is happening.",
     },
+    "barcode-labeling-best-practices-for-inventory-teams": {
+        "title": "Barcode Labeling Best Practices for Inventory Teams | CountDepot Resources",
+        "meta_description": "Learn how inventory teams should label items, shelves, kits, and stock so barcode workflows stay fast and accurate.",
+        "eyebrow": "Operations Guide",
+        "hero_title": "Barcode labeling best practices for inventory teams",
+        "hero_subtitle": "A practical guide to labeling inventory so scanning stays fast, accurate, and usable in the real world.",
+        "read_time": "8 min read",
+        "summary": "Barcode scanning only works well when the labeling system is deliberate. The code format, label placement, print quality, and naming rules all affect whether workers can receive stock quickly, check items in and out, and trust the scan result. CountDepot is built around practical barcode workflows, which is why labeling discipline matters just as much as software setup.",
+        "sections": [
+            {
+                "title": "Start with one labeling standard",
+                "body": [
+                    "The first mistake many teams make is printing labels in multiple formats with no clear rule for when each one should be used. That usually creates confusion during receiving, lookup, and audits.",
+                    "A stronger approach is to decide what gets labeled at the product level, what gets labeled at the individual item level, and what locations need their own scannable labels. Once those rules exist, workers stop improvising.",
+                    "This matters even more when multiple people are printing labels. Without one standard, the system ends up with mixed sizes, different naming patterns, and labels that are hard to scan or interpret in the field."
+                ],
+                "bullets": [
+                    "Use one primary barcode format across the operation",
+                    "Define when to label products, individual items, and storage locations",
+                    "Keep naming and print rules consistent between teams"
+                ],
+            },
+            {
+                "title": "Label the item and the place",
+                "body": [
+                    "Teams often focus only on item labels, but location labels matter too. If shelves, bins, rooms, or trucks are not labeled, stock movement still depends on memory.",
+                    "A practical workflow usually includes barcodes for both the inventory and the storage location. That makes receiving, transfers, cycle counts, and put-away much faster because the worker can confirm what item moved and where it went in the same flow.",
+                    "This is especially useful in multi-site or field-heavy operations where workers are moving quickly and cannot stop to type long location names accurately."
+                ],
+                "bullets": [
+                    "Label items that move",
+                    "Label shelves, rooms, bins, cages, or trucks",
+                    "Make scan workflows validate both the item and the destination"
+                ],
+            },
+            {
+                "title": "Optimize placement for real scanning",
+                "body": [
+                    "A barcode that technically exists is not enough. It has to be easy to find, easy to aim at, and readable under normal working conditions. Labels hidden on a curved edge, wrapped around a cable, or covered by wear will slow the team down immediately.",
+                    "For shared equipment and serialized assets, the best position is usually visible without rotating the item much. For storage labels, place them where a worker naturally looks during picking or counting.",
+                    "The goal is to reduce hesitation. Good placement makes scanning feel obvious. Bad placement creates extra time on every movement and eventually pushes people back toward manual entry."
+                ],
+                "bullets": [
+                    "Place labels where a worker can scan them without repositioning the item",
+                    "Avoid glare-prone, high-wear, or hidden placements",
+                    "Use larger labels when the scan distance will vary"
+                ],
+            },
+            {
+                "title": "Separate internal labels from manufacturer barcodes",
+                "body": [
+                    "Many products already arrive with manufacturer barcodes, but those are not always the best barcode to use for internal inventory control. A box may contain several barcodes for model, shipment, retail packaging, or vendor processing.",
+                    "Internal labels should point to the exact CountDepot record the team needs. That is what removes ambiguity during add-item, clone, checkout, or count workflows.",
+                    "When both labels are present, the internal label should be the easiest one to scan and understand. Otherwise workers will keep picking the wrong barcode and the workflow becomes inconsistent."
+                ],
+                "bullets": [
+                    "Do not assume the factory barcode is your best operational barcode",
+                    "Use internal labels for CountDepot record accuracy",
+                    "Make the preferred scan target obvious on the item"
+                ],
+            },
+            {
+                "title": "Test labels in the real workflow",
+                "body": [
+                    "A label system should be tested where the work actually happens: receiving, put-away, checkout, mobile scanning, and periodic counts. If it only looks good on the printer, the test is incomplete.",
+                    "Good validation means checking scan speed, readability from normal working distance, duplicate barcode risk, and whether workers can identify the right label immediately on mixed packaging.",
+                    "This is also the best time to catch edge cases such as tiny items, kits, shelf labels in dark storage, or equipment that gets handled outdoors."
+                ],
+                "bullets": [
+                    "Test with phone scanning and handheld scanners",
+                    "Verify workers can identify the right barcode quickly",
+                    "Check durability and readability after normal use"
+                ],
+            },
+        ],
+        "cta_title": "Make barcode scanning easier than manual entry",
+        "cta_copy": "CountDepot helps teams turn labeling into a usable scanning workflow for receiving, reservations, checkout, and inventory counts.",
+        "related_slugs": [
+            "inventory-management",
+            "inventory-sop-template-for-receiving-checkout-and-counts",
+            "what-to-look-for-in-inventory-management-software",
+        ],
+    },
 }
 
 

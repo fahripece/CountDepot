@@ -179,6 +179,61 @@ SEO_PAGES = {
             ]
         },
     },
+    "inventory-management-for-hvac-companies": {
+        "tier": "Tier 2",
+        "keyword": "inventory management for HVAC companies",
+        "audience": "HVAC companies",
+        "title": "Inventory Management for HVAC Companies | CountDepot",
+        "description": "Track HVAC parts, tools, truck stock, and job reservations across shops, vans, and field teams with CountDepot.",
+        "hero": "Inventory management for HVAC companies tracking parts, vans, tools, and job-ready stock.",
+        "pain": "HVAC teams lose time and margin when truck stock is unclear, parts are used before a job, or shared tools move between the shop and field without visibility.",
+        "use_cases": ["Track parts and consumables by warehouse, truck, or technician", "Reserve equipment and parts for upcoming installs or service calls", "Check tools in and out across the shop and field", "Monitor low-stock items by site instead of relying on one global count"],
+        "phase2": {
+            "intro": "HVAC inventory moves between shops, warehouses, vans, technicians, and active jobs. CountDepot helps teams control that movement with scanning, reservations, site-based stock visibility, and simple field-friendly workflows.",
+            "workflow": [
+                {
+                    "title": "Track stock by shop, truck, and tech",
+                    "copy": "Organize parts, tools, and install materials by warehouse, service van, cage, shelf, or technician so the team knows where usable stock actually is."
+                },
+                {
+                    "title": "Reserve parts before the job starts",
+                    "copy": "Hold critical equipment and materials for planned installs or service work so a different crew does not consume inventory already committed to the next call."
+                },
+                {
+                    "title": "Use scanning for receiving and field movement",
+                    "copy": "Scan incoming stock, move items between locations, and confirm check-in or check-out without slowing down the field workflow."
+                },
+                {
+                    "title": "See low stock by location",
+                    "copy": "Catch shortages at the warehouse, branch, or van level so one stocked location does not hide another that is about to run out."
+                }
+            ],
+            "examples": [
+                "Residential HVAC team tracking filters, capacitors, thermostats, and truck stock",
+                "Commercial service team managing shared tools, parts cages, and technician assignments",
+                "Install crew tracking units, accessories, job materials, and reserved stock before dispatch",
+                "Multi-branch HVAC company monitoring low stock and transfers by location"
+            ],
+            "faq": [
+                {
+                    "question": "Can CountDepot track truck stock and warehouse stock separately?",
+                    "answer": "Yes. You can assign inventory to shops, warehouses, vans, trucks, or technicians and see which location has available stock."
+                },
+                {
+                    "question": "Can we reserve parts for a scheduled HVAC job?",
+                    "answer": "Yes. Reservations help teams protect future job stock by showing available, reserved, and total quantities before the truck rolls out."
+                },
+                {
+                    "question": "Does CountDepot work for tools and consumables together?",
+                    "answer": "Yes. You can track quantity-based materials, shared tools, and serialized equipment in the same workspace."
+                },
+                {
+                    "question": "Can field workers use it from a phone?",
+                    "answer": "Yes. CountDepot supports mobile-friendly browser workflows for lookup, scanning, check in, check out, and simple stock movement."
+                }
+            ]
+        },
+    },
     "inventory-management-for-it": {
         "tier": "Tier 2",
         "keyword": "inventory management for IT departments",
