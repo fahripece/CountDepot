@@ -2228,10 +2228,10 @@ def test_public_demo_request_skips_csrf_and_bare_domain_landing(app):
 def test_homepage_has_core_seo_meta_tags(app):
     response = app.test_client().get("/", base_url="http://countdepot.com")
     body = response.get_data(as_text=True)
-    title = "CountDepot - Barcode Inventory Management Software for Any Team"
+    title = "CountDepot - Inventory Management Software for Small Businesses | Free Plan"
     description = (
-        "Barcode inventory management software for tracking assets, scanning items, "
-        "managing reservations, and monitoring stock by site. Free plan covers 250 items for 1 user across 2 sites."
+        "Ditch the spreadsheets. CountDepot is simple inventory management software with "
+        "barcode scanning, asset tracking and reservations. Free plan available - no credit card needed."
     )
 
     assert response.status_code == 200
