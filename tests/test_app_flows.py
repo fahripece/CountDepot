@@ -155,6 +155,7 @@ def test_login_requires_email_otp_for_tenant_user_when_enabled(app, tenant, monk
     assert sent["to"] == tenant["email"]
     assert sent["subject"] == "Your CountDepot login code"
     assert otp_row is not None
+    assert 'action="/verify-2fa"' in body
 
 
 def test_login_blocks_when_email_otp_enabled_but_smtp_missing(app, tenant, monkeypatch):
@@ -319,6 +320,7 @@ def test_auto_login_requires_email_otp_when_enabled(app, tenant, monkeypatch):
     assert sent["to"] == tenant["email"]
     assert sent["subject"] == "Your CountDepot login code"
     assert otp_row is not None
+    assert 'action="/verify-2fa"' in body
 
 
 def test_auto_login_redirects_to_safe_next_target(app, tenant):
