@@ -299,10 +299,110 @@ SEO_PAGES = {
         "keyword": "free inventory management software",
         "audience": "teams starting out",
         "title": "Free Inventory Management Software | CountDepot",
-        "description": "Start tracking inventory with CountDepot's free trial and simple small-business inventory workflow.",
-        "hero": "Free inventory management trial for teams replacing spreadsheets.",
-        "pain": "Teams often wait too long to leave spreadsheets because they do not want another expensive monthly tool.",
-        "use_cases": ["Test inventory tracking before committing", "Import or add items gradually", "Use mobile scanning from the browser", "Upgrade only when the workflow proves value"],
+        "description": "Start with free inventory management software for 1 user, 2 sites, and 250 items without using spreadsheets or paying enterprise prices.",
+        "hero": "Free inventory management software for teams replacing spreadsheets.",
+        "pain": "Teams often wait too long to leave spreadsheets because they assume inventory software will be expensive, bloated, or too hard to start.",
+        "use_cases": ["Start free with 250 items, 1 user, and 2 sites", "Use barcode scanning from the browser", "Reserve inventory before jobs or field work", "Upgrade only when the workflow proves value"],
+        "phase2": {
+            "intro": "A free inventory tool only matters if the workflow is usable. CountDepot gives small teams a real starting point with barcode scanning, reservations, and site-based inventory instead of a fake free tier that cannot support real work.",
+            "workflow": [
+                {
+                    "title": "Start with a real free workspace",
+                    "copy": "Create one workspace for 1 user, 2 sites, and up to 250 items so you can move inventory out of spreadsheets without committing to a paid rollout first."
+                },
+                {
+                    "title": "Track stock with practical barcode workflows",
+                    "copy": "Add items, search inventory, scan barcodes, and check stock in or out from desktop or mobile web without buying a separate scanner app."
+                },
+                {
+                    "title": "Use reservations before inventory gets overbooked",
+                    "copy": "Protect future jobs or internal requests by separating available, reserved, and total stock instead of relying on one misleading quantity."
+                },
+                {
+                    "title": "Upgrade only when the team needs more scale",
+                    "copy": "Move to a paid plan when you need more users, more sites, or a larger operational footprint instead of paying upfront before the process is proven."
+                }
+            ],
+            "examples": [
+                "Small business replacing spreadsheets with one clear inventory workspace",
+                "Field team testing barcode scanning and reservations before a wider rollout",
+                "Operations manager organizing stock across two locations without adding more software overhead",
+                "Growing team proving the workflow before adding more users"
+            ],
+            "faq": [
+                {
+                    "question": "Is CountDepot actually free to start?",
+                    "answer": "Yes. The free plan covers 1 user, 2 sites, and 250 items so teams can start with a real inventory workflow before upgrading."
+                },
+                {
+                    "question": "Does the free plan include barcode scanning?",
+                    "answer": "Yes. CountDepot supports barcode-based inventory workflows from the browser so teams can scan, look up, and move inventory faster."
+                },
+                {
+                    "question": "Can I use reservations on the free plan?",
+                    "answer": "Yes. The free plan is meant to support core inventory workflows, including reservations and basic check-in and check-out activity."
+                },
+                {
+                    "question": "When do I need to upgrade?",
+                    "answer": "Upgrade when you need more than 1 user, more than 2 sites, or inventory volume beyond the free plan limit."
+                }
+            ]
+        },
+    },
+    "free-inventory-software": {
+        "tier": "Tier 2",
+        "keyword": "free inventory software",
+        "audience": "small businesses",
+        "title": "Free Inventory Software | CountDepot",
+        "description": "Free inventory software for small businesses with barcode scanning, reservations, and 250 items included before you ever pay.",
+        "hero": "Free inventory software that helps small businesses leave spreadsheets behind.",
+        "pain": "Small businesses need a real inventory workflow, but many tools either force a trial, hide the useful features, or get expensive before the team has even proven the process.",
+        "use_cases": ["Track stock across 2 sites on the free plan", "Use barcode scanning from desktop or mobile web", "Reserve inventory before jobs, installs, or pickups", "Upgrade only when you outgrow the free workspace"],
+        "phase2": {
+            "intro": "Free inventory software should be useful enough to prove the process, not just good enough to collect a signup. CountDepot gives small businesses a real inventory workflow with barcode scanning, reservations, and site-based tracking before a paid upgrade is necessary.",
+            "workflow": [
+                {
+                    "title": "Set up one clean inventory workspace",
+                    "copy": "Start with 1 user, 2 sites, and 250 items so one person can organize inventory properly before rolling it out to the rest of the team."
+                },
+                {
+                    "title": "Scan, search, and move stock faster",
+                    "copy": "Use barcode workflows for receiving, lookup, check-in, check-out, and simple item movement instead of manually editing spreadsheet rows."
+                },
+                {
+                    "title": "Make inventory availability visible",
+                    "copy": "See what is available, what is reserved, and which site holds the stock so small teams can make better decisions without extra calls or side notes."
+                },
+                {
+                    "title": "Upgrade when the business is ready",
+                    "copy": "Once the process works and the team needs more users, more sites, or more scale, move into a paid plan without rebuilding the inventory system."
+                }
+            ],
+            "examples": [
+                "Small warehouse or office inventory moving out of spreadsheets",
+                "Service business tracking core stock before expanding to a larger team",
+                "Retail backroom or supply closet inventory using mobile web scanning",
+                "Operations lead proving reservations and low-stock workflows before buying more seats"
+            ],
+            "faq": [
+                {
+                    "question": "What is included in CountDepot's free inventory software plan?",
+                    "answer": "The free plan includes 1 user, 2 sites, and 250 items with core inventory workflows such as barcode scanning, reservations, and basic check-in and check-out activity."
+                },
+                {
+                    "question": "Is this better than using a spreadsheet for free?",
+                    "answer": "Yes, if inventory is moving between people, rooms, or sites. CountDepot gives you searchable item records, barcode workflows, and clearer availability than a shared spreadsheet can provide."
+                },
+                {
+                    "question": "Can I upgrade later without losing my data?",
+                    "answer": "Yes. The free workspace is the starting point, and paid plans expand the same inventory system when you need more users or more scale."
+                },
+                {
+                    "question": "Do I need a credit card to start?",
+                    "answer": "No. The free plan is available without a credit card."
+                }
+            ]
+        },
     },
     "snipe-it-alternative": {
         "tier": "Tier 2",

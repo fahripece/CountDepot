@@ -2652,6 +2652,21 @@ def test_hvac_seo_page_renders_on_bare_domain(app):
     assert 'href="/resources/inventory-management"' in body
 
 
+def test_free_inventory_software_seo_page_renders_on_bare_domain(app):
+    response = app.test_client().get(
+        "/free-inventory-software",
+        base_url="http://countdepot.com",
+    )
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Free inventory software" in body
+    assert "Do I need a credit card to start?" in body
+    assert "No. The free plan is available without a credit card." in body
+    assert '"@type": "FAQPage"' in body
+    assert 'href="/resources/inventory-management"' in body
+
+
 def test_public_marketing_pages_do_not_render_img_tags_without_alt(app):
     client = app.test_client()
     for path in (
@@ -2660,6 +2675,7 @@ def test_public_marketing_pages_do_not_render_img_tags_without_alt(app):
         "/resources/inventory-management-software-vs-spreadsheets",
         "/inventory-management-for-repair-shops",
         "/inventory-management-for-hvac-companies",
+        "/free-inventory-software",
     ):
         body = client.get(path, base_url="http://countdepot.com").get_data(as_text=True)
         assert "<img" not in body, path
