@@ -163,6 +163,7 @@ def login_page():
                 user["id"], user["role"],
                 user["permissions"] if "permissions" in user.keys() else "")
             sess = _build_session(user, perms)
+            redirect_target = _safe_next_target(session.get("post_login_redirect"))
             session.clear()
             session.update(sess)
             now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
@@ -172,7 +173,7 @@ def login_page():
                     [user["id"], user["username"], ip, request.user_agent.string, "ok", now_str])
             log_auth_event("LOGIN_OK", username=user["username"], ip=ip,
                            tenant=getattr(g, "tenant_slug", ""))
-            return redirect(_safe_next_target(session.pop("post_login_redirect", None)) or url_for("main.inventory"))
+            return redirect(redirect_target or url_for("main.inventory"))
         error = "Invalid username or password."
         execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
                 [None, username, ip, request.user_agent.string, "fail",
@@ -274,6 +275,7 @@ def verify_2fa():
             perms = get_user_perms(user["id"], user["role"],
                                    user["permissions"] if "permissions" in user.keys() else "")
             sess = _build_session(user, perms)
+            redirect_target = _safe_next_target(session.get("post_login_redirect"))
             session.clear()
             session.update(sess)
             now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
@@ -283,7 +285,10 @@ def verify_2fa():
                     [user["id"], user["username"], ip, request.user_agent.string, "ok", now_str])
             log_auth_event("LOGIN_OK_2FA", username=user["username"], ip=ip,
                            tenant=getattr(g, "tenant_slug", ""))
-            return redirect(url_for("main.inventory"))
+            return redirect(
+                redirect_target or url_for("main.inventory"),
+                code=303,
+            )
 
         error = "Invalid or expired code. Please try again."
         execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",

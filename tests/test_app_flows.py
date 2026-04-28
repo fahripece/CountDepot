@@ -8,7 +8,7 @@ from flask import session
 
 from config import Config
 from app.helpers import PERM_KEYS, hash_pw, verify_pw
-from app.blueprints.auth import auto_login, login_page
+from app.blueprints.auth import auto_login, login_page, verify_2fa
 from app.blueprints.main import admin_page, categories_page, docs_page, forecasting_page, integrations_page, inventory, products_page
 from app.blueprints.api import (
     api_add_reservation,
@@ -345,6 +345,30 @@ def test_auto_login_redirects_to_safe_next_target(app, tenant):
         response = _as_response(app, app.preprocess_request() or auto_login())
 
     assert response.status_code == 302
+    assert response.headers["Location"] == "/billing/start?plan=pro&period=monthly"
+
+
+def test_verify_2fa_uses_see_other_redirect_to_safe_next_target(app, tenant):
+    expires_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute("UPDATE users SET must_change_password=0 WHERE id=1")
+    db.execute("INSERT INTO login_otp (user_id,otp,expires_at,used) VALUES (?,?,?,0)", [1, "123456", expires_at])
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/verify-2fa",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        data={"csrf_token": "test-csrf-token", "otp": "123456"},
+    ):
+        session["pending_2fa_user_id"] = 1
+        session["pending_2fa_method"] = "email"
+        session["post_login_redirect"] = "/billing/start?plan=pro&period=monthly"
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or verify_2fa())
+
+    assert response.status_code == 303
     assert response.headers["Location"] == "/billing/start?plan=pro&period=monthly"
 
 
