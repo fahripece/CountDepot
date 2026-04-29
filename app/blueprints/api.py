@@ -4720,7 +4720,10 @@ def api_user_me():
                 [uid], one=True)
     if not row:
         return jsonify({"ok": False, "msg": "Not found"})
-    return jsonify({**dict(row), "ok": True})
+    data = dict(row)
+    data["workspace_two_fa_enabled"] = _workspace_email_2fa_enabled()
+    data["two_fa_enabled"] = data["workspace_two_fa_enabled"] or bool(data.get("two_fa_enabled"))
+    return jsonify({**data, "ok": True})
 
 
 @bp.route("/api/change_password", methods=["POST"])
@@ -5431,6 +5434,17 @@ def _send_email_2fa_code(user_id, email):
     return otp
 
 
+def _workspace_email_2fa_enabled():
+    row = query("SELECT value FROM settings WHERE key='workspace_email_2fa_enabled'", one=True)
+    if row and str(row["value"]).strip() != "":
+        return str(row["value"]).strip() in {"1", "true", "True", "yes", "on"}
+    legacy = query(
+        "SELECT 1 FROM users WHERE role='admin' AND COALESCE(two_fa_enabled,0)=1 LIMIT 1",
+        one=True,
+    )
+    return bool(legacy)
+
+
 @bp.route("/api/user/2fa", methods=["POST"])
 @login_required
 def api_toggle_2fa():
@@ -5444,8 +5458,10 @@ def api_toggle_2fa():
     if enabled and not _Cfg.SMTP_HOST:
         return jsonify({"ok": False, "msg": "2FA requires email. Ask your admin to configure SMTP."})
     if not enabled:
-        execute("UPDATE users SET two_fa_enabled=0 WHERE id=?", [uid])
-        log_action("2FA_TOGGLE", detail=f"2FA disabled for user #{uid}")
+        execute("INSERT INTO settings (key,value) VALUES ('workspace_email_2fa_enabled','0') "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+        execute("UPDATE users SET two_fa_enabled=0")
+        log_action("2FA_TOGGLE", detail=f"Workspace email 2FA disabled by user #{uid}")
         return jsonify({"ok": True, "enabled": False})
     from app.helpers import check_rate_limit as _check_rate_limit
     ip = request.remote_addr or "unknown"
@@ -5454,10 +5470,10 @@ def api_toggle_2fa():
         return jsonify({"ok": False, "msg": f"Too many verification codes sent. Try again in {retry_in} seconds."}), 429
     _send_email_2fa_code(uid, user["email"])
     session["pending_2fa_setup_user_id"] = uid
-    log_action("2FA_SETUP_CODE_SENT", detail=f"Sent email verification code for user #{uid}")
+    log_action("2FA_SETUP_CODE_SENT", detail=f"Sent workspace 2FA verification code for user #{uid}")
     return jsonify({
         "ok": True,
-        "enabled": bool(user["two_fa_enabled"]),
+        "enabled": _workspace_email_2fa_enabled(),
         "requires_verification": True,
         "msg": "Verification code sent to your email.",
     })
@@ -5486,9 +5502,12 @@ def api_verify_2fa_setup():
     if not row or row["otp"] != code:
         return jsonify({"ok": False, "msg": "Invalid or expired code."}), 400
     execute("UPDATE login_otp SET used=1 WHERE id=?", [row["id"]])
+    execute("INSERT INTO settings (key,value) VALUES ('workspace_email_2fa_enabled','1') "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+    execute("UPDATE users SET two_fa_enabled=0")
     execute("UPDATE users SET two_fa_enabled=1 WHERE id=?", [uid])
     session.pop("pending_2fa_setup_user_id", None)
-    log_action("2FA_TOGGLE", detail=f"2FA enabled for user #{uid}")
+    log_action("2FA_TOGGLE", detail=f"Workspace email 2FA enabled by user #{uid}")
     return jsonify({"ok": True, "enabled": True})
 
 

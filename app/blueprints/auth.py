@@ -20,6 +20,22 @@ def _utc_now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _workspace_email_2fa_enabled() -> bool:
+    row = query("SELECT value FROM settings WHERE key='workspace_email_2fa_enabled'", one=True)
+    if row and str(row["value"]).strip() != "":
+        return str(row["value"]).strip() in {"1", "true", "True", "yes", "on"}
+    legacy = query(
+        "SELECT 1 FROM users WHERE role='admin' AND COALESCE(two_fa_enabled,0)=1 LIMIT 1",
+        one=True,
+    )
+    return bool(legacy)
+
+
+def _email_2fa_required(user) -> bool:
+    per_user = user["two_fa_enabled"] if "two_fa_enabled" in user.keys() else 0
+    return _workspace_email_2fa_enabled() or bool(per_user)
+
+
 def _build_session(user, perms):
     """Return a dict of session keys for a logged-in user."""
     loc_ids = get_user_location_ids(user["id"], user["role"])
@@ -118,7 +134,7 @@ def login_page():
                                        unverified=True, unverified_email=email)
             # 2FA check — TOTP takes priority over email OTP if both are enabled
             totp_enabled = user["totp_enabled"] if "totp_enabled" in user.keys() else 0
-            two_fa       = user["two_fa_enabled"] if "two_fa_enabled" in user.keys() else 0
+            two_fa       = _email_2fa_required(user)
             from config import Config as _Cfg
             if totp_enabled and user.get("totp_secret"):
                 session["pending_2fa_user_id"] = user["id"]
@@ -576,7 +592,7 @@ def auto_login():
 
     # Enforce the same 2FA gate used by the normal tenant login flow.
     totp_enabled = user["totp_enabled"] if "totp_enabled" in user.keys() else 0
-    two_fa = user["two_fa_enabled"] if "two_fa_enabled" in user.keys() else 0
+    two_fa = _email_2fa_required(user)
     email = user["email"] if "email" in user.keys() else None
     ip = request.remote_addr or "unknown"
     from config import Config as _Cfg

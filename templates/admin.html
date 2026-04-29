@@ -136,7 +136,7 @@
   <div class="card" style="margin-bottom:20px">
     <div style="margin-bottom:12px">
       <div style="font-weight:600;font-size:15px">Two-Factor Authentication — Email OTP</div>
-      <div style="font-size:12px;color:#94a3b8;margin-top:1px">A one-time code sent to your email on sign-in. Enabling 2FA sends a verification code first, then applies on your next fresh login.</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:1px">A one-time code sent to email on sign-in. Enabling this verifies your email once, then requires a code for everyone in this workspace on their next fresh login.</div>
     </div>
     <div style="display:flex;align-items:center;gap:14px">
       <div id="tfa-status" style="font-size:13px;color:#64748b">Loading…</div>
@@ -1083,7 +1083,7 @@ async function start2FASetup(){
     return;
   }
   if(res.ok){
-    toast('Email login codes enabled','ok');
+    toast('Workspace email login codes enabled','ok');
     load2FA();
     return;
   }
@@ -1106,7 +1106,7 @@ async function verify2FASetup(){
   btn.textContent='Verify & Enable';
   if(res.ok){
     close2FAModal();
-    toast('Email login codes enabled - this applies on your next sign-in','ok');
+    toast('Workspace email login codes enabled','ok');
     load2FA();
     return;
   }

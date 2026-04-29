@@ -260,11 +260,77 @@ def test_email_2fa_enable_requires_verification_code(app, client, tenant, monkey
 
     db = sqlite3.connect(tenant["db_path"])
     enabled = db.execute("SELECT two_fa_enabled FROM users WHERE id=1").fetchone()[0]
+    workspace_enabled = db.execute(
+        "SELECT value FROM settings WHERE key='workspace_email_2fa_enabled'"
+    ).fetchone()[0]
     db.close()
 
     assert verify_res.status_code == 200
     assert verify_payload == {"ok": True, "enabled": True}
     assert enabled == 1
+    assert workspace_enabled == "1"
+
+
+def test_workspace_email_2fa_applies_to_other_users(app, tenant, monkeypatch):
+    sent = {}
+
+    def fake_send_email(to, subject, html, text):
+        sent["to"] = to
+        sent["subject"] = subject
+        sent["html"] = html
+        sent["text"] = text
+        return True
+
+    monkeypatch.setattr(Config, "SMTP_HOST", "smtp.example.com", raising=False)
+    monkeypatch.setattr("app.mailer.send_email", fake_send_email)
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "INSERT INTO settings (key,value) VALUES ('workspace_email_2fa_enabled','1') "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+    )
+    db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,1,0)",
+        [
+            "worker.2fa@example.com",
+            hash_pw("Password1!"),
+            "worker",
+            "view_inventory",
+            "worker.2fa@example.com",
+        ],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/login",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        data={
+            "csrf_token": "test-csrf-token",
+            "username": "worker.2fa@example.com",
+            "password": "Password1!",
+        },
+    ):
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or login_page())
+        saved_session = dict(session)
+
+    body = response.get_data(as_text=True)
+    otp_db = sqlite3.connect(tenant["db_path"])
+    otp_row = otp_db.execute(
+        "SELECT otp FROM login_otp WHERE user_id=(SELECT id FROM users WHERE email=?) AND used=0 ORDER BY id DESC LIMIT 1",
+        ["worker.2fa@example.com"],
+    ).fetchone()
+    otp_db.close()
+
+    assert response.status_code == 200
+    assert "Two-factor verification" in body
+    assert saved_session["pending_2fa_method"] == "email"
+    assert sent["to"] == "worker.2fa@example.com"
+    assert sent["subject"] == "Your CountDepot login code"
+    assert otp_row is not None
 
 
 def test_auto_login_requires_email_otp_when_enabled(app, tenant, monkeypatch):
