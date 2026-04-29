@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Sites · CountDepot{% endblock %}
 {% block content %}
+{% set is_admin_like = session.get('is_admin_like') %}
 <div class="topbar">
   <span class="topbar-title">Sites</span>
   <span class="topbar-sub" id="site-count"></span>
-  {% if session.get('role') == 'admin' %}
+  {% if is_admin_like %}
   <div class="topbar-right">
     <button class="btn btn-primary btn-sm" onclick="openAddSite()">+ Add Site</button>
   </div>
@@ -15,7 +16,7 @@
   <div id="site-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px"></div>
 </div>
 
-{% if session.get('role') == 'admin' %}
+{% if is_admin_like %}
 <!-- ── ADD / EDIT SITE MODAL ──────────────────────────────── -->
 <div class="overlay" id="siteModal">
   <div class="modal" style="max-width:460px">
@@ -125,7 +126,7 @@ function renderSites(sites){
     </div>`;
     return;
   }
-  const isAdmin={{ 'true' if session.get('role') == 'admin' else 'false' }};
+  const isAdmin={{ 'true' if session.get('is_admin_like') else 'false' }};
   grid.innerHTML=sites.map(s=>{
     const initial=(s.name||'?')[0].toUpperCase();
     const out=s.item_count-(s.available_count||0);
@@ -187,7 +188,7 @@ function renderSites(sites){
   }).join('');
 }
 
-{% if session.get('role') == 'admin' %}
+{% if is_admin_like %}
 
 // ── Site add/edit ─────────────────────────────────────────
 function openAddSite(){

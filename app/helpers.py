@@ -213,10 +213,28 @@ def get_user_perms(user_id=None, role=None, perm_str=None):
     stored = set(perm_str.split(",")) if perm_str else set()
     return stored & set(PERM_KEYS)
 
+def is_admin_like(role=None, perm_str=None) -> bool:
+    role = role or session.get("role") or getattr(g, "api_user_role", None)
+    if role == "admin":
+        return True
+    perms = perm_str
+    if perms is None:
+        perms = session.get("permissions") or getattr(g, "api_user_permissions", "")
+    stored = set((perms or "").split(",")) & set(PERM_KEYS)
+    return stored == set(PERM_KEYS)
+
 def get_user_location_ids(user_id: int, role: str) -> list:
     """Return list of location IDs the user is allowed to see.
     Empty list means no restriction (see all). Admins always see all."""
-    if role == "admin":
+    perm_str = None
+    if session.get("user_id") == user_id:
+        perm_str = session.get("permissions")
+    elif getattr(g, "api_user_id", None) == user_id:
+        perm_str = getattr(g, "api_user_permissions", "")
+    else:
+        row = query("SELECT permissions FROM users WHERE id=?", [user_id], one=True)
+        perm_str = row["permissions"] if row else ""
+    if is_admin_like(role, perm_str):
         return []
     rows = query("SELECT location_id FROM user_locations WHERE user_id=?", [user_id])
     return [r["location_id"] for r in rows]
@@ -238,9 +256,9 @@ def location_filter_sql(alias: str = "i") -> tuple:
 
 def has_perm(perm):
     role = session.get("role") or getattr(g, "api_user_role", None)
-    if role == "admin":
-        return True
     perms = session.get("permissions") or getattr(g, "api_user_permissions", "")
+    if is_admin_like(role, perms):
+        return True
     return perm in set(perms.split(","))
 
 
@@ -288,7 +306,7 @@ def perm_required(perm):
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if _auth_role() != "admin":
+        if not is_admin_like(_auth_role(), _auth_perms()):
             if request.path.startswith(("/api/", "/export", "/import")):
                 return jsonify({"ok": False, "msg": "Admin only"}), 403
             return redirect(url_for("main.inventory"))

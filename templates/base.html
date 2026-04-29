@@ -390,6 +390,8 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
     {% set in_reports = request.path.startswith('/report/') or request.path == '/audit' %}
     {% set in_settings = request.path in ('/categories','/products','/contacts','/admin','/integrations','/webhooks','/api-docs','/billing','/importer') or request.path.startswith('/integrations/') %}
     {% set user_perms = (session.get('permissions') or '').split(',') %}
+    {% set is_admin_like = session.get('is_admin_like') %}
+    {% set is_viewer = session.get('role') == 'viewer' %}
 
     <!-- ── INVENTORY ─────────────────────────────── -->
     <div class="sb-section">Inventory</div>
@@ -402,7 +404,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         <span>Sites</span>
       </a>
-      {% if session.get('role') != 'viewer' %}
+      {% if not is_viewer %}
       <a href="/add-item" data-tour="add-item" class="navlink {% if request.path == '/add-item' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
         <span>Add Item</span>
@@ -420,7 +422,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
 
     <!-- ── OPERATIONS ────────────────────────────── -->
     <!-- Docs / SOPs -->
-    {% if session.get('role') == 'admin' or 'view_docs' in user_perms %}
+    {% if is_admin_like or 'view_docs' in user_perms %}
     <div class="sb-section" style="margin-top:10px">Docs</div>
     <nav class="nav">
       <a href="/docs" data-tour="docs" class="navlink {% if request.path == '/docs' %}active{% endif %}">
@@ -430,7 +432,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
     </nav>
     {% endif %}
 
-    {% if session.get('role') != 'viewer' %}
+    {% if not is_viewer %}
     <div class="sb-section" style="margin-top:10px">Operations</div>
     <nav class="nav">
       <a href="/low-stock" class="navlink {% if request.path == '/low-stock' %}active{% endif %}">
@@ -438,7 +440,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <span>Low Stock</span>
         <span class="nb" id="alert-badge" style="display:none;background:#b91c1c">0</span>
       </a>
-      {% if 'view_dashboard' in user_perms or session.get('role') == 'admin' %}
+      {% if 'view_dashboard' in user_perms or is_admin_like %}
       <a href="/forecasting" class="navlink {% if request.path == '/forecasting' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 7-8"/><path d="M14 7h6v6"/></svg>
         <span>Forecasting (Beta)</span>
@@ -459,7 +461,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
     </nav>
 
     <!-- ── PROCUREMENT (admin) ────────────────────── -->
-    {% if session.get('role') == 'admin' %}
+    {% if is_admin_like %}
     <div class="sb-section" style="margin-top:10px">Procurement</div>
     <nav class="nav">
       <a href="/procurement" class="navlink {% if request.path == '/procurement' or (request.path.startswith('/procurement/') and not request.path.startswith('/procurement/catalog') and not request.path.startswith('/procurement/analytics')) %}active{% endif %}">
@@ -511,7 +513,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
         <span>Depreciation</span>
       </a>
-      {% if session.get('role') == 'admin' %}
+      {% if is_admin_like %}
       <a href="/report/login-activity" class="navlink {% if request.path == '/report/login-activity' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><line x1="18" y1="11" x2="22" y2="11"/></svg>
         <span>Login Activity</span>
@@ -528,14 +530,14 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
     </nav>
 
     <!-- ── SETTINGS (collapsible) ─────────── -->
-    {% set can_manage_settings = session.get('role') == 'admin' or 'write_items' in user_perms or 'import_export' in user_perms %}
+    {% set can_manage_settings = is_admin_like or 'write_items' in user_perms or 'import_export' in user_perms %}
     {% if can_manage_settings %}
     <div class="sb-section sb-accordion {% if in_settings %}open{% endif %}" style="margin-top:10px" onclick="toggleAccordion(this,'settings')" id="settings-hdr">
       <span>Settings</span>
       <svg id="settings-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px;margin-left:auto;transition:transform .2s;{% if in_settings %}transform:rotate(180deg){% endif %}"><polyline points="6 9 12 15 18 9"/></svg>
     </div>
     <nav class="nav sb-accordion-body {% if not in_settings %}collapsed{% endif %}" id="settings-nav">
-      {% if session.get('role') == 'admin' or 'write_items' in user_perms %}
+      {% if is_admin_like or 'write_items' in user_perms %}
       <a href="/categories" data-tour="categories" class="navlink {% if request.path == '/categories' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
         <span>Categories</span>
@@ -549,7 +551,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <span>Contacts</span>
       </a>
       {% endif %}
-      {% if session.get('role') == 'admin' %}
+      {% if is_admin_like %}
       <a href="/admin" data-tour="admin" class="navlink {% if request.path == '/admin' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         <span>Users &amp; Permissions</span>
@@ -559,13 +561,13 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <span>Integrations</span>
       </a>
       {% endif %}
-      {% if 'import_export' in user_perms or session.get('role') == 'admin' %}
+      {% if 'import_export' in user_perms or is_admin_like %}
       <a href="/importer" class="navlink {% if request.path == '/importer' %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         <span>Importer</span>
       </a>
       {% endif %}
-      {% if session.get('role') == 'admin' %}
+      {% if is_admin_like %}
       <a href="/billing" class="navlink {% if request.path.startswith('/billing') %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
         <span>Billing</span>
@@ -578,14 +580,14 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
       <div style="padding:8px 12px;color:#475569;font-size:11px;font-family:var(--font-mono);display:flex;align-items:center;gap:6px">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
         <span style="color:#94a3b8">{{ session.get('username','') }}</span>
-        {% if session.get('role') == 'admin' %}<span style="background:#1d4ed8;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">ADMIN</span>{% elif session.get('role') == 'viewer' %}<span style="background:#6d28d9;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">VIEWER</span>{% endif %}
+        {% if is_admin_like %}<span style="background:#1d4ed8;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">ADMIN</span>{% elif session.get('role') == 'viewer' %}<span style="background:#6d28d9;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">VIEWER</span>{% endif %}
       </div>
       <a href="/support" class="navlink {% if request.path == '/support' %}active{% endif %}" style="color:#64748b">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         <span>Help &amp; Support</span>
       </a>
       <!-- Onboarding checklist (admin only, auto-hides when complete) -->
-      {% if session.get('role') == 'admin' %}
+      {% if is_admin_like %}
       <div id="onboardingWidget" style="display:none;margin:0 0 4px">
         <button onclick="toggleOnboarding()" style="width:100%;background:none;border:none;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:8px;color:#94a3b8;font-size:12px">
           <div style="flex:1;background:#334155;border-radius:4px;height:4px;overflow:hidden">
@@ -1171,7 +1173,7 @@ async function _switchCamera(){
         <a class="intro-tour-link" href="/products">Open Products</a>
       </div>
       {% endif %}
-      {% if session.get('role') != 'viewer' %}
+      {% if not is_viewer %}
       <div class="intro-tour-step" data-step="2" data-path="/add-item" data-target="add-item">
         <h3>3. Add inventory items</h3>
         <p>Items are the actual things you own. Add serials, quantities, shelf/bin, condition, cost, and product details.</p>
@@ -1185,7 +1187,7 @@ async function _switchCamera(){
         <div class="intro-tour-list"><div>Create sites from the Sites page.</div><div>Assign users to sites for location-restricted access.</div></div>
         <a class="intro-tour-link" href="/sites">Open Sites</a>
       </div>
-      {% if session.get('role') != 'viewer' %}
+      {% if not is_viewer %}
       <div class="intro-tour-step" data-step="4" data-path="/reservations" data-target="reservations">
         <h3>5. Reserve inventory for jobs</h3>
         <p>Reservations protect stock that is promised for a client, job, or future date so workers see conflicts before using it.</p>
@@ -1193,7 +1195,7 @@ async function _switchCamera(){
         <a class="intro-tour-link" href="/reservations">Open Reservations</a>
       </div>
       {% endif %}
-      {% if session.get('role') == 'admin' or 'view_docs' in user_perms %}
+    {% if is_admin_like or 'view_docs' in user_perms %}
       <div class="intro-tour-step" data-step="5" data-path="/docs" data-target="docs">
         <h3>6. Add SOPs and team docs</h3>
         <p>SOPs keep receiving steps, checkout rules, safety notes, and field procedures next to the inventory system.</p>
@@ -1201,7 +1203,7 @@ async function _switchCamera(){
         <a class="intro-tour-link" href="/docs">Open SOPs & Docs</a>
       </div>
       {% endif %}
-      {% if session.get('role') != 'viewer' %}
+    {% if not is_viewer %}
       <div class="intro-tour-step" data-step="6" data-path="/mobile">
         <h3>7. Use mobile scanner mode</h3>
         <p>The mobile page is the simplified worker flow for scan/search, check in, check out, and reservations.</p>
@@ -1209,7 +1211,7 @@ async function _switchCamera(){
         <a class="intro-tour-link" href="/mobile">Open Mobile Scanner</a>
       </div>
       {% endif %}
-      {% if session.get('role') == 'admin' %}
+      {% if is_admin_like %}
       <div class="intro-tour-step" data-step="7" data-path="/admin" data-target="admin" data-section="settings">
         <h3>8. Invite users and set permissions</h3>
         <p>Admin controls who can view, create, edit, delete, reserve, manage docs, and access sites.</p>

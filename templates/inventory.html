@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{% if site_locked %}{{ site_locked.name }}{% else %}Inventory{% endif %} · CountDepot{% endblock %}
 {% block content %}
+{% set is_admin_like = session.get('is_admin_like') %}
+{% set is_viewer = session.get('role') == 'viewer' %}
 <!-- SCAN BAR -->
 <div class="scan-bar" id="scanBar" style="display:none">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M3 5h3M3 9h3M3 19h3M3 15h3M18 5h3M18 9h3M18 15h3M18 19h3M7 3v5M7 16v5M17 3v5M17 16v5M7 8h10v8H7z"/></svg>
@@ -39,13 +41,13 @@
       <div id="exportMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:100;min-width:160px;overflow:hidden">
         <a href="/export/excel" class="export-opt">📊 Excel (.xlsx)</a>
         <a href="/export/csv" class="export-opt">📄 CSV</a>
-        {% if session.get('role')=='admin' %}
+        {% if is_admin_like %}
         <div style="border-top:1px solid #eee"></div>
         <a href="#" class="export-opt" onclick="event.preventDefault();closeExportMenu();openModal('importModal')">📥 Import Excel</a>
         {% endif %}
       </div>
     </div>
-    {% if session.get('role')=='admin' %}
+    {% if is_admin_like %}
     <button class="btn btn-secondary btn-sm" id="massDeleteBtn" style="display:none;color:#b91c1c" onclick="massDelete()">🗑 Delete (<span id="selCount">0</span>)</button>
     <button class="btn btn-secondary btn-sm" id="massPrintBtn" style="display:none" onclick="printSelectedLabels()">Print Labels (<span id="selCountPrint">0</span>)</button>
     {% endif %}
@@ -113,7 +115,7 @@
 <div class="table-wrap">
   <table>
     <thead><tr>
-      {% if session.get('role')!='viewer' %}
+      {% if not is_viewer %}
       <th style="width:36px;padding:10px 8px 10px 14px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this.checked)"></th>
       {% endif %}
       <th style="width:44px;color:#94a3b8;font-size:10.5px;font-weight:600;letter-spacing:.3px">ID</th>
@@ -855,7 +857,7 @@ tr.selected td{background:#eff6ff!important}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 <script>
-const IS_ADMIN = {{ 'true' if session.get('role')=='admin' else 'false' }};
+const IS_ADMIN = {{ 'true' if session.get('is_admin_like') else 'false' }};
 const USER_ROLE = {{ session.get('role','viewer') | tojson }};
 const USER_PERMISSIONS = new Set({{ (session.get('permissions') or '').split(',') | tojson }});
 const CAN_SELECT = USER_ROLE !== 'viewer';

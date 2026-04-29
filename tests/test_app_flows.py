@@ -24,6 +24,7 @@ from app.blueprints.api import (
     api_item_bulk_clone,
     api_bulk_edit,
     api_qty_adjust,
+    api_scan,
     api_user_add,
     api_user_invite,
     api_user_permissions,
@@ -1699,6 +1700,55 @@ def test_admin_can_promote_worker_to_admin_and_active_session_refreshes(app, ten
         refreshed_role = session["role"]
 
     assert refreshed_role == "admin"
+    assert "Users &amp; Permissions" in html
+
+
+def test_full_permission_user_gets_admin_access_and_unrestricted_scope(app, tenant):
+    admin_response, _admin_session = _login(app, tenant)
+    assert admin_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    location_id = db.execute(
+        "INSERT INTO locations (name, created_at) VALUES (?, '2026-01-01 00:00:00')",
+        ["Restricted Site"],
+    ).lastrowid
+    user_id = db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,1,0)",
+        [
+            "full.access@example.com",
+            hash_pw("Password1!"),
+            "worker",
+            ",".join(PERM_KEYS),
+            "full.access@example.com",
+        ],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO user_locations (user_id, location_id) VALUES (?, ?)",
+        [user_id, location_id],
+    )
+    db.commit()
+    db.close()
+
+    worker_response, worker_session = _login(
+        app, tenant, "full.access@example.com", "Password1!"
+    )
+    assert worker_response.status_code == 302
+    assert worker_session["role"] == "worker"
+
+    with app.test_request_context(
+        "/admin",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(worker_session)
+        response = app.preprocess_request()
+        html = response or admin_page()
+        refreshed_admin_like = session["is_admin_like"]
+        refreshed_location_ids = session["location_ids"]
+
+    assert refreshed_admin_like is True
+    assert refreshed_location_ids == []
     assert "Users &amp; Permissions" in html
 
 
@@ -3514,6 +3564,37 @@ def test_inventory_clone_modal_has_single_and_bulk_scan_actions(app, tenant):
     assert "scanSingleCloneSerial" in body
     assert "scanNextBulkCloneSerial" in body
     assert "Multiple serials entered. Use Create Bulk Clones." in body
+
+
+def test_scan_finds_item_by_inventory_search_fields(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Scan Matches", "#ffffff"],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO items (name,category_id,manufacturer,active,created_at) "
+        "VALUES (?,?,?,?, '2026-01-01 00:00:00')",
+        ["Door Access Controller", category_id, "Ubiquiti", 1],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/scan?code=Door%20Access%20Controller",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        response = _as_response(app, app.preprocess_request() or api_scan())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["found"] is True
+    assert data["item"]["name"] == "Door Access Controller"
 
 
 def test_admin_page_shows_email_otp_only_for_2fa(app, tenant):

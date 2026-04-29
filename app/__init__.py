@@ -251,7 +251,7 @@ def create_app():
             return redirect(url_for("auth.login_page"))
 
         # Keep active sessions in sync with admin permission/site changes.
-        from app.helpers import get_user_perms, get_user_location_ids
+        from app.helpers import get_user_perms, get_user_location_ids, is_admin_like
         perms = get_user_perms(
             db_user["id"],
             db_user["role"],
@@ -260,6 +260,7 @@ def create_app():
         session["username"] = db_user["username"]
         session["role"] = db_user["role"]
         session["permissions"] = ",".join(perms)
+        session["is_admin_like"] = is_admin_like(db_user["role"], ",".join(perms))
         session["must_change_password"] = bool(db_user["must_change_password"])
         session["location_ids"] = get_user_location_ids(db_user["id"], db_user["role"])
 

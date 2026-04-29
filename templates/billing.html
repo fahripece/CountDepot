@@ -117,7 +117,7 @@
     </li>
     {% endfor %}
   </ul>
-  {% if stripe_ok and session.get('role') == 'admin' %}
+{% if stripe_ok and session.get('is_admin_like') %}
     {% if is_current %}
     <button class="btn btn-secondary" disabled style="justify-content:center">Current plan</button>
     {% else %}

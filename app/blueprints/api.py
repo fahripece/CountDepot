@@ -2199,15 +2199,46 @@ def api_scan():
     code = request.args.get("code", "").strip()
     if not code:
         return jsonify({"found": False})
-    row = query("""SELECT i.*, c.name as category, c.color
+    loc_sql, loc_args = location_filter_sql("i")
+    exact_args = [code, code, code, code, code, code]
+    row = query(f"""SELECT i.*, c.name as category, c.color
                    FROM items i LEFT JOIN categories c ON c.id=i.category_id
-                   WHERE i.active=1 AND (i.serial=? OR i.model=? OR i.sku=? OR i.internal_sku=?) LIMIT 1""",
-                [code, code, code, code], one=True)
+                   WHERE i.active=1
+                     {loc_sql}
+                     AND (
+                       i.serial=? OR
+                       i.model=? OR
+                       i.sku=? OR
+                       i.internal_sku=? OR
+                       i.name=? OR
+                       CAST(i.id AS TEXT)=?
+                     )
+                   LIMIT 1""",
+                exact_args + loc_args, one=True)
     if not row:
-        row = query("""SELECT i.*, c.name as category, c.color
+        like = f"%{code}%"
+        row = query(f"""SELECT i.*, c.name as category, c.color
                        FROM items i LEFT JOIN categories c ON c.id=i.category_id
-                       WHERE i.active=1 AND (i.serial LIKE ? OR i.sku LIKE ? OR i.internal_sku LIKE ?) LIMIT 1""",
-                    [f"%{code}%", f"%{code}%", f"%{code}%"], one=True)
+                       WHERE i.active=1
+                         {loc_sql}
+                         AND (
+                           i.serial LIKE ? OR
+                           i.model LIKE ? OR
+                           i.sku LIKE ? OR
+                           i.internal_sku LIKE ? OR
+                           i.name LIKE ? OR
+                           i.manufacturer LIKE ?
+                         )
+                       ORDER BY CASE
+                           WHEN i.serial LIKE ? THEN 0
+                           WHEN i.sku LIKE ? THEN 1
+                           WHEN i.internal_sku LIKE ? THEN 2
+                           WHEN i.model LIKE ? THEN 3
+                           WHEN i.name LIKE ? THEN 4
+                           ELSE 5
+                         END, i.id DESC
+                       LIMIT 1""",
+                    [like, like, like, like, like, like, like, like, like, like, like] + loc_args, one=True)
     return jsonify({"found": bool(row), "item": dict(row) if row else None})
 
 
