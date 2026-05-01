@@ -99,6 +99,11 @@
         <input class="input" id="co-who" placeholder="e.g. JD, John D." style="font-size:14px"
           onkeydown="if(event.key==='Enter')document.getElementById('co-location').focus()">
       </div>
+      <div class="field" id="co-qty-wrap" style="display:none">
+        <label class="label">Quantity to Check Out *</label>
+        <input class="input" id="co-qty" type="number" min="1" value="1" style="font-size:14px">
+        <div id="co-qty-help" style="font-size:12px;color:#64748b;margin-top:5px"></div>
+      </div>
       <div class="field" style="margin-bottom:0">
         <label class="label">Client / Location / Job Ref</label>
         <input class="input" id="co-location" placeholder="e.g. Acme Corp, Site B, Job #1042" style="font-size:14px"
@@ -260,6 +265,7 @@ async function doScan(){
 
 function openCoModal(item){
   _pendingItem=item;
+  const qtyTracked=item.qty!==null&&item.qty!==undefined;
   document.getElementById('co-item-name').textContent=item.name;
   document.getElementById('co-item-sub').textContent=[item.category,'Shelf: '+(item.shelf||'—')].filter(Boolean).join(' · ');
   document.getElementById('co-item-meta').textContent=[item.manufacturer,item.model,item.serial?'SN: '+item.serial:null,item.internal_sku||item.sku].filter(Boolean).join(' · ')||'—';
@@ -267,6 +273,20 @@ function openCoModal(item){
   document.getElementById('co-cat-dot').style.background=item.color||'#6b7280';
   document.getElementById('co-who').value='';
   document.getElementById('co-location').value='';
+  const qtyWrap=document.getElementById('co-qty-wrap');
+  const qtyInput=document.getElementById('co-qty');
+  const qtyHelp=document.getElementById('co-qty-help');
+  if(qtyTracked){
+    qtyWrap.style.display='';
+    qtyInput.value='1';
+    qtyInput.max=Math.max(0, Number(item.available ?? ((item.qty||0)-(item.qty_out||0))));
+    qtyHelp.textContent=`${item.available ?? Math.max(0,(item.qty||0)-(item.qty_out||0))} available / ${item.qty||0} total${item.reserved_qty?` / ${item.reserved_qty} reserved`:''}`;
+  }else{
+    qtyWrap.style.display='none';
+    qtyInput.value='1';
+    qtyInput.removeAttribute('max');
+    qtyHelp.textContent='';
+  }
   document.getElementById('co-confirm-btn').disabled=false;
   document.getElementById('co-confirm-btn').textContent='📤 Check Out';
   document.getElementById('coModal').style.display='flex';
@@ -282,23 +302,25 @@ function closeCoModal(){
 async function confirmCheckout(){
   const who=document.getElementById('co-who').value.trim();
   if(!who){toast('Tech name is required','warn');document.getElementById('co-who').focus();return;}
+  const qtyTracked=_pendingItem.qty!==null&&_pendingItem.qty!==undefined;
+  const amount=qtyTracked?Number(document.getElementById('co-qty').value||0):1;
+  if(qtyTracked&&(!Number.isFinite(amount)||amount<1)){toast('Enter a valid checkout quantity','warn');document.getElementById('co-qty').focus();return;}
   const btn=document.getElementById('co-confirm-btn');
   btn.disabled=true;
   btn.innerHTML='<span style="width:13px;height:13px;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px"></span>Processing…';
 
-  const res=await api('/api/checkout',{
-    id:_pendingItem.id,
-    who,
-    job_ref:document.getElementById('co-location').value.trim(),
-    scanned_code:_pendingItem.serial||_pendingItem.internal_sku||_pendingItem.sku||''
-  });
+  const jobRef=document.getElementById('co-location').value.trim();
+  const payload=qtyTracked
+    ? {id:_pendingItem.id,who,amount,action:'remove',note:['Checkout',who,jobRef?`Job ${jobRef}`:null].filter(Boolean).join(' · ')}
+    : {id:_pendingItem.id,who,job_ref:jobRef,scanned_code:_pendingItem.serial||_pendingItem.internal_sku||_pendingItem.sku||''};
+  const res=await api(qtyTracked?'/api/qty_adjust':'/api/checkout',payload);
 
   if(res.ok){
     closeCoModal();
-    toast('✓ Checked out: '+_pendingItem.name,'ok');
+    toast(qtyTracked?`✓ Checked out ${amount} unit(s) of ${_pendingItem.name}`:'✓ Checked out: '+_pendingItem.name,'ok');
     const fb=document.getElementById('scan-feedback');
     fb.style.display='';fb.style.background='#f0fdf4';fb.style.color='#15803d';
-    fb.textContent='✓ Checked out: '+_pendingItem.name+' → '+who;
+    fb.textContent=qtyTracked?`✓ Checked out ${amount} unit(s) of ${_pendingItem.name} → ${who}`:'✓ Checked out: '+_pendingItem.name+' → '+who;
     loadRecent();
   } else {
     btn.disabled=false;btn.textContent='📤 Check Out';

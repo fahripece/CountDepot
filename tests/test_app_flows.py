@@ -2300,6 +2300,35 @@ def test_quantity_mobile_return_reduces_checked_out_units(app, tenant):
     assert data["qty_out"] == 1
 
 
+def test_qty_adjust_remove_cannot_exceed_available_units(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    item_id = db.execute(
+        "INSERT INTO items (name,category_id,qty,qty_out,active,created_at) VALUES (?,?,?,?,1,datetime('now'))",
+        ["Checkout Qty Limit", 1, 5, 2],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/qty_adjust",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"id": item_id, "action": "remove", "amount": 4, "note": "Over checkout"},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_qty_adjust())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is False
+    assert data["msg"] == "Only 3 unit(s) are available"
+
+
 def test_viewer_cannot_add_items(app, tenant):
     db = sqlite3.connect(tenant["db_path"])
     db.execute(
@@ -3586,6 +3615,8 @@ def test_checkout_page_has_camera_scan_button(app, tenant):
     assert "Bulk Checkout Queue" in body
     assert "submitBulkCheckout" in body
     assert "bulkModeToggle" in body
+    assert "Quantity to Check Out" in body
+    assert 'id="co-qty"' in body
 
 
 def test_add_item_identifier_fields_have_camera_scan_buttons(app, tenant):

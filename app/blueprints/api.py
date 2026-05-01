@@ -2974,11 +2974,18 @@ def api_qty_adjust():
     amount = int(d.get("amount", 0))
     note   = d.get("note", "")
     action = d.get("action")
+    if action != "set" and amount <= 0:
+        return jsonify({"ok": False, "msg": "Amount must be at least 1"})
+    if action == "set" and amount < 0:
+        return jsonify({"ok": False, "msg": "Quantity cannot be negative"})
     if action == "add":
         execute("UPDATE items SET qty=qty+? WHERE id=?", [amount, item["id"]])
         nq = query("SELECT qty FROM items WHERE id=?", [item["id"]], one=True)["qty"]
         log_action("QTY_ADD", item["id"], item["name"], f"+{amount}. {note}. Total:{nq}", before, {"qty": nq})
     elif action == "remove":
+        available_now = max(0, int(item["qty"] or 0) - int(item["qty_out"] or 0))
+        if amount > available_now:
+            return jsonify({"ok": False, "msg": f"Only {available_now} unit(s) are available"})
         conflicts = _reservation_conflict_payload(item["id"])
         use_reservation = bool(d.get("use_reservation"))
         override_reservation = bool(d.get("override_reservation") or d.get("reservation_override"))

@@ -452,6 +452,11 @@
         <div id="co-scan-status" style="font-size:12px;margin-top:6px;display:none"></div>
       </div>
       <div class="field"><label class="label">Tech Name / Initials *</label><input class="input" id="co-who"></div>
+      <div class="field" id="co-qty-wrap" style="display:none">
+        <label class="label">Quantity to Check Out *</label>
+        <input class="input" id="co-qty" type="number" min="1" value="1">
+        <div id="co-qty-help" style="font-size:12px;color:#64748b;margin-top:5px"></div>
+      </div>
       <div class="field"><label class="label">Job Reference / Customer</label><input class="input" id="co-jobref"></div>
       <div class="field"><label class="label">Expected Return Date <span style="font-weight:400;font-size:10px;color:#94a3b8">(optional)</span></label><input class="input" id="co-return-date" type="date"></div>
     </div>
@@ -1577,6 +1582,20 @@ function openCheckout(id){
   document.getElementById('co-item-name').textContent=item.name;
   document.getElementById('co-serial').textContent=item.serial||item.sku||item.internal_sku||item.model||'';
   document.getElementById('co-who').value='';document.getElementById('co-jobref').value='';document.getElementById('co-return-date').value='';
+  const qtyWrap=document.getElementById('co-qty-wrap');
+  const qtyInput=document.getElementById('co-qty');
+  const qtyHelp=document.getElementById('co-qty-help');
+  if(item.qty!==null){
+    qtyWrap.style.display='';
+    qtyInput.value='1';
+    qtyInput.max=Math.max(0, parseInt(item.available||0,10));
+    qtyHelp.textContent=`${item.available||0} available / ${item.qty||0} total${item.reserved_qty?` / ${item.reserved_qty} reserved`:''}`;
+  }else{
+    qtyWrap.style.display='none';
+    qtyInput.value='1';
+    qtyInput.removeAttribute('max');
+    qtyHelp.textContent='';
+  }
   document.getElementById('co-res-warning').style.display='none';
   document.getElementById('co-res-detail').textContent='';
   document.getElementById('co-use-res').checked=false;
@@ -1614,12 +1633,20 @@ document.getElementById('co-scan-input')?.addEventListener('keydown',e=>{if(e.ke
 async function confirmCheckout(){
   const who=document.getElementById('co-who').value.trim();
   if(!who){toast('Please enter tech name/initials','warn');return;}
+  const item=allItems.find(i=>i.id===pendingCheckoutId);
+  const qtyTracked=!!(item&&item.qty!==null);
+  const amount=qtyTracked?parseInt(document.getElementById('co-qty').value||'0',10):1;
+  if(qtyTracked&&(!amount||amount<1)){toast('Enter a valid checkout quantity','warn');return;}
   const btn=document.getElementById('coBtn');btn.disabled=true;btn.textContent='Checking out…';
   const scannedCode=document.getElementById('co-scan-input')?.value.trim()||'';
   const useRes=document.getElementById('co-use-res')?.checked||false;
-  const res=await api('/api/checkout',{id:pendingCheckoutId,who,job_ref:document.getElementById('co-jobref').value.trim(),scanned_code:scannedCode,expected_return_date:document.getElementById('co-return-date').value||null,use_reservation:useRes,reservation_id:useRes?document.getElementById('co-res-select').value:null,override_reservation:document.getElementById('co-res-override')?.checked||false});
+  const jobRef=document.getElementById('co-jobref').value.trim();
+  const payload=qtyTracked
+    ? {id:pendingCheckoutId,who,amount,action:'remove',note:['Checkout',who,jobRef?`Job ${jobRef}`:null].filter(Boolean).join(' · '),use_reservation:useRes,reservation_id:useRes?document.getElementById('co-res-select').value:null,override_reservation:document.getElementById('co-res-override')?.checked||false}
+    : {id:pendingCheckoutId,who,job_ref:jobRef,scanned_code:scannedCode,expected_return_date:document.getElementById('co-return-date').value||null,use_reservation:useRes,reservation_id:useRes?document.getElementById('co-res-select').value:null,override_reservation:document.getElementById('co-res-override')?.checked||false};
+  const res=await api(qtyTracked?'/api/qty_adjust':'/api/checkout',payload);
   btn.disabled=false;btn.innerHTML='📤 Check Out';
-  if(res.ok){toast('Checked out ✓','ok');closeModal('checkoutModal');await loadItems();const u=allItems.find(i=>i.id===pendingCheckoutId);if(u)showDetail(u);}
+  if(res.ok){toast(qtyTracked?`Checked out ${amount} unit(s) ✓`:'Checked out ✓','ok');closeModal('checkoutModal');await loadItems();const u=allItems.find(i=>i.id===pendingCheckoutId);if(u)showDetail(u);}
   else if(res.msg==='scan_required') toast('Scan required — please verify the barcode first','warn');
   else if(res.msg==='scan_mismatch') toast(res.detail||'Scan mismatch','err');
   else if(res.msg==='reservation_conflict'){
