@@ -3663,6 +3663,26 @@ def test_inventory_clone_modal_has_single_and_bulk_scan_actions(app, tenant):
     assert "Multiple serials entered. Use Create Bulk Clones." in body
 
 
+def test_inventory_selection_checkout_uses_single_item_flow_for_qty_tracked_items(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "if(items.length===1){openCheckout(items[0].id);return;}" in body
+    assert "CountDepot will open the full checkout form so you can choose the amount." in body
+    assert "Already-checked-out and qty-tracked items will be skipped." not in body
+
+
 def test_scan_finds_item_by_inventory_search_fields(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302

@@ -746,11 +746,11 @@
 </div>
 
 <div class="overlay" id="bulkCheckoutModal">
-  <div class="modal modal-sm">
+  <div class="modal">
     <div class="modal-header"><div class="modal-title">📤 Bulk Check Out</div><button class="modal-close" onclick="closeModal('bulkCheckoutModal')">✕</button></div>
     <div class="modal-body">
       <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:10px 12px;margin-bottom:14px;font-size:12.5px;color:#1e40af">
-        Checking out <strong id="bco-count"></strong> selected items. Already-checked-out and qty-tracked items will be skipped.
+        Checking out <strong id="bco-count"></strong> selected serialized items together. If you select one quantity-tracked item, CountDepot will open the full checkout form so you can choose the amount.
       </div>
       <div class="field"><label class="label">Tech Name / Initials *</label><input class="input" id="bco-who" placeholder="e.g. JD or John Doe"></div>
       <div class="field"><label class="label">Job Reference / Customer</label><input class="input" id="bco-jobref" placeholder="Optional"></div>
@@ -2113,13 +2113,29 @@ async function massDelete(){
 }
 
 // Bulk checkout
-function openBulkCheckout(){if(!CAN_CHECKOUT){toast('You do not have permission to check items out','err');return;}if(!selectedIds.size){toast('Select items first','warn');return;}document.getElementById('bco-who').value='';document.getElementById('bco-jobref').value='';document.getElementById('bco-return').value='';const cEl=document.getElementById('bco-count');if(cEl)cEl.textContent=selectedIds.size+' item'+(selectedIds.size===1?'':'s');openModal('bulkCheckoutModal');}
+function openBulkCheckout(){
+  if(!CAN_CHECKOUT){toast('You do not have permission to check items out','err');return;}
+  if(!selectedIds.size){toast('Select items first','warn');return;}
+  const items=allItems.filter(i=>selectedIds.has(i.id));
+  if(items.length===1){openCheckout(items[0].id);return;}
+  const qtyTrackedItems=items.filter(i=>i.qty!==null);
+  if(qtyTrackedItems.length){
+    toast(qtyTrackedItems.length===1?'Select the quantity-tracked item by itself to choose how many to check out':'Quantity-tracked items must be checked out individually so you can choose amounts','warn');
+    return;
+  }
+  document.getElementById('bco-who').value='';
+  document.getElementById('bco-jobref').value='';
+  document.getElementById('bco-return').value='';
+  const cEl=document.getElementById('bco-count');
+  if(cEl)cEl.textContent=selectedIds.size+' item'+(selectedIds.size===1?'':'s');
+  openModal('bulkCheckoutModal');
+}
 async function confirmBulkCheckout(){
   const who=document.getElementById('bco-who').value.trim();
   if(!who){toast('Name/initials required','warn');return;}
   const btn=document.getElementById('bcoBtn');btn.disabled=true;btn.textContent='Working…';
   const res=await api('/api/items/bulk-checkout',{ids:[...selectedIds],who,job_ref:document.getElementById('bco-jobref').value.trim(),expected_return_date:document.getElementById('bco-return').value||null});
-  btn.disabled=false;btn.textContent='Check Out';
+  btn.disabled=false;btn.innerHTML='ðŸ“¤ Check Out';
   if(res.ok){toast(`Checked out ${res.done} item(s)${res.skipped?' ('+res.skipped+' skipped)':''}`, 'ok');selectedIds.clear();updateSelectionUI();closeModal('bulkCheckoutModal');loadItems();}
   else toast(res.msg||'Error','err');
 }
