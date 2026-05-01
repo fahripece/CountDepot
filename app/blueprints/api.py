@@ -2200,7 +2200,7 @@ def api_scan():
     if not code:
         return jsonify({"found": False})
     loc_sql, loc_args = location_filter_sql("i")
-    exact_args = [code, code, code, code, code, code]
+    exact_args = [code, code, code, code, code, code, code]
     row = query(f"""SELECT i.*, c.name as category, c.color
                    FROM items i LEFT JOIN categories c ON c.id=i.category_id
                    WHERE i.active=1
@@ -2211,13 +2211,14 @@ def api_scan():
                        i.sku=? OR
                        i.internal_sku=? OR
                        i.name=? OR
+                       CAST(i.shelf AS TEXT)=? OR
                        CAST(i.id AS TEXT)=?
                      )
                    LIMIT 1""",
                 exact_args + loc_args, one=True)
     if not row:
         like = f"%{code}%"
-        row = query(f"""SELECT i.*, c.name as category, c.color
+        rows = query(f"""SELECT i.*, c.name as category, c.color
                        FROM items i LEFT JOIN categories c ON c.id=i.category_id
                        WHERE i.active=1
                          {loc_sql}
@@ -2227,7 +2228,9 @@ def api_scan():
                            i.sku LIKE ? OR
                            i.internal_sku LIKE ? OR
                            i.name LIKE ? OR
-                           i.manufacturer LIKE ?
+                           i.manufacturer LIKE ? OR
+                           CAST(i.shelf AS TEXT) LIKE ? OR
+                           CAST(i.id AS TEXT) LIKE ?
                          )
                        ORDER BY CASE
                            WHEN i.serial LIKE ? THEN 0
@@ -2235,11 +2238,27 @@ def api_scan():
                            WHEN i.internal_sku LIKE ? THEN 2
                            WHEN i.model LIKE ? THEN 3
                            WHEN i.name LIKE ? THEN 4
-                           ELSE 5
+                           WHEN i.manufacturer LIKE ? THEN 5
+                           ELSE 6
                          END, i.id DESC
-                       LIMIT 1""",
-                    [like, like, like, like, like, like, like, like, like, like, like] + loc_args, one=True)
-    return jsonify({"found": bool(row), "item": dict(row) if row else None})
+                       LIMIT 6""",
+                    [like, like, like, like, like, like, like, like, like, like, like, like, like, like] + loc_args)
+        if rows:
+            if len(rows) == 1:
+                row = rows[0]
+            else:
+                return jsonify({
+                    "found": True,
+                    "ambiguous": True,
+                    "item": dict(rows[0]),
+                    "matches": [dict(r) for r in rows],
+                })
+    return jsonify({
+        "found": bool(row),
+        "ambiguous": False,
+        "item": dict(row) if row else None,
+        "matches": [dict(row)] if row else [],
+    })
 
 
 @bp.route("/api/checkout", methods=["POST"])

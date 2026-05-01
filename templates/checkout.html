@@ -143,6 +143,10 @@ let _pendingItem=null;
 let _bulkCheckoutMode=false;
 let _bulkQueue=[];
 
+function escHtml(value){
+  return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function scanCheckoutWithCamera(){
   openCameraScanner(code=>{
     document.getElementById('scanBox').value=code;
@@ -228,11 +232,61 @@ async function submitBulkCheckout(){
   if(failed.length)toast(failed[0],'err');
 }
 
+function handleScannedItem(item, fb){
+  if(item.checked_out){
+    fb.style.background='#fffbeb';fb.style.color='#d97706';
+    fb.textContent='Already checked out: '+item.name+' (by '+( item.checkout_by||'unknown')+')';
+    return;
+  }
+  if(item.sold){
+    fb.style.background='#fef2f2';fb.style.color='#b91c1c';
+    fb.textContent='This item has been marked as sold.';
+    return;
+  }
+  fb.style.background='#f0fdf4';fb.style.color='#15803d';
+  if(_bulkCheckoutMode){
+    fb.textContent='Queued: '+queueCheckoutItem(item);
+    return;
+  }
+  fb.textContent='Found: '+item.name;
+  openCoModal(item);
+}
+
+function renderScanMatches(code, matches){
+  const fb=document.getElementById('scan-feedback');
+  window._checkoutScanMatches=matches;
+  fb.style.display='';
+  fb.style.background='#eff6ff';
+  fb.style.color='#1e40af';
+  fb.innerHTML=`
+    <div style="font-weight:700;margin-bottom:8px">Multiple matches found for ${escHtml(code)}. Pick the correct item.</div>
+    <div style="display:grid;gap:8px">
+      ${matches.map((item, idx)=>`
+        <button type="button" onclick="selectScanMatch(${idx})" style="text-align:left;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;background:#fff;cursor:pointer">
+          <div style="font-weight:700;color:#0f172a">${escHtml(item.name)}</div>
+          <div style="font-size:12px;color:#475569;margin-top:2px">${[
+            item.serial?`SN: ${escHtml(item.serial)}`:null,
+            item.internal_sku?`Internal SKU: ${escHtml(item.internal_sku)}`:item.sku?`SKU: ${escHtml(item.sku)}`:null,
+            item.manufacturer?escHtml(item.manufacturer):null,
+            item.shelf?`Shelf ${escHtml(item.shelf)}`:null
+          ].filter(Boolean).join(' · ')||'No extra identifiers'}</div>
+        </button>`).join('')}
+    </div>`;
+}
+
+function selectScanMatch(idx){
+  const matches=window._checkoutScanMatches||[];
+  const item=matches[idx];
+  if(!item)return;
+  window._checkoutScanMatches=[];
+  handleScannedItem(item, document.getElementById('scan-feedback'));
+}
+
 async function doScan(){
   const code=document.getElementById('scanBox').value.trim();
   if(!code) return;
   const fb=document.getElementById('scan-feedback');
-  fb.style.display='';fb.style.background='#f0f7ff';fb.style.color='#1e40af';fb.textContent='Searching…';
+  fb.style.display='';fb.style.background='#f0f7ff';fb.style.color='#1e40af';fb.textContent='Searching...';
 
   const data=await fetch('/api/scan?code='+encodeURIComponent(code)).then(r=>r.json());
   document.getElementById('scanBox').value='';
@@ -240,27 +294,14 @@ async function doScan(){
 
   if(!data.found){
     fb.style.background='#fef2f2';fb.style.color='#b91c1c';
-    fb.textContent='✕ Not found: '+code+' — check the serial number or SKU and try again.';
+    fb.textContent='Not found: '+code+' - try serial, SKU, internal SKU, shelf, or item name.';
     return;
   }
-  const item=data.item;
-  if(item.checked_out){
-    fb.style.background='#fffbeb';fb.style.color='#d97706';
-    fb.textContent='⚠ Already checked out: '+item.name+' (by '+( item.checkout_by||'unknown')+')';
+  if(data.ambiguous && Array.isArray(data.matches) && data.matches.length>1){
+    renderScanMatches(code, data.matches);
     return;
   }
-  if(item.sold){
-    fb.style.background='#fef2f2';fb.style.color='#b91c1c';
-    fb.textContent='✕ This item has been marked as sold.';
-    return;
-  }
-  fb.style.background='#f0fdf4';fb.style.color='#15803d';
-  if(_bulkCheckoutMode){
-    fb.textContent='✓ '+queueCheckoutItem(item);
-    return;
-  }
-  fb.textContent='✓ Found: '+item.name;
-  openCoModal(item);
+  handleScannedItem(data.item, fb);
 }
 
 function openCoModal(item){

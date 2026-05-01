@@ -3617,6 +3617,8 @@ def test_checkout_page_has_camera_scan_button(app, tenant):
     assert "bulkModeToggle" in body
     assert "Quantity to Check Out" in body
     assert 'id="co-qty"' in body
+    assert "renderScanMatches" in body
+    assert "Pick the correct item." in body
 
 
 def test_add_item_identifier_fields_have_camera_scan_buttons(app, tenant):
@@ -3712,6 +3714,45 @@ def test_scan_finds_item_by_inventory_search_fields(app, tenant):
     assert response.status_code == 200
     assert data["found"] is True
     assert data["item"]["name"] == "Door Access Controller"
+    assert data["ambiguous"] is False
+
+
+def test_scan_returns_multiple_matches_for_broad_checkout_search(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Scan Choices", "#ffffff"],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO items (name,category_id,manufacturer,serial,active,created_at) "
+        "VALUES (?,?,?,?,1,'2026-01-01 00:00:00')",
+        ["Laptop A", category_id, "Dell", "DL-100",],
+    )
+    db.execute(
+        "INSERT INTO items (name,category_id,manufacturer,serial,active,created_at) "
+        "VALUES (?,?,?,?,1,'2026-01-01 00:00:00')",
+        ["Laptop B", category_id, "Dell", "DL-200",],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/scan?code=Dell",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        response = _as_response(app, app.preprocess_request() or api_scan())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["found"] is True
+    assert data["ambiguous"] is True
+    assert len(data["matches"]) >= 2
+    assert {row["name"] for row in data["matches"]} >= {"Laptop A", "Laptop B"}
 
 
 def test_admin_page_shows_email_otp_only_for_2fa(app, tenant):
