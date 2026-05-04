@@ -3040,7 +3040,16 @@ def test_generic_seo_pages_do_not_show_repair_shop_phase_two_content(app):
     assert "SOPs and team docs" in body
     assert '"@type": "FAQPage"' in body
     assert "Questions nonprofits ask before replacing spreadsheets." in body
-    assert "Can CountDepot track both serialized items and quantity-based inventory?" in body
+    assert "Why nonprofits choose CountDepot over spreadsheets" in body
+    assert "Grant-funded asset tracking" in body
+    assert "Volunteer check-in and check-out" in body
+    assert "Multi-location donation inventory" in body
+    assert "Equipment accountability for audits" in body
+    assert "Is there free inventory software for nonprofits?" in body
+    assert "free forever plan for nonprofits with 2 sites and 250 items" in body
+    assert 'href="/">inventory management software for nonprofits</a>' in body
+    assert "Used by mission-driven teams" in body
+    assert "Free inventory management for nonprofits" in body
     assert "Phone repair shop tracking screens" not in body
 
 

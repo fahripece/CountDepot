@@ -59,10 +59,75 @@ SEO_PAGES = {
         "keyword": "inventory software for nonprofits",
         "audience": "nonprofits",
         "title": "Inventory Software for Nonprofits | CountDepot",
-        "description": "Affordable inventory software for nonprofits tracking donated goods, equipment, supplies, and locations.",
+        "description": "Free inventory management for nonprofits tracking donated goods, equipment, supplies, volunteers, and multiple locations.",
         "hero": "Simple inventory software for nonprofits managing donations, supplies, and shared equipment.",
         "pain": "Nonprofits need accountability without complex systems, expensive seats, or manual spreadsheets that fall apart during busy donation cycles.",
         "use_cases": ["Track donated goods by category and location", "Assign equipment to staff or programs", "Keep audit-friendly item history", "Manage supplies across storage rooms and sites"],
+        "phase2": {
+            "intro": "CountDepot helps nonprofits track donated inventory, shared equipment, volunteer handoffs, and storage locations without building another spreadsheet that only one person understands.",
+            "workflow": [
+                {
+                    "title": "Log donations and equipment into a shared system",
+                    "copy": "Track donated items, purchased supplies, and program equipment in one searchable place with categories, quantities, serials, and site visibility."
+                },
+                {
+                    "title": "Let staff and volunteers check items in and out cleanly",
+                    "copy": "Use simple check-in, check-out, and reservation workflows so volunteers can move inventory without breaking accountability."
+                },
+                {
+                    "title": "See what each location actually has",
+                    "copy": "Split donation inventory and supplies across offices, pantries, classrooms, or storage rooms so one location does not hide another."
+                },
+                {
+                    "title": "Stay ready for grant reviews and audits",
+                    "copy": "Keep item history, assignments, and movement records tied to real inventory so audit prep is not a last-minute spreadsheet cleanup project."
+                },
+            ],
+            "examples": [
+                "Track pantry donations across multiple sites",
+                "Check laptops and tablets out to program staff or volunteers",
+                "Manage event supplies, storage rooms, and outreach kits",
+                "Keep grant-funded assets tied to the right program and location",
+            ],
+            "spreadsheet_section_title": "Why nonprofits choose CountDepot over spreadsheets",
+            "spreadsheet_points": [
+                {
+                    "title": "Grant-funded asset tracking",
+                    "copy": "Track which equipment was funded by which grant, where it lives, and who last used it instead of relying on disconnected tabs and manual notes."
+                },
+                {
+                    "title": "Volunteer check-in and check-out",
+                    "copy": "Give staff and volunteers a simple workflow for borrowing equipment or supplies without losing accountability when multiple people touch inventory."
+                },
+                {
+                    "title": "Multi-location donation inventory",
+                    "copy": "See donated goods by pantry, office, storage room, or program site so one spreadsheet does not hide shortages or overstock at a specific location."
+                },
+                {
+                    "title": "Equipment accountability for audits",
+                    "copy": "Keep an audit-friendly history of item movement, assignments, and status changes so reviews are based on actual records instead of guesswork."
+                },
+            ],
+            "social_proof": "Used by mission-driven teams that need cleaner donation tracking, better volunteer handoffs, and less spreadsheet cleanup before audits.",
+            "homepage_link": {
+                "href": "/",
+                "text": "inventory management software for nonprofits",
+            },
+            "faq": [
+                {
+                    "question": "Is there free inventory software for nonprofits?",
+                    "answer": "Yes. CountDepot includes a free forever plan for nonprofits with 2 sites and 250 items, which is a practical starting point for smaller teams replacing spreadsheets."
+                },
+                {
+                    "question": "How do nonprofits track donated inventory?",
+                    "answer": "Most nonprofits start by tracking donated inventory by category, quantity, site, and status. CountDepot keeps those records in one system so teams can search items, move stock between locations, and keep a cleaner audit trail."
+                },
+                {
+                    "question": "What inventory software works for small nonprofits with volunteers?",
+                    "answer": "Small nonprofits usually need simple check-in, check-out, reservations, and location tracking without enterprise overhead. CountDepot fits that workflow well because volunteers and staff can work from the same browser-based system without learning a complex ERP."
+                },
+            ],
+        },
     },
     "inventory-management-for-photographers": {
         "tier": "Tier 1",

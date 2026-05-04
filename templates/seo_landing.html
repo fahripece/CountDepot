@@ -307,6 +307,39 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
 </section>
 {% endif %}
 
+{% if page.phase2 and page.phase2.spreadsheet_section_title and page.phase2.spreadsheet_points %}
+<section>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-label">Spreadsheet replacement</div>
+      <h2 class="section-title">{{ page.phase2.spreadsheet_section_title }}</h2>
+    </div>
+    <div class="feature-grid">
+      {% for point in page.phase2.spreadsheet_points %}
+      <div class="feature">
+        <div class="feature-icon">{{ loop.index }}</div>
+        <h3>{{ point.title }}</h3>
+        <p>{{ point.copy }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% if page.phase2.social_proof %}
+    <div class="hero-proof" style="margin-top:32px" aria-label="Page-specific proof">
+      <div class="hero-stars">★★★★★</div>
+      <div class="hero-proof-copy">
+        <strong>{{ page.phase2.social_proof }}</strong>
+      </div>
+    </div>
+    {% endif %}
+    {% if page.phase2.homepage_link %}
+    <p class="section-sub" style="margin-top:22px">
+      <a href="{{ page.phase2.homepage_link.href }}">{{ page.phase2.homepage_link.text }}</a>
+    </p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
 <section class="{% if not page.phase2 %}section-alt{% endif %}">
   <div class="container">
     <div class="section-head">
