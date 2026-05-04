@@ -2491,7 +2491,8 @@ def test_homepage_has_schema_internal_links_and_marketing_events(app):
     assert "pricing_click" in body
     assert "demo_request" in body
     assert "Before you go —" in body
-    assert "See how CountDepot works in 60 seconds." in body
+    assert "Did you know CountDepot is completely free to start for 1 user, 2 sites, and 250 items?" in body
+    assert 'href="/signup">Sign up</a>' in body
     assert "countdepot-exit-intent-seen" in body
     assert "seo_internal_link_click" not in body
 
@@ -2929,6 +2930,22 @@ def test_barcode_labeling_resource_article_renders_on_bare_domain(app):
     assert 'href="/resources/inventory-management"' in body
 
 
+def test_inventory_onboarding_checklist_resource_article_renders_on_bare_domain(app):
+    response = app.test_client().get(
+        "/resources/inventory-onboarding-checklist-for-small-teams",
+        base_url="http://countdepot.com",
+    )
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Inventory onboarding checklist for small teams" in body
+    assert "Start with the inventory that actually moves" in body
+    assert "Train by role, not by feature list" in body
+    assert '<link rel="canonical" href="http://countdepot.com/resources/inventory-onboarding-checklist-for-small-teams">' in body
+    assert '"@type": "Article"' in body
+    assert 'href="/resources/barcode-labeling-best-practices-for-inventory-teams"' in body
+
+
 def test_homepage_links_to_inventory_management_resource(app):
     response = app.test_client().get("/", base_url="http://countdepot.com")
     body = response.get_data(as_text=True)
@@ -2936,6 +2953,7 @@ def test_homepage_links_to_inventory_management_resource(app):
     assert response.status_code == 200
     assert 'href="/resources/inventory-management"' in body
     assert "Inventory management: what it is, how it works, and how to improve it" in body
+    assert body.count('href="/resources/') >= 6
 
 
 def test_homepage_links_to_barcode_labeling_resource(app):
@@ -2945,6 +2963,15 @@ def test_homepage_links_to_barcode_labeling_resource(app):
     assert response.status_code == 200
     assert 'href="/resources/barcode-labeling-best-practices-for-inventory-teams"' in body
     assert "Barcode labeling best practices for inventory teams" in body
+
+
+def test_homepage_links_to_inventory_onboarding_checklist_resource(app):
+    response = app.test_client().get("/", base_url="http://countdepot.com")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'href="/resources/inventory-onboarding-checklist-for-small-teams"' in body
+    assert "Inventory onboarding checklist for small teams" in body
 
 
 def test_seo_landing_links_to_inventory_management_resource(app):

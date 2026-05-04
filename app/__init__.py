@@ -118,7 +118,7 @@ def create_app():
                 abort(403)
 
         from app.seo_pages import seo_page_for_slug
-        from app.resources import resource_page_for_slug
+        from app.resources import resource_page_for_slug, homepage_resource_cards
         path_slug = request.path.strip("/")
 
         # These routes bypass tenant resolution entirely
@@ -152,7 +152,7 @@ def create_app():
         )
         if is_bare_domain and not request.path.startswith("/auth/google"):
             from flask import render_template
-            return render_template("landing.html")
+            return render_template("landing.html", homepage_resources=homepage_resource_cards())
 
         resolve_tenant()
 

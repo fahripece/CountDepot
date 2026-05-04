@@ -589,6 +589,72 @@ RESOURCE_GUIDES = {
             "what-to-look-for-in-inventory-management-software",
         ],
     },
+    "inventory-onboarding-checklist-for-small-teams": {
+        "title": "Inventory Onboarding Checklist for Small Teams | CountDepot Resources",
+        "meta_description": "Use this inventory onboarding checklist to set up categories, locations, labels, permissions, and your first clean receiving workflow.",
+        "eyebrow": "Checklist",
+        "hero_title": "Inventory onboarding checklist for small teams",
+        "hero_subtitle": "A practical setup checklist for teams moving out of spreadsheets and into a real inventory workflow.",
+        "read_time": "7 min read",
+        "summary": "Most inventory rollouts fail because the team tries to configure everything at once without locking the basics first. A good onboarding checklist keeps the setup narrow: decide what to track, how to name it, where it lives, who can move it, and which workflows have to work on day one. CountDepot is strongest when the first rollout is practical, disciplined, and built around the actions your team repeats every day.",
+        "sections": [
+            {
+                "title": "Start with the inventory that actually moves",
+                "body": [
+                    "Do not begin by importing every historical item your business has ever touched. Start with the inventory that is actively received, moved, reserved, checked out, counted, or reordered today.",
+                    "That smaller scope helps the team build trust in the process quickly. Once the core data is clean, older or lower-priority records can be added later without slowing the launch."
+                ],
+                "bullets": [
+                    "Choose the categories that matter first",
+                    "Import active stock before legacy edge cases",
+                    "Separate serialized items from quantity-tracked stock"
+                ],
+            },
+            {
+                "title": "Lock naming, sites, and required fields early",
+                "body": [
+                    "Onboarding gets messy when everyone names products, locations, and statuses differently. Decide the naming rules, site list, and must-have fields before multiple users start entering inventory.",
+                    "For most teams that means agreeing on product names, category structure, site names, shelf or room labels, and whether serial, cost, or owner is required."
+                ],
+                "bullets": [
+                    "Standardize product and category naming",
+                    "Create sites, shelves, rooms, or bins before importing stock",
+                    "Define which fields are mandatory on every record"
+                ],
+            },
+            {
+                "title": "Test receiving, checkout, and reservations first",
+                "body": [
+                    "The first operational test should use the actions your workers repeat most often. For many teams that means receiving inventory, checking it out to someone, reserving future stock, and checking it back in.",
+                    "If those workflows feel clean, users trust the system early. If they feel slow or confusing, rollout friction will compound fast."
+                ],
+                "bullets": [
+                    "Run one real receiving test",
+                    "Check one serialized item and one quantity item out",
+                    "Reserve stock and confirm available versus reserved counts"
+                ],
+            },
+            {
+                "title": "Train by role, not by feature list",
+                "body": [
+                    "Admins, workers, and viewers do not need the same onboarding. Show each group the workflows they actually perform so the product feels simpler from the start.",
+                    "A short role-based walkthrough usually beats a long feature tour because it reduces noise and builds confidence around the actions users repeat."
+                ],
+                "bullets": [
+                    "Teach admins setup and controls",
+                    "Teach workers add, scan, checkout, and reservations",
+                    "Teach viewers search and site visibility only"
+                ],
+            },
+        ],
+        "cta_title": "Roll out inventory without turning onboarding into a project",
+        "cta_copy": "CountDepot helps small teams launch clean inventory workflows with categories, sites, scanning, reservations, and role-based access in one system.",
+        "related_slugs": [
+            "inventory-management",
+            "inventory-sop-template-for-receiving-checkout-and-counts",
+            "barcode-labeling-best-practices-for-inventory-teams",
+        ],
+    },
 }
 
 
@@ -598,3 +664,25 @@ def resource_page_for_slug(slug):
 
 def resource_slugs():
     return tuple(RESOURCE_GUIDES.keys())
+
+
+def homepage_resource_cards():
+    curated = (
+        ("inventory-management", "Read pillar guide ->"),
+        ("inventory-management-software-vs-spreadsheets", "Read guide ->"),
+        ("how-it-teams-track-inventory-across-locations", "Open workflow ->"),
+        ("barcode-labeling-best-practices-for-inventory-teams", "Read labeling guide ->"),
+        ("inventory-sop-template-for-receiving-checkout-and-counts", "Open SOP template ->"),
+        ("inventory-onboarding-checklist-for-small-teams", "Open checklist ->"),
+    )
+    cards = []
+    for slug, footer in curated:
+        page = RESOURCE_GUIDES[slug]
+        cards.append({
+            "slug": slug,
+            "eyebrow": page["eyebrow"],
+            "title": page["hero_title"],
+            "summary": page["hero_subtitle"],
+            "footer": footer,
+        })
+    return cards

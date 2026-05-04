@@ -1460,30 +1460,14 @@ footer p{font-size:13px;color:var(--muted);font-weight:300}
     <p class="section-sub">These are real documents, not filler pages. Use them to compare software, explain the switch internally, and choose a workflow that fits your operation.</p>
     <div class="resources-shell">
       <div class="seo-links-grid">
-        <a class="seo-link-card" href="/resources/inventory-management">
-          <span class="seo-link-kicker">Pillar Guide</span>
-          <h3>Inventory management: what it is, how it works, and how to improve it</h3>
-          <p>Start with the core guide for teams researching inventory management before choosing software or redesigning the workflow.</p>
-          <span class="seo-link-footer">Read pillar guide -></span>
+        {% for guide in homepage_resources %}
+        <a class="seo-link-card" href="/resources/{{ guide.slug }}">
+          <span class="seo-link-kicker">{{ guide.eyebrow }}</span>
+          <h3>{{ guide.title }}</h3>
+          <p>{{ guide.summary }}</p>
+          <span class="seo-link-footer">{{ guide.footer }}</span>
         </a>
-        <a class="seo-link-card" href="/resources/inventory-management-software-vs-spreadsheets">
-          <span class="seo-link-kicker">Guide</span>
-          <h3>Inventory management software vs. spreadsheets</h3>
-          <p>Read the breakdown of where spreadsheets fail first and what a proper inventory workflow fixes.</p>
-          <span class="seo-link-footer">Read guide -></span>
-        </a>
-        <a class="seo-link-card" href="/resources/how-it-teams-track-inventory-across-locations">
-          <span class="seo-link-kicker">Workflow</span>
-          <h3>How IT teams track inventory across locations</h3>
-          <p>See a filled-out operational workflow for multi-site inventory, reservations, and device accountability.</p>
-          <span class="seo-link-footer">Open workflow -></span>
-        </a>
-        <a class="seo-link-card" href="/resources/barcode-labeling-best-practices-for-inventory-teams">
-          <span class="seo-link-kicker">Operations Guide</span>
-          <h3>Barcode labeling best practices for inventory teams</h3>
-          <p>Set up labels for items, shelves, and locations so scanning stays fast and workers hit the right barcode every time.</p>
-          <span class="seo-link-footer">Read labeling guide -></span>
-        </a>
+        {% endfor %}
       </div>
     </div>
     <div class="resources-cta">
@@ -1782,8 +1766,8 @@ async function submitDemoRequest(){
 <div class="exit-modal-overlay" id="exitIntentOverlay" role="dialog" aria-modal="true" aria-labelledby="exitIntentTitle">
   <div class="exit-modal">
     <h3 id="exitIntentTitle">Before you go —</h3>
-    <p>See how CountDepot works in 60 seconds.</p>
-    <a class="btn-primary" href="/#demo">Watch the demo</a>
+    <p>Did you know CountDepot is completely free to start for 1 user, 2 sites, and 250 items?</p>
+    <a class="btn-primary" href="/signup">Sign up</a>
     <a href="#" class="exit-modal-dismiss" onclick="dismissExitIntent(event)">No thanks</a>
   </div>
 </div>
