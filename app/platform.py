@@ -42,7 +42,10 @@ def init_platform_db():
             stripe_subscription_id TEXT,
             cancellation_reason TEXT,
             cancelled_at TEXT,
-            free_access INTEGER NOT NULL DEFAULT 0
+            free_access INTEGER NOT NULL DEFAULT 0,
+            free_inactive_warned_at TEXT,
+            free_inactive_delete_at TEXT,
+            free_inactive_reason TEXT
         );
         CREATE TABLE IF NOT EXISTS rate_limits (
             ip       TEXT NOT NULL,
@@ -118,6 +121,12 @@ def init_platform_db():
         db.execute("ALTER TABLE tenants ADD COLUMN cancelled_at TEXT")
     if "free_access" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN free_access INTEGER NOT NULL DEFAULT 0")
+    if "free_inactive_warned_at" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN free_inactive_warned_at TEXT")
+    if "free_inactive_delete_at" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN free_inactive_delete_at TEXT")
+    if "free_inactive_reason" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN free_inactive_reason TEXT")
     pending_cols = [r[1] for r in db.execute("PRAGMA table_info(pending_signups)").fetchall()]
     if "selected_plan" not in pending_cols:
         db.execute("ALTER TABLE pending_signups ADD COLUMN selected_plan TEXT")

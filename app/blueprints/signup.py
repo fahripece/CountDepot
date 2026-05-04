@@ -24,7 +24,7 @@ from flask import Blueprint, render_template, request, redirect, url_for
 
 from app.platform            import create_tenant, get_tenant_by_slug, get_tenant_by_owner_email, get_platform_db
 from app.blueprints.platform import _bootstrap_tenant_db
-from app.mailer              import send_signup_verification_email, send_welcome_email
+from app.mailer              import send_signup_verification_email, send_welcome_email, send_platform_signup_alert
 from app.helpers             import hash_pw, check_rate_limit
 from config                  import Config
 from app.stripe_billing      import PLAN_ORDER
@@ -193,6 +193,14 @@ def signup():
             db.close()
 
             send_signup_verification_email(email, name, token)
+            send_platform_signup_alert(
+                name=name,
+                email=email,
+                slug=slug,
+                selected_plan=selected_plan,
+                selected_period=selected_period,
+                stage="Verification email sent",
+            )
 
             return render_template(
                 "signup_verify_sent.html",
@@ -321,6 +329,15 @@ def verify_signup(token):
 
     # Welcome email
     send_welcome_email(email, name, slug, temp_password=None, verify_token=None)
+    send_platform_signup_alert(
+        name=name,
+        email=email,
+        slug=slug,
+        selected_plan=selected_plan,
+        selected_period=selected_period,
+        stage="Workspace created",
+        created=True,
+    )
 
     workspace_url = _workspace_base_url(slug)
     if selected_plan in PLAN_ORDER:

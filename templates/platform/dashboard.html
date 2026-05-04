@@ -75,6 +75,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 .health-fill.warn{background:#fbbf24}.health-fill.bad{background:#f87171}
 .risk-list{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
 .risk{font-size:10px;color:#fcd34d;background:#422006;border:1px solid #78350f;border-radius:5px;padding:2px 6px}
+.subtle-band{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:12px 14px;margin-bottom:18px}
+.split-panels{display:grid;grid-template-columns:1.05fr .95fr;gap:16px;margin-bottom:28px}
+@media(max-width:900px){.split-panels{grid-template-columns:1fr}}
 @media(max-width:900px){.exec-grid{grid-template-columns:1fr}.metric-row{grid-template-columns:repeat(2,1fr)}}
 
 /* Table */
@@ -211,6 +214,10 @@ tr:hover td{background:#1a2947}
       <div class="card-lbl">Users total</div>
     </div>
     <div class="card">
+      <div class="card-val">{{ signup_summary.last_7d or 0 }}</div>
+      <div class="card-lbl">Signups last 7d</div>
+    </div>
+    <div class="card">
       <div class="card-val" style="font-size:18px">{{ total_kb }} KB</div>
       <div class="card-lbl">Total DB size</div>
     </div>
@@ -323,6 +330,15 @@ tr:hover td{background:#1a2947}
                 {% endif %}
               </div>
               {% endif %}
+              {% if t.free_inactive_delete_at %}
+              <div class="{% if t.free_inactive_due %}risk{% else %}muted{% endif %}" style="margin-top:4px">
+                {% if t.free_inactive_due %}
+                  Free cleanup due
+                {% else %}
+                  Free cleanup {{ t.free_inactive_delete_at[:10] }}
+                {% endif %}
+              </div>
+              {% endif %}
             </td>
             <td>
               <span class="health">
@@ -406,9 +422,83 @@ tr:hover td{background:#1a2947}
   <div class="tab-panel" id="tab-growth">
     <div class="cards">
       <div class="card"><div class="card-val green">${{ estimated_mrr }}</div><div class="card-lbl">MRR from paying tenants</div></div>
+      <div class="card"><div class="card-val">{{ signup_summary.total or 0 }}</div><div class="card-lbl">Captured signups</div></div>
+      <div class="card"><div class="card-val">{{ signup_summary.pending or 0 }}</div><div class="card-lbl">Pending verification</div></div>
+      <div class="card"><div class="card-val">{{ signup_summary.verified or 0 }}</div><div class="card-lbl">Verified / workspace created</div></div>
       <div class="card"><div class="card-val">{{ trial_ending|length }}</div><div class="card-lbl">Trials/pilots ending soon</div></div>
       <div class="card"><div class="card-val amber">{{ inactive|length }}</div><div class="card-lbl">Inactive / never logged in</div></div>
+      <div class="card"><div class="card-val amber">{{ free_cleanup_queue|length }}</div><div class="card-lbl">Free cleanup queue</div></div>
       <div class="card"><div class="card-val red">{{ cancellations|length }}</div><div class="card-lbl">Cancelled customers</div></div>
+    </div>
+    <div class="split-panels">
+      <div class="panel">
+        <div class="panel-title">Recent Signups</div>
+        <div class="subtle-band" style="display:flex;gap:16px;flex-wrap:wrap">
+          <div style="font-size:12px;color:#94a3b8">Free intent <strong style="color:#f8fafc">{{ signup_summary.free_intent or 0 }}</strong></div>
+          <div style="font-size:12px;color:#94a3b8">Paid intent <strong style="color:#f8fafc">{{ signup_summary.paid_intent or 0 }}</strong></div>
+          <div style="font-size:12px;color:#94a3b8">Pending <strong style="color:#f8fafc">{{ signup_summary.pending or 0 }}</strong></div>
+        </div>
+        <div class="tbl-wrap">
+          <table style="min-width:unset">
+            <thead><tr><th>Company</th><th>Plan intent</th><th>Stage</th><th>Created</th></tr></thead>
+            <tbody>
+              {% for signup in recent_signups %}
+              <tr>
+                <td>
+                  <strong>{{ signup.name }}</strong>
+                  <div class="slug">{{ signup.slug }}</div>
+                  <div class="muted">{{ signup.email }}</div>
+                </td>
+                <td>{{ (signup.selected_plan or 'free')|title }} · {{ (signup.selected_period or 'monthly')|title }}</td>
+                <td>
+                  {% if signup.workspace_created_at %}
+                  <span class="badge sub-active">Workspace created</span>
+                  {% elif signup.used %}
+                  <span class="badge sub-trial">Verified</span>
+                  {% else %}
+                  <span class="badge sub-expired">Pending verify</span>
+                  {% endif %}
+                </td>
+                <td>{{ signup.created_at[:10] if signup.created_at else '—' }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4" style="text-align:center;padding:32px;color:#475569">No recent signups captured yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Free Tier Cleanup Queue</div>
+        <div class="tbl-wrap">
+          <table style="min-width:unset">
+            <thead><tr><th>Workspace</th><th>Reason</th><th>Delete date</th></tr></thead>
+            <tbody>
+              {% for t in free_cleanup_queue %}
+              <tr>
+                <td><strong>{{ t.name }}</strong><div class="slug">{{ t.slug }}</div></td>
+                <td style="color:#94a3b8">
+                  {% if t.free_inactive_reason == 'no_inventory' %}
+                  No inventory after 30 days
+                  {% else %}
+                  No add/remove activity in 30 days
+                  {% endif %}
+                </td>
+                <td>
+                  {% if t.free_inactive_due %}
+                  <span class="risk">Due now</span>
+                  {% else %}
+                  {{ t.free_inactive_delete_at[:10] if t.free_inactive_delete_at else '—' }}
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="3" style="text-align:center;padding:32px;color:#475569">No inactive free workspaces in the cleanup queue.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
     <div class="sec-hdr"><h2>Owner action queue</h2></div>
     <div class="tbl-wrap" style="margin-bottom:24px">

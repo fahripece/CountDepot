@@ -20,8 +20,12 @@ from app.platform import (get_platform_db, create_tenant,
                            get_tenant_by_slug, init_platform_db)
 from app.helpers  import hash_pw, check_rate_limit
 from config       import Config
+from app.mailer   import send_free_inactive_warning_email
 
 bp = Blueprint("platform", __name__, url_prefix="/_platform")
+
+FREE_INACTIVE_WARNING_DAYS = 30
+FREE_INACTIVE_DELETE_GRACE_DAYS = 7
 
 # ── Platform-admin auth ───────────────────────────────────────────────────────
 
@@ -259,6 +263,120 @@ def _sync_trial_expirations():
     db.close()
 
 
+def _recent_signups(limit=12):
+    db = get_platform_db()
+    try:
+        rows = db.execute(
+            """
+            SELECT ps.name, ps.slug, ps.email, ps.selected_plan, ps.selected_period,
+                   ps.created_at, ps.used,
+                   t.created_at AS workspace_created_at,
+                   t.subscription_status,
+                   t.plan AS current_plan
+            FROM pending_signups ps
+            LEFT JOIN tenants t ON t.slug = ps.slug
+            ORDER BY datetime(ps.created_at) DESC
+            LIMIT ?
+            """,
+            [limit],
+        ).fetchall()
+        summary = db.execute(
+            """
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN used=0 THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN used=1 THEN 1 ELSE 0 END) AS verified,
+              SUM(CASE WHEN COALESCE(selected_plan,'free')='free' THEN 1 ELSE 0 END) AS free_intent,
+              SUM(CASE WHEN COALESCE(selected_plan,'free')!='free' THEN 1 ELSE 0 END) AS paid_intent,
+              SUM(CASE WHEN created_at >= datetime('now','-7 days') THEN 1 ELSE 0 END) AS last_7d
+            FROM pending_signups
+            """
+        ).fetchone()
+    finally:
+        db.close()
+    return [dict(r) for r in rows], dict(summary or {})
+
+
+def _sync_free_inactive_accounts(tenants):
+    db = get_platform_db()
+    try:
+        rows = db.execute(
+            "SELECT slug, owner_email, name, plan, subscription_status, free_access, "
+            "free_inactive_warned_at, free_inactive_delete_at, free_inactive_reason "
+            "FROM tenants"
+        ).fetchall()
+        by_slug = {row["slug"]: dict(row) for row in rows}
+        now = _utc_now()
+        synced = {}
+        for tenant in tenants:
+            slug = tenant["slug"]
+            row = by_slug.get(slug)
+            if not row:
+                continue
+            tenant["free_inactive_warned_at"] = row.get("free_inactive_warned_at")
+            tenant["free_inactive_delete_at"] = row.get("free_inactive_delete_at")
+            tenant["free_inactive_reason"] = row.get("free_inactive_reason")
+
+            is_free_plan = (row.get("plan") or "").lower() == "free"
+            is_paid = (row.get("subscription_status") or "active") != "active" or not is_free_plan or row.get("free_access")
+            if is_paid:
+                if row.get("free_inactive_warned_at") or row.get("free_inactive_delete_at") or row.get("free_inactive_reason"):
+                    db.execute(
+                        "UPDATE tenants SET free_inactive_warned_at=NULL, free_inactive_delete_at=NULL, free_inactive_reason=NULL WHERE slug=?",
+                        [slug],
+                    )
+                tenant["free_inactive_warned_at"] = None
+                tenant["free_inactive_delete_at"] = None
+                tenant["free_inactive_reason"] = None
+                continue
+
+            created_days = _days_since(tenant.get("created_at"))
+            items = tenant["stats"].get("items", 0)
+            days_since_activity = tenant.get("days_since_activity")
+            warn_reason = None
+            if items == 0 and created_days is not None and created_days >= FREE_INACTIVE_WARNING_DAYS:
+                warn_reason = "no_inventory"
+            elif items > 0 and (days_since_activity is None or days_since_activity >= FREE_INACTIVE_WARNING_DAYS):
+                warn_reason = "no_activity"
+
+            if warn_reason:
+                warned_at = row.get("free_inactive_warned_at")
+                delete_at = row.get("free_inactive_delete_at")
+                if not delete_at:
+                    delete_at = _fmt_dt(now + timedelta(days=FREE_INACTIVE_DELETE_GRACE_DAYS))
+                if not warned_at:
+                    warned_at = _fmt_dt(now)
+                    send_free_inactive_warning_email(
+                        row.get("owner_email"),
+                        row.get("name") or slug,
+                        slug,
+                        delete_at,
+                        warn_reason,
+                    )
+                db.execute(
+                    "UPDATE tenants SET free_inactive_warned_at=?, free_inactive_delete_at=?, free_inactive_reason=? WHERE slug=?",
+                    [warned_at, delete_at, warn_reason, slug],
+                )
+                tenant["free_inactive_warned_at"] = warned_at
+                tenant["free_inactive_delete_at"] = delete_at
+                tenant["free_inactive_reason"] = warn_reason
+            else:
+                if row.get("free_inactive_warned_at") or row.get("free_inactive_delete_at") or row.get("free_inactive_reason"):
+                    db.execute(
+                        "UPDATE tenants SET free_inactive_warned_at=NULL, free_inactive_delete_at=NULL, free_inactive_reason=NULL WHERE slug=?",
+                        [slug],
+                    )
+                tenant["free_inactive_warned_at"] = None
+                tenant["free_inactive_delete_at"] = None
+                tenant["free_inactive_reason"] = None
+
+            synced[slug] = tenant
+        db.commit()
+        return synced
+    finally:
+        db.close()
+
+
 def _trial_days_left(value):
     if not value:
         return None
@@ -310,6 +428,12 @@ def _enrich_tenant(t):
     t["days_since_activity"] = _days_since(t["stats"].get("last_activity"))
     t["is_free_access"] = _is_free_access(t)
     t["days_until_delete"] = _days_until(t.get("scheduled_delete_at"))
+    t["free_inactive_days_until_delete"] = _days_until(t.get("free_inactive_delete_at"))
+    t["free_inactive_due"] = (
+        bool(t.get("free_inactive_delete_at"))
+        and t["free_inactive_days_until_delete"] is not None
+        and t["free_inactive_days_until_delete"] < 0
+    )
     t["is_deletion_due"] = (
         (t.get("subscription_status") == "expired")
         and t["days_until_delete"] is not None
@@ -322,6 +446,9 @@ def _enrich_tenant(t):
     if t["is_deletion_due"]:
         score -= 65
         risks.append("Ready for deletion")
+    if t["free_inactive_due"]:
+        score -= 30
+        risks.append("Free cleanup due")
     if not t.get("active"):
         score -= 45
         risks.append("Suspended")
@@ -353,6 +480,9 @@ def _enrich_tenant(t):
     if t["stats"].get("audit_30d", 0) == 0 and t["stats"].get("items", 0) > 0:
         score -= 10
         risks.append("No recent activity")
+    if t.get("free_inactive_delete_at") and t["free_inactive_days_until_delete"] is not None and not t["free_inactive_due"]:
+        score -= 10
+        risks.append(f"Free cleanup in {t['free_inactive_days_until_delete']}d")
 
     t["health_score"] = max(0, min(100, score))
     t["risk_flags"] = risks
@@ -506,7 +636,10 @@ def dashboard():
     tenants = _all_tenants()
     for t in tenants:
         t["stats"] = _tenant_stats(t["slug"])
+    _sync_free_inactive_accounts(tenants)
+    for t in tenants:
         _enrich_tenant(t)
+    recent_signups, signup_summary = _recent_signups()
     today = date.today().isoformat()
     total_items   = sum(t["stats"]["items"] for t in tenants)
     total_users   = sum(t["stats"]["users"] for t in tenants)
@@ -526,6 +659,8 @@ def dashboard():
     inactive = [t for t in tenants if t.get("days_since_login") is None or t.get("days_since_login", 0) >= 30]
     cancellations = [t for t in tenants if t.get("subscription_status") == "cancelled"]
     deletion_due = [t for t in tenants if t.get("is_deletion_due")]
+    free_cleanup_queue = [t for t in tenants if t.get("free_inactive_delete_at")]
+    free_cleanup_due = [t for t in tenants if t.get("free_inactive_due")]
     expansion_candidates = sorted(
         [t for t in tenants if t.get("subscription_status") == "active"
          and t.get("plan") == "starter" and (t["stats"]["users"] >= 4 or t["stats"].get("sites", 0) >= 4)],
@@ -542,6 +677,9 @@ def dashboard():
     for t in deletion_due[:8]:
         action_items.append({"priority": "high", "label": "Expired access ready for deletion",
                              "tenant": t, "detail": "Grace period ended; confirm delete or extend/reactivate"})
+    for t in free_cleanup_due[:8]:
+        action_items.append({"priority": "med", "label": "Free workspace cleanup due",
+                             "tenant": t, "detail": "Inactive free workspace reached its cleanup date"})
     for t in [x for x in at_risk if x.get("subscription_status") not in ("overdue", "expired")][:8]:
         action_items.append({"priority": "med", "label": "Usage risk",
                              "tenant": t, "detail": ", ".join(t["risk_flags"][:2]) or "Low health score"})
@@ -563,8 +701,12 @@ def dashboard():
                            inactive=inactive,
                            cancellations=cancellations,
                            deletion_due=deletion_due,
+                           free_cleanup_queue=free_cleanup_queue,
+                           free_cleanup_due=free_cleanup_due,
                            expansion_candidates=expansion_candidates,
                            action_items=action_items[:12],
+                           recent_signups=recent_signups,
+                           signup_summary=signup_summary,
                            today=today)
 
 

@@ -7,6 +7,7 @@ and for setups that don't need email yet.
 
 import smtplib
 import logging
+from html import escape
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text      import MIMEText
@@ -117,6 +118,84 @@ def send_signup_verification_email(to: str, name: str, token: str) -> bool:
     text = (f"Verify your CountDepot email\n\n"
             f"Hi {name},\n\nClick here to verify and create your workspace (expires 24h):\n{url}\n\n"
             f"If you didn't sign up, ignore this email.\n")
+    return send_email(to, subject, html, text)
+
+
+def send_platform_signup_alert(name: str, email: str, slug: str, selected_plan: str,
+                               selected_period: str, stage: str, created: bool = False) -> bool:
+    to = Config.PLATFORM_ADMIN_EMAIL or Config.SUPPORT_EMAIL
+    if not to:
+        return False
+    safe_name = escape(name or "Unknown")
+    safe_email = escape(email or "Unknown")
+    safe_slug = escape(slug or "unknown")
+    safe_plan = escape((selected_plan or "free").title())
+    safe_period = escape((selected_period or "monthly").title())
+    safe_stage = "Workspace created" if created else "Signup submitted"
+    subject = f"[CountDepot] {safe_stage}: {name or email or slug}"
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <div style="display:inline-block;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:700;letter-spacing:.5px;padding:3px 10px;border-radius:4px;margin-bottom:16px">{safe_stage.upper()}</div>
+  <h2 style="font-size:18px;font-weight:700;margin-bottom:8px">New CountDepot signup activity</h2>
+  <p style="color:#64748b;margin-bottom:20px;font-size:13px">A new self-serve account event just happened.</p>
+  <div style="background:#f8f7f4;border-radius:8px;padding:14px 18px;margin-bottom:20px">
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px">COMPANY</div>
+    <div style="font-weight:700">{safe_name}</div>
+    <div style="margin-top:12px;font-size:11px;color:#94a3b8;margin-bottom:4px">EMAIL</div>
+    <div style="font-family:monospace">{safe_email}</div>
+    <div style="margin-top:12px;font-size:11px;color:#94a3b8;margin-bottom:4px">WORKSPACE</div>
+    <div style="font-family:monospace">{safe_slug}</div>
+    <div style="margin-top:12px;font-size:11px;color:#94a3b8;margin-bottom:4px">PLAN INTENT</div>
+    <div>{safe_plan} · {safe_period}</div>
+    <div style="margin-top:12px;font-size:11px;color:#94a3b8;margin-bottom:4px">STAGE</div>
+    <div>{escape(stage or safe_stage)}</div>
+  </div>
+  <p style="font-size:12px;color:#94a3b8">Check the platform dashboard for recent signups, verification status, and workspace health.</p>
+</div>"""
+    text = (
+        f"CountDepot signup activity\n\n"
+        f"Stage: {stage or safe_stage}\n"
+        f"Company: {name}\n"
+        f"Email: {email}\n"
+        f"Workspace: {slug}\n"
+        f"Plan intent: {selected_plan} ({selected_period})\n"
+    )
+    return send_email(to, subject, html, text)
+
+
+def send_free_inactive_warning_email(to: str, name: str, slug: str, delete_at: str, reason: str) -> bool:
+    if not to:
+        return False
+    domain = Config.APP_DOMAIN
+    workspace_url = f"https://{slug}.{domain}"
+    reason_text = {
+        "no_inventory": "No inventory has been added in the last 30 days.",
+        "no_activity": "No inventory activity has been recorded in the last 30 days.",
+    }.get(reason, "This free workspace has been inactive for 30 days.")
+    subject = "Your CountDepot free workspace is scheduled for cleanup"
+    html = f"""
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#0f172a">
+  <div style="display:inline-block;background:#fffbeb;color:#92400e;font-size:11px;font-weight:700;letter-spacing:.5px;padding:3px 10px;border-radius:4px;margin-bottom:16px">INACTIVE FREE WORKSPACE</div>
+  <h2 style="font-size:20px;font-weight:700;margin-bottom:8px">Your CountDepot free workspace needs activity</h2>
+  <p style="color:#64748b;margin-bottom:18px;font-size:13px">{reason_text}</p>
+  <div style="background:#f8f7f4;border-radius:8px;padding:14px 18px;margin-bottom:20px">
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px">WORKSPACE</div>
+    <div style="font-weight:700">{escape(name)}</div>
+    <div style="font-family:monospace;color:#1d4ed8;margin-top:4px">{escape(workspace_url)}</div>
+    <div style="margin-top:12px;font-size:11px;color:#94a3b8;margin-bottom:4px">SCHEDULED CLEANUP DATE</div>
+    <div style="font-weight:700">{escape(delete_at[:10] if delete_at else "")}</div>
+  </div>
+  <p style="color:#64748b;margin-bottom:20px;font-size:13px">Log in and add inventory or record inventory activity before that date to keep the workspace active.</p>
+  <a href="{workspace_url}" style="display:inline-block;padding:12px 24px;background:#1d4ed8;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;font-size:14px">Open my workspace →</a>
+</div>"""
+    text = (
+        f"Your CountDepot free workspace is scheduled for cleanup.\n\n"
+        f"Workspace: {name}\n"
+        f"URL: {workspace_url}\n"
+        f"Reason: {reason_text}\n"
+        f"Scheduled cleanup date: {delete_at[:10] if delete_at else ''}\n\n"
+        f"Log in and add inventory or record inventory activity before that date to keep the workspace active.\n"
+    )
     return send_email(to, subject, html, text)
 
 

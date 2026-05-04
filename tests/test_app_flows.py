@@ -2634,6 +2634,68 @@ def test_free_signup_success_page_fires_marketing_conversion_events(app, monkeyp
     assert "https://freeplan.countdepot.com/login" in body
 
 
+def test_signup_flow_sends_platform_admin_alerts(app, monkeypatch):
+    from app.platform import get_platform_db
+
+    alerts = []
+    monkeypatch.setattr(
+        "app.blueprints.signup.send_signup_verification_email",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        "app.blueprints.signup.send_welcome_email",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        "app.blueprints.signup.send_platform_signup_alert",
+        lambda **kwargs: alerts.append(kwargs) or True,
+    )
+
+    client = app.test_client()
+    get_response = client.get("/signup", base_url="http://countdepot.com")
+    body = get_response.get_data(as_text=True)
+    form_started = re.search(r'name="form_started" value="(\d+)"', body).group(1)
+    csrf_token = re.search(r'name="csrf_token" value="([a-f0-9]+)"', body).group(1)
+
+    post_response = client.post(
+        "/signup",
+        base_url="http://countdepot.com",
+        data={
+            "csrf_token": csrf_token,
+            "form_started": str(int(form_started) - 10),
+            "website": "",
+            "name": "Signal Co",
+            "slug": "signal-co",
+            "email": "owner@signalco.com",
+            "password": "Password1!",
+            "selected_plan": "pro",
+            "selected_period": "yearly",
+        },
+    )
+
+    assert post_response.status_code == 200
+    assert alerts[0]["stage"] == "Verification email sent"
+    assert alerts[0]["slug"] == "signal-co"
+    assert alerts[0]["selected_plan"] == "pro"
+
+    db = get_platform_db()
+    token = db.execute(
+        "SELECT token FROM pending_signups WHERE slug=?",
+        ["signal-co"],
+    ).fetchone()["token"]
+    db.close()
+
+    verify_response = client.get(
+        f"/verify-signup/{token}",
+        base_url="http://countdepot.com",
+        follow_redirects=False,
+    )
+
+    assert verify_response.status_code == 302
+    assert alerts[-1]["stage"] == "Workspace created"
+    assert alerts[-1]["created"] is True
+
+
 def test_free_plan_blocks_adding_second_user(app, tenant):
     from app.platform import get_platform_db
 
@@ -4079,6 +4141,44 @@ def test_platform_dashboard_renders_owner_metrics(app):
         "VALUES (?,?,?,?,?,?,?,?,?,?)",
         ["deadtrial", "Dead Trial", "starter", "", 1, 1, "2024-01-01 00:00:00", "dead@example.com", "trial", "2024-02-01 00:00:00"],
     )
+    db.execute(
+        """
+        INSERT INTO pending_signups
+        (name, slug, email, password_hash, selected_plan, selected_period, token, created_at, expires_at, used)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "Pending Co",
+            "pendingco",
+            "owner@pendingco.com",
+            hash_pw("Password1!"),
+            "free",
+            "monthly",
+            "pending-co-token",
+            "2026-04-20 00:00:00",
+            "2099-01-01 00:00:00",
+            0,
+        ],
+    )
+    db.execute(
+        """
+        INSERT INTO pending_signups
+        (name, slug, email, password_hash, selected_plan, selected_period, token, created_at, expires_at, used)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "Verified Co",
+            "verifiedco",
+            "owner@verifiedco.com",
+            hash_pw("Password1!"),
+            "starter",
+            "yearly",
+            "verified-co-token",
+            "2026-04-21 00:00:00",
+            "2099-01-01 00:00:00",
+            1,
+        ],
+    )
     db.commit()
     db.close()
 
@@ -4110,8 +4210,56 @@ def test_platform_dashboard_renders_owner_metrics(app):
     assert "$50" in body
     assert "$600" in body
     assert "Free/Partner" in body
+    assert "Recent Signups" in body
+    assert "Pending Co" in body
+    assert "Pending verify" in body
     assert "2026-04-12" in body
     assert "Expired access ready for deletion" in body
     assert "Ready for deletion" in body
     assert "Cancellations and churn notes" in body
     assert "Too expensive" in body
+
+
+def test_platform_dashboard_warns_on_inactive_free_workspace(app, monkeypatch):
+    from app.platform import get_platform_db
+    from app.blueprints.platform import SESSION_KEY
+
+    sent = {}
+    monkeypatch.setattr(
+        "app.blueprints.platform.send_free_inactive_warning_email",
+        lambda to, name, slug, delete_at, reason: sent.update(
+            {"to": to, "name": name, "slug": slug, "delete_at": delete_at, "reason": reason}
+        ) or True,
+    )
+
+    db = get_platform_db()
+    db.execute(
+        "INSERT INTO tenants (slug,name,plan,sector,onboarded,active,created_at,owner_email,subscription_status,trial_ends_at,free_access) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        ["quietfree", "Quiet Free", "free", "", 1, 1, "2026-03-01 00:00:00", "quiet@example.com", "active", None, 0],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context("/_platform/", base_url="http://localhost:5000"):
+        session[SESSION_KEY] = True
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Free Tier Cleanup Queue" in body
+    assert "Quiet Free" in body
+    assert "No inventory after 30 days" in body
+
+    db = get_platform_db()
+    row = db.execute(
+        "SELECT free_inactive_warned_at, free_inactive_delete_at, free_inactive_reason FROM tenants WHERE slug=?",
+        ["quietfree"],
+    ).fetchone()
+    db.close()
+
+    assert row["free_inactive_warned_at"] is not None
+    assert row["free_inactive_delete_at"] is not None
+    assert row["free_inactive_reason"] == "no_inventory"
+    assert sent["to"] == "quiet@example.com"
+    assert sent["slug"] == "quietfree"
