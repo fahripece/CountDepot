@@ -3612,6 +3612,8 @@ def test_checkout_page_has_camera_scan_button(app, tenant):
     assert "scanCheckoutWithCamera" in body
     assert "openCameraScanner" in body
     assert "Camera</button>" in body
+    assert "Scan or search by serial, SKU, shelf, item name, or manufacturer" in body
+    assert "Scan barcode or search serial / SKU / shelf / item name..." in body
     assert "Bulk Checkout Queue" in body
     assert "submitBulkCheckout" in body
     assert "bulkModeToggle" in body
