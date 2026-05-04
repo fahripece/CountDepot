@@ -167,40 +167,6 @@ body.dark [style*="background:#eff6ff"]{background:#1e293b!important;border-colo
 body.dark [style*="background:#fef3c7"],body.dark [style*="background:#fef9c3"]{background:#1e293b!important;border-color:#78350f!important}
 body.dark [style*="background:#f8f7f5"],body.dark [style*="background:#f5f4f1"],body.dark [style*="background:#f0efec"]{background:#162032!important}
 body.dark [style*="background:#f0f7ff"],body.dark [style*="background:#f0f9ff"]{background:#1e293b!important;border-color:#1e3a8a!important}
-.intro-tour-overlay{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.18);display:none;align-items:flex-start;justify-content:flex-end;padding:84px 24px 18px;pointer-events:none}
-.intro-tour-overlay.show{display:flex}
-.intro-tour-overlay.choice-mode{align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.38);pointer-events:auto}
-.intro-tour-card{width:min(430px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--border);border-radius:28px;box-shadow:var(--shadow-3);overflow:hidden;color:var(--text);pointer-events:auto;position:relative;z-index:10003}
-.intro-tour-choice{width:min(520px,calc(100vw - 32px));background:var(--surface);border:1px solid rgba(255,255,255,.65);border-radius:30px;box-shadow:var(--shadow-3);padding:28px;color:var(--text);pointer-events:auto;position:relative;z-index:10004}
-.intro-tour-choice h2{font-size:28px;line-height:1.05;letter-spacing:-.04em;margin:8px 0 10px}
-.intro-tour-choice p{color:var(--muted);line-height:1.6;font-size:14px;margin:0 0 18px}
-.intro-tour-choice-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
-.intro-tour-choice-actions .btn,.intro-tour-choice-actions .intro-tour-skip{min-height:42px}
-.intro-tour-choice-actions .intro-tour-skip{border:1px solid var(--border);border-radius:999px;background:var(--surface);padding:9px 16px}
-.intro-tour-card.tour-hidden,.intro-tour-choice.tour-hidden{display:none}
-.intro-tour-spotlight{position:fixed;border:3px solid var(--primary);border-radius:18px;box-shadow:0 0 0 9999px rgba(15,23,42,.22),0 18px 42px rgba(15,23,42,.25);pointer-events:none;z-index:10001;transition:all .18s ease;display:none}
-.intro-tour-target-active{position:relative;z-index:10002!important;box-shadow:0 0 0 3px rgba(200,179,253,.72),0 12px 28px rgba(100,66,214,.28)!important;background:rgba(100,66,214,.26)!important;color:#fff!important}
-.intro-tour-hero{padding:24px;background:radial-gradient(circle at 14% 0,rgba(100,66,214,.2),transparent 34%),linear-gradient(135deg,#111827,#1f2937);color:#fff}
-.intro-tour-kicker{font-size:11px;text-transform:uppercase;letter-spacing:1.4px;color:#c8b3fd;font-weight:900;margin-bottom:8px}
-.intro-tour-title{font-size:26px;font-weight:900;letter-spacing:-.04em;line-height:1.05;margin-bottom:8px}
-.intro-tour-copy{font-size:14px;color:#cbd5e1;line-height:1.55;margin:0}
-.intro-tour-body{padding:22px}
-.intro-tour-step{display:none}
-.intro-tour-step.active{display:block}
-.intro-tour-step h3{font-size:19px;margin-bottom:8px;color:var(--text)}
-.intro-tour-step p{font-size:14px;color:var(--muted);line-height:1.65;margin-bottom:16px}
-.intro-tour-list{display:grid;gap:9px;margin:14px 0 6px}
-.intro-tour-list div{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:11px 12px;font-size:13px;font-weight:700;color:var(--text)}
-.intro-tour-list div::before{content:"";display:inline-block;width:7px;height:7px;border-radius:999px;background:var(--primary);margin-right:9px;vertical-align:middle}
-.intro-tour-progress{height:6px;background:var(--surface-3);border-radius:999px;overflow:hidden;margin-top:18px}
-.intro-tour-progress span{display:block;height:100%;width:0;background:var(--primary);transition:width .2s ease}
-.intro-tour-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 22px 22px}
-.intro-tour-actions .btn{min-width:96px}
-.intro-tour-skip{background:transparent;border:0;color:var(--muted);font-size:13px;font-weight:800;cursor:pointer}
-.intro-tour-skip:hover{color:var(--text)}
-.intro-tour-link{display:inline-flex;margin-top:6px;color:var(--primary);font-weight:900;font-size:13px}
-@media(max-width:900px){.intro-tour-overlay{padding:76px 14px 14px}.intro-tour-card{width:min(420px,100%)}}
-@media(max-width:520px){.intro-tour-title{font-size:23px}.intro-tour-actions{flex-wrap:wrap}.intro-tour-actions .btn{flex:1}.intro-tour-skip{width:100%;order:3;padding-top:4px}.intro-tour-choice-actions{grid-template-columns:1fr}}
 .mono{font-family:var(--font-mono)}
 .layout{display:flex;height:100vh;overflow:hidden}
 .sidebar{width:224px;background:linear-gradient(180deg,var(--sidebar-bg,#111827) 0%,#0b1220 100%);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;box-shadow:inset -1px 0 rgba(255,255,255,.06)}
@@ -396,7 +362,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
     <!-- ── INVENTORY ─────────────────────────────── -->
     <div class="sb-section">Inventory</div>
     <nav class="nav">
-      <a href="/" class="navlink {% if request.path == '/' %}active{% endif %}">
+      <a href="/" class="navlink {% if request.path in ('/','/items') %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
         <span>All Items</span>
       </a>
@@ -405,7 +371,7 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <span>Sites</span>
       </a>
       {% if not is_viewer %}
-      <a href="/add-item" data-tour="add-item" class="navlink {% if request.path == '/add-item' %}active{% endif %}">
+      <a href="/add-item" data-tour="add-item" class="navlink {% if request.path in ('/add-item','/items/add') %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
         <span>Add Item</span>
       </a>
@@ -582,10 +548,18 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <span style="color:#94a3b8">{{ session.get('username','') }}</span>
         {% if is_admin_like %}<span style="background:#1d4ed8;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">ADMIN</span>{% elif session.get('role') == 'viewer' %}<span style="background:#6d28d9;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">VIEWER</span>{% endif %}
       </div>
+      <a href="/profile" class="navlink {% if request.path == '/profile' %}active{% endif %}" style="color:#64748b">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
+        <span>Profile</span>
+      </a>
       <a href="/support" class="navlink {% if request.path == '/support' %}active{% endif %}" style="color:#64748b">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         <span>Help &amp; Support</span>
       </a>
+      <button class="navlink" type="button" onclick="window.CountDepotTour && window.CountDepotTour.restart()" style="color:#64748b">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M3 12a9 9 0 109-9"/><path d="M3 3v6h6"/></svg>
+        <span>Take the tour again</span>
+      </button>
       <!-- Onboarding checklist (admin only, auto-hides when complete) -->
       {% if is_admin_like %}
       <div id="onboardingWidget" style="display:none;margin:0 0 4px">
@@ -1135,7 +1109,7 @@ async function _switchCamera(){
 }
 </script>
 
-{% if session.get("show_intro_tour") %}
+{# {% if session.get("show_intro_tour") %}
 <div class="intro-tour-overlay show choice-mode" id="introTourOverlay" role="dialog" aria-labelledby="introTourTitle">
   <div class="intro-tour-spotlight" id="introTourSpotlight" aria-hidden="true"></div>
   <div class="intro-tour-choice" id="introTourChoice">
@@ -1230,7 +1204,7 @@ async function _switchCamera(){
     </div>
   </div>
 </div>
-{% endif %}
+{% endif %} #}
 
 <!-- ── Camera scanner overlay (global) ──────────────────────────────────────── -->
 <div id="camScanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:10000;align-items:center;justify-content:center;flex-direction:column">
@@ -1268,152 +1242,16 @@ async function _switchCamera(){
 
 {% block scripts %}{% endblock %}
 <script>
-let introTourIndex=0;
-let introTourResizeHandler=null;
-const INTRO_TOUR_ACTIVE_KEY='countDepotIntroTourActive';
-const INTRO_TOUR_STEP_KEY='countDepotIntroTourStep';
-const INTRO_TOUR_SNOOZE_KEY='countDepotIntroTourSnoozed';
-function introTourSteps(){
-  return [...document.querySelectorAll('#introTourOverlay .intro-tour-step')];
-}
-function introTourCurrentPath(){
-  return window.location.pathname.replace(/\/$/,'')||'/';
-}
-function introTourStepPath(step){
-  return (step?.dataset.path||'').replace(/\/$/,'')||'/';
-}
-function clearIntroTourTarget(){
-  document.querySelectorAll('.intro-tour-target-active').forEach(el=>el.classList.remove('intro-tour-target-active'));
-  const spot=document.getElementById('introTourSpotlight');
-  if(spot)spot.style.display='none';
-}
-function openIntroTourSection(section){
-  if(section!=='settings')return;
-  const nav=document.getElementById('settings-nav');
-  const hdr=document.getElementById('settings-hdr');
-  const chevron=document.getElementById('settings-chevron');
-  if(nav)nav.classList.remove('collapsed');
-  if(hdr)hdr.classList.add('open');
-  if(chevron)chevron.style.transform='rotate(180deg)';
-}
-function positionIntroTourSpotlight(){
-  const overlay=document.getElementById('introTourOverlay');
-  if(!overlay||!overlay.classList.contains('show'))return;
-  const step=overlay.querySelector('.intro-tour-step.active');
-  const spot=document.getElementById('introTourSpotlight');
-  clearIntroTourTarget();
-  if(!step||!spot)return;
-  openIntroTourSection(step.dataset.section);
-  const targetName=step.dataset.target;
-  const target=targetName?document.querySelector(`[data-tour="${targetName}"]`):null;
-  if(!target)return;
-  target.classList.add('intro-tour-target-active');
-  target.scrollIntoView({block:'center',inline:'nearest'});
-  requestAnimationFrame(()=>{
-    const rect=target.getBoundingClientRect();
-    spot.style.display='block';
-    spot.style.left=Math.max(8,rect.left-8)+'px';
-    spot.style.top=Math.max(8,rect.top-8)+'px';
-    spot.style.width=(rect.width+16)+'px';
-    spot.style.height=(rect.height+16)+'px';
-  });
-}
-function refreshIntroTour(){
-  const overlay=document.getElementById('introTourOverlay');
-  if(!overlay)return;
-  const steps=introTourSteps();
-  if(!steps.length){completeIntroTour();return;}
-  introTourIndex=Math.max(0,Math.min(steps.length-1,introTourIndex));
-  steps.forEach((step,idx)=>step.classList.toggle('active',idx===introTourIndex));
-  steps.forEach((step,idx)=>step.dataset.step=String(idx));
-  const progress=document.getElementById('introTourProgress');
-  if(progress)progress.style.width=((introTourIndex+1)/steps.length*100)+'%';
-  const back=document.getElementById('introTourBack');
-  const next=document.getElementById('introTourNext');
-  if(back)back.disabled=introTourIndex===0;
-  if(next)next.textContent=introTourIndex===steps.length-1?'Finish':'Next';
-  positionIntroTourSpotlight();
-}
-function showIntroTourCard(){
-  const overlay=document.getElementById('introTourOverlay');
-  const choice=document.getElementById('introTourChoice');
-  const card=document.getElementById('introTourCard');
-  if(!overlay||!card)return;
-  overlay.classList.add('show');
-  overlay.classList.remove('choice-mode');
-  if(choice)choice.classList.add('tour-hidden');
-  card.classList.remove('tour-hidden');
-}
-function showIntroTourChoice(){
-  const overlay=document.getElementById('introTourOverlay');
-  const choice=document.getElementById('introTourChoice');
-  const card=document.getElementById('introTourCard');
-  if(!overlay||!choice)return;
-  overlay.classList.add('show','choice-mode');
-  choice.classList.remove('tour-hidden');
-  if(card)card.classList.add('tour-hidden');
-  clearIntroTourTarget();
-}
-function goToIntroTourStep(index){
-  const steps=introTourSteps();
-  if(!steps.length)return;
-  introTourIndex=Math.max(0,Math.min(steps.length-1,index));
-  sessionStorage.setItem(INTRO_TOUR_ACTIVE_KEY,'1');
-  sessionStorage.setItem(INTRO_TOUR_STEP_KEY,String(introTourIndex));
-  sessionStorage.removeItem(INTRO_TOUR_SNOOZE_KEY);
-  const targetPath=introTourStepPath(steps[introTourIndex]);
-  if(targetPath&&targetPath!==introTourCurrentPath()){
-    window.location.href=targetPath;
-    return;
-  }
-  showIntroTourCard();
-  refreshIntroTour();
-}
-function startIntroTour(){
-  goToIntroTourStep(introTourIndex||0);
-}
-function moveIntroTour(delta){
-  const steps=introTourSteps();
-  if(!steps.length)return;
-  if(delta>0&&introTourIndex>=steps.length-1){completeIntroTour();return;}
-  goToIntroTourStep(introTourIndex+delta);
-}
-function snoozeIntroTour(){
-  const overlay=document.getElementById('introTourOverlay');
-  if(overlay)overlay.classList.remove('show');
-  clearIntroTourTarget();
-  sessionStorage.removeItem(INTRO_TOUR_ACTIVE_KEY);
-  sessionStorage.setItem(INTRO_TOUR_SNOOZE_KEY,'1');
-}
-async function completeIntroTour(keepNavigating){
-  const overlay=document.getElementById('introTourOverlay');
-  if(overlay)overlay.classList.remove('show');
-  clearIntroTourTarget();
-  sessionStorage.removeItem(INTRO_TOUR_ACTIVE_KEY);
-  sessionStorage.removeItem(INTRO_TOUR_STEP_KEY);
-  sessionStorage.removeItem(INTRO_TOUR_SNOOZE_KEY);
-  if(introTourResizeHandler){
-    window.removeEventListener('resize',introTourResizeHandler);
-    introTourResizeHandler=null;
-  }
-  try{
-    await fetch('/api/user/intro-tour-complete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name="csrf-token"]').content},body:'{}'});
-  }catch(e){}
-}
-document.addEventListener('DOMContentLoaded',()=>{
-  const overlay=document.getElementById('introTourOverlay');
-  if(!overlay)return;
-  introTourResizeHandler=()=>positionIntroTourSpotlight();
-  window.addEventListener('resize',introTourResizeHandler);
-  if(sessionStorage.getItem(INTRO_TOUR_ACTIVE_KEY)==='1'){
-    introTourIndex=parseInt(sessionStorage.getItem(INTRO_TOUR_STEP_KEY)||'0',10)||0;
-    goToIntroTourStep(introTourIndex);
-  }else if(sessionStorage.getItem(INTRO_TOUR_SNOOZE_KEY)==='1'){
-    overlay.classList.remove('show');
-  }else{
-    showIntroTourChoice();
-  }
-});
+window.COUNTDEPOT_TOUR_CONTEXT = {
+  role: {{ (session.get('role') or 'worker')|tojson }},
+  isAdminLike: {{ session.get('is_admin_like', False)|tojson }},
+  tourStatus: {{ (session.get('tour_status') or 'pending')|tojson }},
+  promptSuppressed: {{ session.get('tour_prompt_suppressed', False)|tojson }},
+  csrfToken: {{ csrf_token|tojson }}
+};
+</script>
+<script type="module" src="{{ url_for('static', filename='tour.js') }}"></script>
+<script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.getRegistrations()

@@ -14,7 +14,7 @@
       {% for cat in categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
     </select>
     {% if session.get('role') == 'admin' or 'write_items' in (session.get('permissions') or '') %}
-    <button class="btn btn-primary btn-sm" onclick="openAddProduct()">+ New Product</button>
+    <button class="btn btn-primary btn-sm" data-tour="add-product" onclick="openAddProduct()">+ New Product</button>
     {% endif %}
   </div>
 </div>

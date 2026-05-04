@@ -9,7 +9,9 @@ from flask import session
 from config import Config
 from app.helpers import PERM_KEYS, hash_pw, verify_pw
 from app.blueprints.auth import auto_login, login_page, verify_2fa
-from app.blueprints.main import admin_page, categories_page, docs_page, forecasting_page, integrations_page, inventory, products_page
+from app.blueprints.main import (admin_page, categories_page, docs_page, forecasting_page,
+                                 integrations_page, inventory, products_page, sites_page,
+                                 reservations_page, profile_page, add_item_page)
 from app.blueprints.api import (
     api_add_reservation,
     api_cat_add,
@@ -50,6 +52,7 @@ from app.blueprints.api import (
     api_toggle_2fa,
     api_verify_2fa_setup,
     api_alerts,
+    api_tour_status,
 )
 
 
@@ -441,11 +444,11 @@ def test_verify_2fa_uses_see_other_redirect_to_safe_next_target(app, tenant):
     assert response.headers["Location"] == "/billing/start?plan=pro&period=monthly"
 
 
-def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
+def test_first_login_uses_server_backed_tour_status_and_base_loads_tour_module(app, tenant):
     db = sqlite3.connect(tenant["db_path"])
     db.row_factory = sqlite3.Row
     db.execute(
-        "UPDATE users SET last_login=NULL, intro_tour_completed_at=NULL WHERE email=?",
+        "UPDATE users SET last_login=NULL, intro_tour_completed_at=NULL, tour_status='pending' WHERE email=?",
         [tenant["email"]],
     )
     db.commit()
@@ -453,7 +456,8 @@ def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
 
     response, saved_session = _login(app, tenant)
     assert response.status_code == 302
-    assert saved_session["show_intro_tour"] is True
+    assert saved_session["tour_status"] == "pending"
+    assert saved_session["tour_prompt_suppressed"] is False
 
     with app.test_request_context(
         "/",
@@ -465,51 +469,43 @@ def test_first_login_shows_intro_tour_and_completion_persists(app, tenant):
         page = _as_response(app, app.preprocess_request() or inventory())
 
     body = page.get_data(as_text=True)
-    assert "Want a quick CountDepot walkthrough?" in body
-    assert "Start tutorial now" in body
-    assert "Later" in body
-    assert "I don&#39;t need a tutorial" in body or "I don't need a tutorial" in body
-    assert "First login guide" in body
-    assert "Start with categories" in body
-    assert "Create products" in body
-    assert "Use sites and locations" in body
-    assert "Add SOPs and team docs" in body
-    assert 'data-path="/docs"' in body
-    assert 'data-tour="docs"' in body
-    assert "countDepotIntroTourActive" in body
-    assert "goToIntroTourStep" in body
-    assert 'id="introTourSpotlight"' in body
-    assert 'data-target="categories"' in body
-    assert 'data-tour="categories"' in body
-    assert "positionIntroTourSpotlight" in body
+    assert "COUNTDEPOT_TOUR_CONTEXT" in body
+    assert 'src="/static/tour.js"' in body
+    assert "tourStatus:" in body
+    assert "'pending'" in body or '"pending"' in body
+    assert "Take the tour again" in body
+    assert 'data-tour="inventory-list"' in body
 
     with app.test_request_context(
-        "/api/user/intro-tour-complete",
+        "/api/tour/status",
         base_url=f"http://{tenant['host']}",
         method="POST",
-        json={},
+        json={"status": "completed"},
         headers={"X-CSRF-Token": "test-csrf-token"},
     ):
         session.update(saved_session)
         session["_csrf_token"] = "test-csrf-token"
-        complete = _as_response(app, app.preprocess_request() or api_user_intro_tour_complete())
+        complete = _as_response(app, app.preprocess_request() or api_tour_status())
         completed_session = dict(session)
 
     assert complete.status_code == 200
     assert complete.get_json()["ok"] is True
-    assert completed_session["show_intro_tour"] is False
+    assert completed_session["tour_status"] == "completed"
+    assert completed_session["tour_prompt_suppressed"] is True
 
     db = sqlite3.connect(tenant["db_path"])
-    completed_at = db.execute(
-        "SELECT intro_tour_completed_at FROM users WHERE email=?",
+    completed_at, stored_status = db.execute(
+        "SELECT intro_tour_completed_at, tour_status FROM users WHERE email=?",
         [tenant["email"]],
-    ).fetchone()[0]
+    ).fetchone()
     db.close()
     assert completed_at
+    assert stored_status == "completed"
 
     second_response, second_session = _login(app, tenant)
     assert second_response.status_code == 302
-    assert not second_session.get("show_intro_tour")
+    assert second_session["tour_status"] == "completed"
+    assert second_session["tour_prompt_suppressed"] is False
 
 
 def test_low_stock_alerts_are_scoped_per_site(app, client, tenant):
@@ -565,10 +561,10 @@ def test_low_stock_alerts_are_scoped_per_site(app, client, tenant):
     assert site_b_payload == []
 
 
-def test_intro_tour_shows_until_completed_even_if_user_has_logged_in_before(app, tenant):
+def test_tour_status_stays_pending_until_user_updates_it(app, tenant):
     db = sqlite3.connect(tenant["db_path"])
     db.execute(
-        "UPDATE users SET last_login='2026-04-17 09:00:00', intro_tour_completed_at=NULL WHERE email=?",
+        "UPDATE users SET last_login='2026-04-17 09:00:00', intro_tour_completed_at=NULL, tour_status='pending' WHERE email=?",
         [tenant["email"]],
     )
     db.commit()
@@ -576,7 +572,29 @@ def test_intro_tour_shows_until_completed_even_if_user_has_logged_in_before(app,
 
     response, saved_session = _login(app, tenant)
     assert response.status_code == 302
-    assert saved_session["show_intro_tour"] is True
+    assert saved_session["tour_status"] == "pending"
+
+
+def test_tour_target_attributes_and_profile_restart_entry_point_render(app, tenant):
+    response, saved_session = _login(app, tenant)
+    assert response.status_code == 302
+
+    pages = [
+        ("/categories", categories_page, 'data-tour="add-category"'),
+        ("/products", products_page, 'data-tour="add-product"'),
+        ("/items/add", add_item_page, 'data-tour="item-name-field"'),
+        ("/sites", sites_page, 'data-tour="site-list"'),
+        ("/reservations", reservations_page, 'data-tour="create-reservation"'),
+        ("/docs", docs_page, 'data-tour="sops-list"'),
+        ("/items", inventory, 'data-tour="inventory-list"'),
+        ("/profile", profile_page, "Restart onboarding tour"),
+    ]
+
+    for path, view_fn, needle in pages:
+        with app.test_request_context(path, base_url=f"http://{tenant['host']}", method="GET"):
+            session.update(saved_session)
+            page = _as_response(app, app.preprocess_request() or view_fn())
+        assert needle in page.get_data(as_text=True)
 
 
 def test_onboarding_gate_redirects_unfinished_tenant(app):

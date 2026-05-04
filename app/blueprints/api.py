@@ -287,13 +287,40 @@ def _forecast_metrics(stock_row, daily_usage, today):
     }
 
 
+VALID_TOUR_STATUSES = {"pending", "remind_later", "skipped", "completed"}
+
+
+def _apply_tour_status(status: str):
+    if status not in VALID_TOUR_STATUSES:
+        return False
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    completed_at = now if status == "completed" else None
+    execute(
+        "UPDATE users SET tour_status=?, intro_tour_completed_at=? WHERE id=?",
+        [status, completed_at, session.get("user_id")],
+    )
+    session["tour_status"] = status
+    return True
+
+
+@bp.route("/api/tour/status", methods=["POST"])
+@login_required
+def api_tour_status():
+    data = request.get_json(silent=True) or {}
+    status = str(data.get("status") or "").strip()
+    if not _apply_tour_status(status):
+        return jsonify({"ok": False, "msg": "Invalid tour status"}), 400
+    if status in {"remind_later", "skipped", "completed"}:
+        session["tour_prompt_suppressed"] = True
+    else:
+        session["tour_prompt_suppressed"] = bool(data.get("suppress_prompt"))
+    return jsonify({"ok": True, "status": status})
+
+
 @bp.route("/api/user/intro-tour-complete", methods=["POST"])
 @login_required
 def api_user_intro_tour_complete():
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    execute("UPDATE users SET intro_tour_completed_at=? WHERE id=?",
-            [now, session.get("user_id")])
-    session["show_intro_tour"] = False
+    _apply_tour_status("completed")
     return jsonify({"ok": True})
 
 

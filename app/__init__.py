@@ -252,6 +252,7 @@ def create_app():
 
         # Keep active sessions in sync with admin permission/site changes.
         from app.helpers import get_user_perms, get_user_location_ids, is_admin_like
+        from app.blueprints.auth import _resolved_tour_status
         perms = get_user_perms(
             db_user["id"],
             db_user["role"],
@@ -263,6 +264,7 @@ def create_app():
         session["is_admin_like"] = is_admin_like(db_user["role"], ",".join(perms))
         session["must_change_password"] = bool(db_user["must_change_password"])
         session["location_ids"] = get_user_location_ids(db_user["id"], db_user["role"])
+        session["tour_status"] = _resolved_tour_status(db_user)
 
         # Force password change on first login — block API too
         if session.get("must_change_password"):

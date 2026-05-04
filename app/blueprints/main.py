@@ -316,6 +316,7 @@ def _products_list():
 
 # ── Page routes ───────────────────────────────────────────────────────────────
 
+@bp.route("/items")
 @bp.route("/")
 @login_required
 def inventory():
@@ -337,6 +338,7 @@ def mobile_app():
         user_perms=list(session.get("permissions", "").split(",")))
 
 
+@bp.route("/items/add")
 @bp.route("/add-item")
 @login_required
 @perm_required("write_items")
@@ -997,6 +999,12 @@ def api_low_stock():
 @login_required
 def support_page():
     return render_template("support.html")
+
+
+@bp.route("/profile")
+@login_required
+def profile_page():
+    return render_template("profile.html")
 
 
 @bp.route("/importer")

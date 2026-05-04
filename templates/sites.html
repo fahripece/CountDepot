@@ -7,13 +7,13 @@
   <span class="topbar-sub" id="site-count"></span>
   {% if is_admin_like %}
   <div class="topbar-right">
-    <button class="btn btn-primary btn-sm" onclick="openAddSite()">+ Add Site</button>
+    <button class="btn btn-primary btn-sm" data-tour="add-site" onclick="openAddSite()">+ Add Site</button>
   </div>
   {% endif %}
 </div>
 
 <div style="flex:1;overflow-y:auto;padding:22px 24px">
-  <div id="site-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px"></div>
+  <div id="site-grid" data-tour="site-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px"></div>
 </div>
 
 {% if is_admin_like %}

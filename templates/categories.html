@@ -9,7 +9,7 @@
   <span class="topbar-sub" style="margin-left:6px">{{ categories|length }} total</span>
   <div class="topbar-right">
     {% if can_write_items %}
-    <button class="btn btn-primary btn-sm" onclick="openAddCat()">+ New Category</button>
+    <button class="btn btn-primary btn-sm" data-tour="add-category" onclick="openAddCat()">+ New Category</button>
     {% endif %}
   </div>
 </div>

@@ -147,6 +147,7 @@ MIGRATIONS = [
     ("users", "low_stock_alerts", "INTEGER NOT NULL DEFAULT 0"),
     # users — first-login product tour
     ("users", "intro_tour_completed_at", "TEXT"),
+    ("users", "tour_status", "TEXT NOT NULL DEFAULT 'pending'"),
 
     # departments — user + item assignment
     ("users", "department_id",            "INTEGER"),
@@ -264,6 +265,7 @@ def _init_db_conn(db):
             last_login           TEXT,
             low_stock_alerts     INTEGER NOT NULL DEFAULT 0,
             intro_tour_completed_at TEXT,
+            tour_status          TEXT NOT NULL DEFAULT 'pending',
             department_id        INTEGER,
             restrict_to_department INTEGER NOT NULL DEFAULT 0
         );

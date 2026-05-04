@@ -36,9 +36,20 @@ def _email_2fa_required(user) -> bool:
     return _workspace_email_2fa_enabled() or bool(per_user)
 
 
+def _resolved_tour_status(user) -> str:
+    raw = ""
+    if "tour_status" in user.keys():
+        raw = (user["tour_status"] or "").strip()
+    if raw in {"pending", "remind_later", "skipped", "completed"}:
+        return raw
+    legacy_done = bool(user["intro_tour_completed_at"] if "intro_tour_completed_at" in user.keys() else None)
+    return "completed" if legacy_done else "pending"
+
+
 def _build_session(user, perms):
     """Return a dict of session keys for a logged-in user."""
     loc_ids = get_user_location_ids(user["id"], user["role"])
+    tour_status = _resolved_tour_status(user)
     sess = {
         "user_id":              user["id"],
         "username":             user["username"],
@@ -48,10 +59,9 @@ def _build_session(user, perms):
         "expires_at":           (_utc_now() + timedelta(hours=SESSION_LIFETIME_HOURS)).isoformat(),
         "session_token":        _secrets.token_hex(32),
         "location_ids":         loc_ids,
+        "tour_status":          tour_status,
+        "tour_prompt_suppressed": False,
     }
-    tour_done = bool(user["intro_tour_completed_at"] if "intro_tour_completed_at" in user.keys() else None)
-    if not tour_done:
-        sess["show_intro_tour"] = True
     return sess
 
 
