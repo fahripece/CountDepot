@@ -714,7 +714,7 @@
   <button class="btn btn-sm" id="selectionCheckoutBtn" style="background:#1e40af;color:#fff;border:none" onclick="openBulkCheckout()">Checkout</button>
   <button class="btn btn-sm" id="selectionCheckinBtn" style="background:#15803d;color:#fff;border:none" onclick="bulkCheckin()">Check In</button>
   <button class="btn btn-sm" id="selectionPrintBtn" style="background:#374151;color:#fff;border:none" onclick="printSelectedLabels()">Print Labels</button>
-  <button class="btn btn-sm" id="selectionEditBtn" style="background:#475569;color:#fff;border:none" onclick="openBulkEdit()">Edit</button>
+  <button class="btn btn-sm" id="selectionEditBtn" style="background:#475569;color:#fff;border:none" onclick="openSelectionEdit()">Edit</button>
   <button class="btn btn-sm" id="selectionCloneBtn" style="background:#475569;color:#fff;border:none" onclick="openSelectedClone()">Clone</button>
   <button class="btn btn-sm" id="selectionDeleteBtn" style="background:#991b1b;color:#fff;border:none" onclick="massDelete()">Delete</button>
   <button class="bulk-action-clear" onclick="clearSelection()" title="Clear selection">x</button>
@@ -793,9 +793,20 @@
       </div>
       <div class="field">
         <label class="label">Site</label>
-        <select class="select" id="be-loc">
-          <option value="">— Keep existing —</option>
-        </select>
+        <div class="field-row">
+          <div class="field">
+            <select class="select" id="be-loc-mode" onchange="onBulkLocationModeChange()">
+              <option value="keep">— Keep existing —</option>
+              <option value="set">Set to site…</option>
+              <option value="clear">Clear site</option>
+            </select>
+          </div>
+          <div class="field">
+            <select class="select" id="be-loc" disabled>
+              <option value="">Select site…</option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -945,7 +956,7 @@ async function loadItemsPage(page){
     if(!Array.isArray(items)) throw new Error(data.msg||'Inventory response was not a list');
     totalItems=data.total!=null?data.total:items.length;
     totalPages=data.pages||1;
-    allItems=items; renderTable(items); updateStats(data); renderPagination(); refreshAlertBadge();
+    allItems=items; renderTable(items); updateSelectionUI(); updateStats(data); renderPagination(); refreshAlertBadge();
     if(currentDetailId){const u=allItems.find(i=>i.id===currentDetailId);if(u)showDetail(u);}
   }catch(e){
     console.error(e);
@@ -2004,7 +2015,26 @@ function renderLabels(){
 function doPrint(){const content=document.getElementById('labelPreview').innerHTML;const w=window.open('','_blank','width=950,height=750');w.document.write(`<!DOCTYPE html><html><head><title>Labels</title><script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"><\/script></head><body>${content}</body></html>`);w.document.close();}
 
 // ── Selection / Mass ops ──
-function onRowCheck(cb,evt){if(evt)evt.stopPropagation();const id=parseInt(cb.dataset.id);if(cb.checked)selectedIds.add(id);else selectedIds.delete(id);updateSelectionUI();}
+function onRowCheck(cb,evt){if(evt)evt.stopPropagation();const id=parseInt(cb.dataset.id,10);if(cb.checked)selectedIds.add(id);else selectedIds.delete(id);updateSelectionUI();}
+function getVisibleItemIds(){return new Set((allItems||[]).map(i=>parseInt(i.id,10)).filter(Boolean));}
+function reconcileSelection(options={}){
+  const preserveOffscreen=!!options.preserveOffscreen;
+  const visibleIds=getVisibleItemIds();
+  if(!preserveOffscreen){
+    selectedIds=new Set([...selectedIds].filter(id=>visibleIds.has(parseInt(id,10))));
+  }
+  document.querySelectorAll('.row-cb').forEach(cb=>{
+    const id=parseInt(cb.dataset.id,10);
+    cb.checked=selectedIds.has(id);
+  });
+  const selectAll=document.getElementById('selectAll');
+  if(selectAll){
+    const visibleCount=visibleIds.size;
+    const checkedCount=[...selectedIds].filter(id=>visibleIds.has(parseInt(id,10))).length;
+    selectAll.checked=visibleCount>0&&checkedCount===visibleCount;
+    selectAll.indeterminate=checkedCount>0&&checkedCount<visibleCount;
+  }
+}
 function toggleRowSelect(id){
   id=parseInt(id);
   if(selectedIds.has(id))selectedIds.delete(id);else selectedIds.add(id);
@@ -2012,18 +2042,19 @@ function toggleRowSelect(id){
   if(cb)cb.checked=selectedIds.has(id);
   updateSelectionUI();
 }
-function toggleSelectAll(checked){allItems.forEach(i=>{if(checked)selectedIds.add(i.id);else selectedIds.delete(i.id);});updateSelectionUI();document.querySelectorAll('.row-cb').forEach(cb=>{cb.checked=selectedIds.has(parseInt(cb.dataset.id));});}
+function toggleSelectAll(checked){getVisibleItemIds().forEach(id=>{if(checked)selectedIds.add(id);else selectedIds.delete(id);});updateSelectionUI();}
 function clearSelection(){
   selectedIds.clear();
   updateSelectionUI();
   const selectAll=document.getElementById('selectAll');
-  if(selectAll)selectAll.checked=false;
+  if(selectAll){selectAll.checked=false;selectAll.indeterminate=false;}
 }
 function setBarButton(id, show){
   const el=document.getElementById(id);
   if(el)el.style.display=show?'inline-flex':'none';
 }
 function updateSelectionUI(){
+  reconcileSelection();
   const n=selectedIds.size;
   // legacy topbar buttons
   const btn=document.getElementById('massDeleteBtn');const pBtn=document.getElementById('massPrintBtn');
@@ -2042,12 +2073,22 @@ function updateSelectionUI(){
     setBarButton('selectionCloneBtn', n===1&&CAN_WRITE_ITEMS);
     setBarButton('selectionDeleteBtn', n>0&&CAN_DELETE_ITEMS);
   }
-  document.querySelectorAll('.row-cb').forEach(cb=>{cb.checked=selectedIds.has(parseInt(cb.dataset.id));});
 }
 function openSelectedDetails(){
   if(selectedIds.size!==1){toast('Select one item for details','warn');return;}
   const item=allItems.find(i=>i.id===[...selectedIds][0]);
   if(item)showDetail(item);
+}
+function openSelectionEdit(){
+  if(!CAN_WRITE_ITEMS){toast('You do not have permission to edit items','err');return;}
+  if(!selectedIds.size){toast('Select item(s) first','warn');return;}
+  const items=allItems.filter(i=>selectedIds.has(i.id));
+  if(items.length===1){
+    closeDetail();
+    editItem(items[0]);
+    return;
+  }
+  openBulkEdit();
 }
 function openSelectedClone(){
   if(!CAN_WRITE_ITEMS){toast('You do not have permission to clone items','err');return;}
@@ -2151,18 +2192,32 @@ async function bulkCheckin(){
 function openBulkEdit(){
   if(!CAN_WRITE_ITEMS){toast('You do not have permission to edit items','err');return;}
   if(!selectedIds.size){toast('Select items first','warn');return;}
+  const items=allItems.filter(i=>selectedIds.has(i.id));
+  if(items.length===1){
+    editItem(items[0]);
+    return;
+  }
   document.getElementById('be-condition').value='';
   document.getElementById('be-shelf').value='';
   document.getElementById('be-cost').value='';
   document.getElementById('be-sale').value='';
   document.getElementById('be-tags').value='';
+  document.getElementById('be-loc-mode').value='keep';
   document.getElementById('be-loc').value='';
   // Populate location dropdown from locFilter options
   const srcSel=document.getElementById('locFilter');
   const dstSel=document.getElementById('be-loc');
-  dstSel.innerHTML='<option value="">— Keep existing —</option>';
+  dstSel.innerHTML='<option value="">Select site…</option>';
   if(srcSel)Array.from(srcSel.options).slice(1).forEach(o=>{const opt=document.createElement('option');opt.value=o.value;opt.textContent=o.textContent;dstSel.appendChild(opt);});
+  onBulkLocationModeChange();
   openModal('bulkEditModal');
+}
+function onBulkLocationModeChange(){
+  const mode=document.getElementById('be-loc-mode').value;
+  const loc=document.getElementById('be-loc');
+  if(!loc)return;
+  loc.disabled=mode!=='set';
+  if(mode!=='set')loc.value='';
 }
 async function confirmBulkEdit(){
   const d={ids:[...selectedIds]};
@@ -2171,8 +2226,14 @@ async function confirmBulkEdit(){
   const cost=document.getElementById('be-cost').value;
   const sale=document.getElementById('be-sale').value;
   const tags=document.getElementById('be-tags').value.trim();
+  const locMode=document.getElementById('be-loc-mode').value;
   const loc=document.getElementById('be-loc').value;
-  if(cond)d.condition=cond;if(shelf)d.shelf=shelf;if(cost!=='')d.cost_price=cost;if(sale!=='')d.sale_price=sale;if(tags!=='')d.tags=tags;if(loc)d.location_id=loc;
+  if(cond)d.condition=cond;if(shelf)d.shelf=shelf;if(cost!=='')d.cost_price=cost;if(sale!=='')d.sale_price=sale;if(tags!=='')d.tags=tags;
+  if(locMode==='clear')d.clear_location=true;
+  if(locMode==='set'){
+    if(!loc){toast('Choose a site to apply','warn');return;}
+    d.location_id=loc;
+  }
   if(Object.keys(d).length<=1){toast('Enter at least one field to update','warn');return;}
   const res=await api('/api/items/bulk-edit',d);
   if(res.ok){toast(`Updated ${res.updated} item(s)`,'ok');selectedIds.clear();updateSelectionUI();closeModal('bulkEditModal');loadItems();loadTagsFilter();}

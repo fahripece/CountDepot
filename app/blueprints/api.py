@@ -3491,7 +3491,9 @@ def api_bulk_edit():
         updates.append("condition=?"); args.append(d["condition"])
     if d.get("shelf") not in (None, ""):
         updates.append("shelf=?"); args.append(d["shelf"])
-    if d.get("location_id") not in (None, ""):
+    if d.get("clear_location"):
+        updates.append("location_id=?"); args.append(None)
+    elif d.get("location_id") not in (None, ""):
         updates.append("location_id=?"); args.append(int(d["location_id"]) if d["location_id"] else None)
     if d.get("cost_price") not in (None, ""):
         try:

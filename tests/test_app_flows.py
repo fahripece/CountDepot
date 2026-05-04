@@ -1635,6 +1635,47 @@ def test_bulk_edit_can_update_cost_and_sale_prices(app, tenant):
     assert all(task["status"] == "done" for task in tasks)
 
 
+def test_bulk_edit_can_clear_item_location(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Bulk Location Category", "#ffffff"],
+    ).lastrowid
+    location_id = db.execute(
+        "INSERT INTO locations (name,active,created_at) VALUES (?,?,?)",
+        ["Warehouse A", 1, "2026-01-01 00:00:00"],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (name,category_id,location_id,active,created_at) VALUES (?,?,?,?,?)",
+        ["Location Item", category_id, location_id, 1, "2026-01-01 00:00:00"],
+    ).lastrowid
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/items/bulk-edit",
+        base_url=f"http://{tenant['host']}",
+        method="POST",
+        json={"ids": [item_id], "clear_location": True},
+        headers={"X-CSRF-Token": "test-csrf-token"},
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or api_bulk_edit())
+        data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+
+    db = sqlite3.connect(tenant["db_path"])
+    row = db.execute("SELECT location_id FROM items WHERE id=?", [item_id]).fetchone()
+    db.close()
+    assert row[0] is None
+
+
 def test_permission_changes_apply_to_active_worker_session(app, tenant):
     admin_response, admin_session = _login(app, tenant)
     assert admin_response.status_code == 302
@@ -3809,6 +3850,30 @@ def test_inventory_selection_checkout_uses_single_item_flow_for_qty_tracked_item
     assert "if(items.length===1){openCheckout(items[0].id);return;}" in body
     assert "CountDepot will open the full checkout form so you can choose the amount." in body
     assert "Already-checked-out and qty-tracked items will be skipped." not in body
+
+
+def test_inventory_selection_edit_uses_single_item_flow_and_explicit_bulk_site_modes(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        session["_csrf_token"] = "test-csrf-token"
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'onclick="openSelectionEdit()"' in body
+    assert "if(items.length===1){" in body
+    assert "editItem(items[0]);" in body
+    assert 'id="be-loc-mode"' in body
+    assert "Clear site" in body
+    assert "Set to site" in body
+    assert "function reconcileSelection" in body
 
 
 def test_scan_finds_item_by_inventory_search_fields(app, tenant):
