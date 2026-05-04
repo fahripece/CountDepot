@@ -103,6 +103,11 @@ h1 span,.gradient-text{background:linear-gradient(135deg,var(--primary2),var(--a
 .btn-primary,.btn-secondary{display:inline-flex;align-items:center;justify-content:center;padding:14px 32px;border-radius:999px;font-size:16px;font-weight:800;transition:all .2s}
 .btn-secondary{color:var(--muted2);border:1px solid var(--border)}.btn-secondary:hover{color:var(--text);border-color:var(--muted);transform:translateY(-2px)}
 .hero-note{margin-top:22px;color:var(--muted);font-size:13px;animation:fadeUp .6s .4s ease both}
+.hero-proof{margin:26px auto 0;max-width:860px;padding:18px 22px;border-radius:18px;border:1px solid rgba(200,179,253,.2);background:rgba(23,32,51,.72);display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center;animation:fadeUp .6s .45s ease both}
+.hero-stars{font-size:18px;letter-spacing:2px;color:#f59e0b;white-space:nowrap}
+.hero-proof-copy{display:grid;gap:4px;text-align:left}
+.hero-proof-copy strong{font-size:14px;color:var(--text)}
+.hero-proof-copy span{font-size:13px;color:var(--muted2)}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);width:min(var(--max),calc(100% - 48px));margin:-34px auto 0;background:rgba(17,24,39,.86);backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:var(--radius);position:relative;z-index:3;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.26)}
 .stat{padding:27px 22px;text-align:center;border-right:1px solid var(--border)}.stat:last-child{border-right:none}.stat-val{font-size:30px;font-weight:800;letter-spacing:-1px;color:var(--text)}.stat-label{font-size:13px;color:var(--muted);margin-top:4px}
 section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-width:var(--max);margin:0 auto}.section-head{text-align:center;max-width:780px;margin:0 auto}.section-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--accent);margin-bottom:16px;text-align:center}.section-title{font-size:clamp(28px,4vw,46px);font-weight:800;letter-spacing:-.8px;line-height:1.12;margin-bottom:16px;text-align:center}.section-sub{font-size:17px;color:var(--muted2);font-weight:300;line-height:1.75;max-width:720px;margin:0 auto;text-align:center}
@@ -117,8 +122,15 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
 .faq{display:grid;gap:14px;margin-top:44px}.faq details{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px}.faq summary{cursor:pointer;font-weight:800}.faq p{margin-top:10px;color:var(--muted2);font-size:15px;font-weight:300}
 .trial-section{text-align:center;padding:100px 24px;position:relative;overflow:hidden;background:var(--bg)}.trial-section::before{content:"";position:absolute;width:620px;height:620px;border-radius:50%;background:radial-gradient(circle,rgba(100,66,214,.18) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}.trial-inner{position:relative;z-index:2}.trial-section h2{font-size:clamp(32px,5vw,56px);font-weight:800;letter-spacing:-1.5px;margin-bottom:16px}.trial-section p{font-size:18px;color:var(--muted2);font-weight:300;margin-bottom:40px}.trial-note{margin-top:16px;font-size:13px;color:var(--muted)}
 .footer{border-top:1px solid var(--border);padding:32px 24px;color:var(--muted);font-size:13px}.footer-inner{max-width:var(--max);margin:0 auto;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.exit-modal-overlay{position:fixed;inset:0;background:rgba(11,16,32,.72);backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:24px;z-index:200}
+.exit-modal-overlay.show{display:flex}
+.exit-modal{width:min(480px,100%);background:linear-gradient(145deg,rgba(23,32,51,.98),rgba(15,22,40,.98));border:1px solid rgba(200,179,253,.18);border-radius:28px;padding:30px;box-shadow:0 28px 80px rgba(0,0,0,.4);text-align:center}
+.exit-modal h3{font-size:30px;line-height:1.05;letter-spacing:-1px;margin-bottom:12px}
+.exit-modal p{font-size:15px;color:var(--muted2);line-height:1.7;margin-bottom:22px}
+.exit-modal-dismiss{display:inline-block;margin-top:16px;font-size:13px;color:var(--muted2)}
+.exit-modal-dismiss:hover{color:var(--text)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.42}}@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-@media(max-width:900px){.site-nav{padding:14px 18px}.nav-links{display:none}.hero{min-height:auto;padding-top:116px}.stats,.feature-grid,.workflow,.compare-grid,.industry-strip{grid-template-columns:1fr}.stat{border-right:0;border-bottom:1px solid var(--border)}.stat:last-child{border-bottom:0}section{padding:74px 20px}}
+@media(max-width:900px){.site-nav{padding:14px 18px}.nav-links{display:none}.hero{min-height:auto;padding-top:116px}.hero-proof,.stats,.feature-grid,.workflow,.compare-grid,.industry-strip{grid-template-columns:1fr}.stat{border-right:0;border-bottom:1px solid var(--border)}.stat:last-child{border-bottom:0}section{padding:74px 20px}.hero-proof-copy{text-align:center}}
 </style>
 </head>
 <body>
@@ -140,13 +152,20 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
 <header class="hero">
   <div class="hero-inner">
     <div class="badge"><span class="badge-dot"></span>{{ page.keyword }}</div>
-    <h1>{{ page.hero }}</h1>
+    <h1>{{ page.audience|title }} teams waste hours tracking assets in spreadsheets. CountDepot fixes that.</h1>
     <p class="hero-sub">{{ page.description }}</p>
     <div class="hero-actions">
       <a class="btn-primary" href="/signup">Start free</a>
       <a class="btn-secondary" href="/#pricing">See pricing</a>
     </div>
     <div class="hero-note">Free plan covers core workflows for 1 user across 2 sites and 250 items. Upgrade only when you need more scale.</div>
+    <div class="hero-proof" aria-label="Customer proof">
+      <div class="hero-stars">★★★★★</div>
+      <div class="hero-proof-copy">
+        <strong>“Replaced our Excel sheet in one afternoon” — IT Manager, Des Moines</strong>
+        <span>Trusted by teams across New York, San Jose, Des Moines and growing.</span>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -357,6 +376,36 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
     <span>{{ page.keyword }}</span>
   </div>
 </footer>
+<div class="exit-modal-overlay" id="exitIntentOverlay" role="dialog" aria-modal="true" aria-labelledby="exitIntentTitle">
+  <div class="exit-modal">
+    <h3 id="exitIntentTitle">Before you go —</h3>
+    <p>See how CountDepot works in 60 seconds.</p>
+    <a class="btn-primary" href="/#demo">Watch the demo</a>
+    <a href="#" class="exit-modal-dismiss" onclick="dismissExitIntent(event)">No thanks</a>
+  </div>
+</div>
+<script>
+const EXIT_INTENT_KEY = 'countdepot-exit-intent-seen';
+function showExitIntent(){
+  const overlay = document.getElementById('exitIntentOverlay');
+  if (!overlay || sessionStorage.getItem(EXIT_INTENT_KEY) === '1') return;
+  sessionStorage.setItem(EXIT_INTENT_KEY, '1');
+  overlay.classList.add('show');
+}
+function dismissExitIntent(event){
+  if (event) event.preventDefault();
+  const overlay = document.getElementById('exitIntentOverlay');
+  if (overlay) overlay.classList.remove('show');
+  sessionStorage.setItem(EXIT_INTENT_KEY, '1');
+}
+document.addEventListener('mouseleave', function (event) {
+  if (event.clientY > 8) return;
+  showExitIntent();
+});
+document.getElementById('exitIntentOverlay')?.addEventListener('click', function (event) {
+  if (event.target === this) dismissExitIntent();
+});
+</script>
 </body>
 </html>
 

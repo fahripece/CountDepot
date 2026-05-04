@@ -2431,6 +2431,9 @@ def test_homepage_has_schema_internal_links_and_marketing_events(app):
     assert "signup_click" in body
     assert "pricing_click" in body
     assert "demo_request" in body
+    assert "Before you go —" in body
+    assert "See how CountDepot works in 60 seconds." in body
+    assert "countdepot-exit-intent-seen" in body
     assert "seo_internal_link_click" not in body
 
 
@@ -2449,6 +2452,14 @@ def test_signup_page_has_seo_meta_and_submit_event(app):
     assert "signup_submit" in body
     assert 'name="form_started"' in body
     assert 'name="website"' in body
+    assert 'placeholder="Your company name (optional)"' in body
+    assert 'type="hidden" name="slug"' in body
+    assert "No credit card required" in body
+    assert "30-day free trial" in body
+    assert "Cancel anytime" in body
+    assert "Setup in under 5 minutes" in body
+    assert "After signing up you'll be taken straight to your dashboard." in body
+    assert "Your subdomain" not in body
 
 
 def test_signup_page_preserves_selected_paid_plan(app):
@@ -2578,6 +2589,49 @@ def test_paid_signup_verification_redirects_to_checkout_flow(app, monkeypatch):
     location = response.headers["Location"]
     assert location.startswith("https://planco.countdepot.com/auto-login?token=")
     assert "next=/billing/start%3Fplan%3Dpro%26period%3Dyearly" in location
+
+
+def test_free_signup_success_page_fires_marketing_conversion_events(app, monkeypatch):
+    from app.platform import get_platform_db
+
+    monkeypatch.setattr(Config, "APP_DOMAIN", "countdepot.com", raising=False)
+    app.config["LINKEDIN_SIGNUP_CONVERSION_ID"] = "77"
+    monkeypatch.setattr("app.blueprints.signup.send_welcome_email", lambda *args, **kwargs: True)
+    monkeypatch.setattr("app.blueprints.signup.send_signup_verification_email", lambda *args, **kwargs: True)
+
+    db = get_platform_db()
+    db.execute(
+        """
+        INSERT INTO pending_signups
+        (name, slug, email, password_hash, selected_plan, selected_period, token, created_at, expires_at, used)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        """,
+        [
+            "Free Plan Co",
+            "freeplan",
+            "owner@freeplan.com",
+            hash_pw("Password1!"),
+            "free",
+            "monthly",
+            "verify-free-token",
+            "2026-04-24 00:00:00",
+            "2099-01-01 00:00:00",
+        ],
+    )
+    db.commit()
+    db.close()
+
+    response = app.test_client().get(
+        "/verify-signup/verify-free-token",
+        base_url="http://countdepot.com",
+        follow_redirects=False,
+    )
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "free_trial_signup" in body
+    assert 'lintrk(\'track\', { conversion_id: "77" })' in body
+    assert "https://freeplan.countdepot.com/login" in body
 
 
 def test_free_plan_blocks_adding_second_user(app, tenant):
@@ -2782,6 +2836,10 @@ def test_seo_landing_links_to_inventory_management_resource(app):
     assert response.status_code == 200
     assert 'href="/resources/inventory-management"' in body
     assert "Inventory management guide" in body
+    assert "Repair Shops teams waste hours tracking assets in spreadsheets. CountDepot fixes that." in body
+    assert "Replaced our Excel sheet in one afternoon" in body
+    assert "Trusted by teams across New York, San Jose, Des Moines and growing." in body
+    assert "countdepot-exit-intent-seen" in body
 
 
 def test_hvac_seo_page_renders_on_bare_domain(app):
@@ -2792,7 +2850,8 @@ def test_hvac_seo_page_renders_on_bare_domain(app):
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Inventory management for HVAC companies" in body
+    assert "Inventory Management for HVAC Companies | CountDepot" in body
+    assert "teams waste hours tracking assets in spreadsheets. CountDepot fixes that." in body
     assert "Track parts and consumables by warehouse, truck, or technician" in body
     assert "Questions HVAC companies ask before replacing spreadsheets." in body
     assert '"@type": "FAQPage"' in body

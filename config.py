@@ -48,3 +48,5 @@ class Config:
     # Google OAuth2 ("Sign in with Google")
     GOOGLE_CLIENT_ID            = os.environ.get("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET        = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    LINKEDIN_PARTNER_ID         = os.environ.get("LINKEDIN_PARTNER_ID", "")
+    LINKEDIN_SIGNUP_CONVERSION_ID = os.environ.get("LINKEDIN_SIGNUP_CONVERSION_ID", "")

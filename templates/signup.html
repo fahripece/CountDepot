@@ -11,39 +11,31 @@
 <meta property="og:description" content="Create your CountDepot workspace in under a minute. Start free with core workflows for 1 user, 2 sites, 250 items, barcode scanning, and no credit card required.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://countdepot.com/signup">
-{#
-<title>Get started · CountDepot</title>
-#}
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  background:#f8f7f4;min-height:100vh;padding:40px 24px}
-.wrap{max-width:520px;margin:0 auto}
-.logo{font-size:13px;font-weight:700;color:#94a3b8;text-transform:uppercase;
-  letter-spacing:.8px;text-align:center;margin-bottom:32px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f7f4;min-height:100vh;padding:40px 24px}
+.wrap{max-width:540px;margin:0 auto}
+.logo{font-size:13px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;text-align:center;margin-bottom:32px}
 h1{font-size:24px;font-weight:700;color:#0f172a;text-align:center;margin-bottom:6px}
 .sub{font-size:14px;color:#64748b;text-align:center;margin-bottom:32px;line-height:1.55}
-.card{background:#fff;border:1px solid #e5e3de;border-radius:12px;
-  padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
-.err{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;
-  border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:20px}
+.card{background:#fff;border:1px solid #e5e3de;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.err{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:20px}
 .field{margin-bottom:18px}
-label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;
-  letter-spacing:.5px;color:#64748b;margin-bottom:6px}
-input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:7px;
-  font-size:14px;outline:none;transition:border-color .15s;color:#0f172a;background:#fff}
+label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:6px}
+input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:7px;font-size:14px;outline:none;transition:border-color .15s;color:#0f172a;background:#fff}
 input:focus{border-color:#1d4ed8;box-shadow:0 0 0 3px rgba(29,78,216,.08)}
 .hint{font-size:11.5px;color:#94a3b8;margin-top:4px}
-.slug-preview{font-size:12px;color:#1d4ed8;font-family:'IBM Plex Mono',monospace;
-  margin-top:4px;min-height:18px;font-weight:600}
 .hp{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
-button{width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;
-  border-radius:7px;font-size:15px;font-weight:600;cursor:pointer;margin-top:6px;
-  transition:background .15s}
+button{width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;border-radius:7px;font-size:15px;font-weight:600;cursor:pointer;margin-top:6px;transition:background .15s}
 button:hover{background:#1e40af}
+.trust-block{margin-top:18px;padding-top:18px;border-top:1px solid #e5e7eb}
+.trust-inline{display:flex;flex-wrap:wrap;gap:10px 16px;justify-content:center}
+.trust-item{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:#475569}
+.trust-check{width:18px;height:18px;border-radius:999px;background:#ecfdf3;border:1px solid #bbf7d0;color:#15803d;display:inline-flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.trust-quote{margin-top:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.6;color:#334155;text-align:center}
+.next-step{margin-top:12px;font-size:12px;line-height:1.6;color:#94a3b8;text-align:center}
 .divider{text-align:center;font-size:12.5px;color:#94a3b8;margin:22px 0 0}
-a.signin{display:block;text-align:center;margin-top:10px;font-size:13px;
-  color:#1d4ed8;text-decoration:none;font-weight:500}
+a.signin{display:block;text-align:center;margin-top:10px;font-size:13px;color:#1d4ed8;text-decoration:none;font-weight:500}
 a.signin:hover{text-decoration:underline}
 </style>
 </head>
@@ -62,43 +54,45 @@ a.signin:hover{text-decoration:underline}
     </a>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><div style="flex:1;height:1px;background:#e5e3de"></div><span style="font-size:12px;color:#94a3b8">or fill in manually</span><div style="flex:1;height:1px;background:#e5e3de"></div></div>
 
-    <form method="POST" onsubmit="if(typeof gtag==='function'){gtag('event','signup_submit',{page_location:window.location.href});}">
+    <form method="POST" onsubmit="return prepareSignupForm(event)">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="form_started" value="{{ form_started }}">
       <input type="hidden" name="selected_plan" value="{{ selected_plan or 'free' }}">
       <input type="hidden" name="selected_period" value="{{ selected_period or 'monthly' }}">
+      <input type="hidden" name="slug" id="slug-input">
       <div class="hp" aria-hidden="true">
         <label for="website-field">Website</label>
         <input id="website-field" name="website" type="text" tabindex="-1" autocomplete="off">
       </div>
-      <div class="field">
-        <label>Company name</label>
-        <input name="name" id="name-input" autofocus required
-               oninput="suggestSlug(this.value)">
-      </div>
-
-      <div class="field">
-        <label>Your subdomain</label>
-        <input name="slug" id="slug-input" required
-               pattern="[a-z0-9\-]{2,32}"
-               style="font-family:'IBM Plex Mono',monospace"
-               oninput="updatePreview(this.value)">
-        <div class="slug-preview" id="slug-preview"></div>
-        <div class="hint">Lowercase letters, numbers, hyphens — 2 to 32 characters.</div>
-      </div>
 
       <div class="field">
         <label>Work email</label>
-        <input name="email" id="email-input" type="email" required>
+        <input name="email" id="email-input" type="email" autofocus required>
       </div>
 
       <div class="field">
         <label>Password</label>
-        <input name="password" type="password" required minlength="8">
+        <input name="password" id="password-input" type="password" required minlength="8">
         <div class="hint">Min 8 characters.</div>
       </div>
 
+      <div class="field">
+        <label>Company name</label>
+        <input name="name" id="name-input" placeholder="Your company name (optional)">
+      </div>
+
       <button type="submit">Create my workspace →</button>
+
+      <div class="trust-block">
+        <div class="trust-inline">
+          <div class="trust-item"><span class="trust-check">✓</span><span>No credit card required</span></div>
+          <div class="trust-item"><span class="trust-check">✓</span><span>30-day free trial</span></div>
+          <div class="trust-item"><span class="trust-check">✓</span><span>Cancel anytime</span></div>
+          <div class="trust-item"><span class="trust-check">✓</span><span>Setup in under 5 minutes</span></div>
+        </div>
+        <div class="trust-quote">“Replaced our Excel sheet in one afternoon. — IT Manager, Des Moines”</div>
+        <div class="next-step">After signing up you'll be taken straight to your dashboard. Add your first item in under 2 minutes.</div>
+      </div>
     </form>
 
     <div class="divider">Already have an account?</div>
@@ -106,36 +100,71 @@ a.signin:hover{text-decoration:underline}
   </div>
 </div>
 <script>
-function suggestSlug(name){
-  const slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,32);
-  const el=document.getElementById('slug-input');
-  if(!el.dataset.touched)el.value=slug;
-  updatePreview(el.value);
+function slugify(value){
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
 }
-function updatePreview(slug){
-  const host=window.location.hostname;
-  const parts=host.split('.');
-  const domain=parts.length>=2?parts.slice(-2).join('.'):'yourdomain.com';
-  document.getElementById('slug-preview').textContent=slug?slug+'.'+domain:'';
+function fallbackCompanyNameFromEmail(email){
+  const parts = String(email || '').split('@');
+  if (parts.length < 2) return 'Your Workspace';
+  const domainCore = parts[1].split('.')[0] || parts[0] || 'workspace';
+  return domainCore
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
 }
-document.getElementById('slug-input').addEventListener('input',function(){
-  this.dataset.touched='1';updatePreview(this.value);
-});
-// Pre-fill from Google OAuth redirect
-(function(){
-  const p=new URLSearchParams(location.search);
-  const ge=p.get('google_email'), gn=p.get('google_name');
-  if(ge){
-    document.getElementById('email-input').value=ge;
-    document.getElementById('email-input').readOnly=true;
-    document.getElementById('email-input').style.background='#f8fafc';
+function ensureSignupWorkspaceFields(){
+  const emailEl = document.getElementById('email-input');
+  const nameEl = document.getElementById('name-input');
+  const slugEl = document.getElementById('slug-input');
+  const email = (emailEl.value || '').trim().toLowerCase();
+  const emailParts = email.split('@');
+  const emailLocal = slugify(emailParts[0] || '').slice(0, 8);
+  const emailDomainCore = slugify((emailParts[1] || '').split('.')[0] || '').slice(0, 10);
+  let companyName = (nameEl.value || '').trim();
+  if (!companyName) {
+    companyName = fallbackCompanyNameFromEmail(email);
+    nameEl.value = companyName;
   }
-  if(gn&&!document.getElementById('name-input').value){
-    document.getElementById('name-input').value=gn;
-    suggestSlug(gn);
+  let slug = slugify(companyName);
+  if (slug && emailDomainCore && !slug.includes(emailDomainCore)) {
+    slug = slugify((slug + '-' + emailDomainCore).slice(0, 32));
+  }
+  if (!slug && emailDomainCore) {
+    slug = emailDomainCore;
+  }
+  if (slug && emailLocal && !slug.includes(emailLocal) && slug.length < 24) {
+    slug = slugify((slug + '-' + emailLocal).slice(0, 32));
+  }
+  if (!slug) {
+    slug = emailLocal || 'workspace';
+  }
+  slugEl.value = slug;
+}
+function prepareSignupForm(){
+  ensureSignupWorkspaceFields();
+  if (typeof gtag === 'function') {
+    gtag('event', 'signup_submit', { page_location: window.location.href });
+  }
+  return true;
+}
+(function(){
+  const p = new URLSearchParams(location.search);
+  const ge = p.get('google_email');
+  const gn = p.get('google_name');
+  if (ge) {
+    document.getElementById('email-input').value = ge;
+    document.getElementById('email-input').readOnly = true;
+    document.getElementById('email-input').style.background = '#f8fafc';
+  }
+  if (gn && !document.getElementById('name-input').value) {
+    document.getElementById('name-input').value = gn;
   }
 })();
+document.getElementById('email-input').addEventListener('blur', ensureSignupWorkspaceFields);
+document.getElementById('name-input').addEventListener('blur', ensureSignupWorkspaceFields);
 </script>
 </body>
 </html>
-

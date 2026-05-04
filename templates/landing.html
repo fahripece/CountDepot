@@ -716,6 +716,27 @@ section{padding:100px 24px}
   font-weight:300;margin-bottom:40px;
 }
 .trial-note{margin-top:16px;font-size:13px;color:var(--muted)}
+.exit-modal-overlay{
+  position:fixed;inset:0;z-index:200;
+  background:rgba(11,16,32,.72);
+  backdrop-filter:blur(10px);
+  display:none;align-items:center;justify-content:center;
+  padding:24px;
+}
+.exit-modal-overlay.show{display:flex}
+.exit-modal{
+  width:min(480px,100%);
+  background:linear-gradient(145deg,rgba(23,32,51,.98),rgba(15,22,40,.98));
+  border:1px solid rgba(200,179,253,.18);
+  border-radius:28px;
+  padding:30px;
+  box-shadow:0 28px 80px rgba(0,0,0,.4);
+  text-align:center;
+}
+.exit-modal h3{font-size:30px;line-height:1.05;letter-spacing:-1px;margin-bottom:12px}
+.exit-modal p{font-size:15px;color:var(--muted2);line-height:1.7;margin-bottom:22px}
+.exit-modal-dismiss{display:inline-block;margin-top:16px;font-size:13px;color:var(--muted2)}
+.exit-modal-dismiss:hover{color:var(--text)}
 
 /* ── FOOTER ── */
 footer{
@@ -1758,6 +1779,14 @@ async function submitDemoRequest(){
   <p>© 2026 CountDepot. Inventory Management Made Easy.</p>
   <a href="/signup" class="nav-cta">Get started free</a>
 </footer>
+<div class="exit-modal-overlay" id="exitIntentOverlay" role="dialog" aria-modal="true" aria-labelledby="exitIntentTitle">
+  <div class="exit-modal">
+    <h3 id="exitIntentTitle">Before you go —</h3>
+    <p>See how CountDepot works in 60 seconds.</p>
+    <a class="btn-primary" href="/#demo">Watch the demo</a>
+    <a href="#" class="exit-modal-dismiss" onclick="dismissExitIntent(event)">No thanks</a>
+  </div>
+</div>
 
 <script>
 function trackMarketingEvent(name, params) {
@@ -1875,6 +1904,27 @@ toggle.addEventListener('change', () => {
   annualLabels.forEach(id => {
     document.getElementById(id).style.visibility = isAnnual ? 'visible' : 'hidden';
   });
+});
+
+const EXIT_INTENT_KEY = 'countdepot-exit-intent-seen';
+function showExitIntent() {
+  const overlay = document.getElementById('exitIntentOverlay');
+  if (!overlay || sessionStorage.getItem(EXIT_INTENT_KEY) === '1') return;
+  sessionStorage.setItem(EXIT_INTENT_KEY, '1');
+  overlay.classList.add('show');
+}
+function dismissExitIntent(event) {
+  if (event) event.preventDefault();
+  const overlay = document.getElementById('exitIntentOverlay');
+  if (overlay) overlay.classList.remove('show');
+  sessionStorage.setItem(EXIT_INTENT_KEY, '1');
+}
+document.addEventListener('mouseleave', function(event) {
+  if (event.clientY > 8) return;
+  showExitIntent();
+});
+document.getElementById('exitIntentOverlay').addEventListener('click', function(event) {
+  if (event.target === this) dismissExitIntent();
 });
 </script>
 
