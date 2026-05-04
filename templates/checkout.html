@@ -62,10 +62,22 @@
   </div>
 
   <!-- ── Recently checked out today ── -->
-  <div style="max-width:900px;margin:0 auto">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin-bottom:12px">Recently Checked Out</div>
-    <div id="recent-list">
-      <div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">Loading…</div>
+<div style="max-width:900px;margin:0 auto">
+    <div style="background:#fff;border:1px solid #e5e3de;border-radius:14px;padding:22px 24px;box-shadow:0 2px 12px rgba(0,0,0,.05)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8">Checked Out Now</div>
+          <div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:4px">Find what is already out</div>
+          <div style="font-size:12.5px;color:#64748b;margin-top:4px">Search by item name, serial, SKU, internal SKU, tech, or job reference.</div>
+        </div>
+        <div style="min-width:260px;flex:1;max-width:360px">
+          <input id="recentSearch" class="input mono" placeholder="Search checked out items..." autocomplete="off" oninput="renderRecentList()">
+        </div>
+      </div>
+      <div id="recentSummary" style="font-size:12.5px;color:#64748b;margin-bottom:12px">Loading checked out items...</div>
+      <div id="recent-list">
+        <div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">Loading...</div>
+      </div>
     </div>
   </div>
 
@@ -121,6 +133,9 @@
 .recent-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;transition:box-shadow .12s}
 .recent-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .co-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.recent-status{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:999px;padding:4px 8px}
+.recent-meta{font-size:11.5px;color:#475569;margin-top:4px;display:flex;flex-wrap:wrap;gap:8px}
+.recent-ident{font-size:11px;color:#94a3b8;margin-top:2px;font-family:'IBM Plex Mono',monospace}
 .co-mode-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}
 .co-mode-pill{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:#0f172a;background:#f8fafc;border:1px solid #e2e8f0;border-radius:999px;padding:7px 12px}
 .co-mode-hint{font-size:12px;color:#94a3b8}
@@ -142,6 +157,7 @@
 let _pendingItem=null;
 let _bulkCheckoutMode=false;
 let _bulkQueue=[];
+let _recentRows=[];
 
 function escHtml(value){
   return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -369,25 +385,55 @@ async function confirmCheckout(){
   }
 }
 
-async function loadRecent(){
-  const rows=await fetch('/api/items?status=out&hide_out=0').then(r=>r.json());
+function renderRecentList(){
   const el=document.getElementById('recent-list');
+  const summary=document.getElementById('recentSummary');
+  const q=(document.getElementById('recentSearch')?.value||'').trim().toLowerCase();
+  const rows=!q?_recentRows:_recentRows.filter(i=>{
+    const haystack=[
+      i.name,
+      i.serial,
+      i.internal_sku,
+      i.sku,
+      i.checkout_by,
+      i.job_ref,
+      i.manufacturer,
+      i.model,
+      i.shelf,
+      i.checkout_date
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(q);
+  });
+  if(summary){
+    summary.textContent=q
+      ? `${rows.length} result${rows.length===1?'':'s'} for "${q}"`
+      : `${_recentRows.length} item${_recentRows.length===1?'':'s'} currently checked out`;
+  }
   if(!rows.length){
-    el.innerHTML='<div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">No items currently checked out.</div>';
+    el.innerHTML='<div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">No matching checked out items.</div>';
     return;
   }
   el.innerHTML=`<div class="co-grid">${rows.map(i=>`
     <div class="recent-card">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:13px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.name}</div>
-        <div style="font-size:11px;color:#94a3b8;margin-top:2px;font-family:'IBM Plex Mono',monospace">${i.serial||i.internal_sku||i.sku||'—'}</div>
-        <div style="font-size:11.5px;color:#475569;margin-top:4px">👤 ${i.checkout_by||'—'}${i.job_ref?' · '+i.job_ref:''}</div>
+        <div class="recent-ident">${i.serial||i.internal_sku||i.sku||'—'}</div>
+        <div class="recent-meta">
+          <span>Tech: ${i.checkout_by||'—'}</span>
+          ${i.job_ref?`<span>Job: ${i.job_ref}</span>`:''}
+          ${i.shelf?`<span>Shelf: ${i.shelf}</span>`:''}
+        </div>
       </div>
       <div style="flex-shrink:0;text-align:right">
-        <div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Since</div>
-        <div style="font-size:12px;font-weight:600;color:#0f172a">${i.checkout_date||'—'}</div>
+        <div class="recent-status">Checked Out</div>
+        <div style="font-size:12px;font-weight:600;color:#0f172a;margin-top:6px">${i.checkout_date||'—'}</div>
       </div>
     </div>`).join('')}</div>`;
+}
+
+async function loadRecent(){
+  _recentRows=await fetch('/api/items?status=out&hide_out=0').then(r=>r.json());
+  renderRecentList();
 }
 
 // Keyboard shortcut — focus scan box on any key if not already focused

@@ -3619,6 +3619,9 @@ def test_checkout_page_has_camera_scan_button(app, tenant):
     assert 'id="co-qty"' in body
     assert "renderScanMatches" in body
     assert "Pick the correct item." in body
+    assert 'id="recentSearch"' in body
+    assert "Find what is already out" in body
+    assert "renderRecentList()" in body
 
 
 def test_add_item_identifier_fields_have_camera_scan_buttons(app, tenant):
