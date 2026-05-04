@@ -302,7 +302,7 @@ def _sync_free_inactive_accounts(tenants):
     try:
         rows = db.execute(
             "SELECT slug, owner_email, name, plan, subscription_status, free_access, "
-            "free_inactive_warned_at, free_inactive_delete_at, free_inactive_reason "
+            "free_inactive_grace_started_at, free_inactive_warned_at, free_inactive_delete_at, free_inactive_reason, created_at "
             "FROM tenants"
         ).fetchall()
         by_slug = {row["slug"]: dict(row) for row in rows}
@@ -313,6 +313,7 @@ def _sync_free_inactive_accounts(tenants):
             row = by_slug.get(slug)
             if not row:
                 continue
+            tenant["free_inactive_grace_started_at"] = row.get("free_inactive_grace_started_at")
             tenant["free_inactive_warned_at"] = row.get("free_inactive_warned_at")
             tenant["free_inactive_delete_at"] = row.get("free_inactive_delete_at")
             tenant["free_inactive_reason"] = row.get("free_inactive_reason")
@@ -320,6 +321,41 @@ def _sync_free_inactive_accounts(tenants):
             is_free_plan = (row.get("plan") or "").lower() == "free"
             is_paid = (row.get("subscription_status") or "active") != "active" or not is_free_plan or row.get("free_access")
             if is_paid:
+                if (
+                    row.get("free_inactive_grace_started_at")
+                    or row.get("free_inactive_warned_at")
+                    or row.get("free_inactive_delete_at")
+                    or row.get("free_inactive_reason")
+                ):
+                    db.execute(
+                        "UPDATE tenants SET free_inactive_grace_started_at=NULL, free_inactive_warned_at=NULL, free_inactive_delete_at=NULL, free_inactive_reason=NULL WHERE slug=?",
+                        [slug],
+                    )
+                tenant["free_inactive_grace_started_at"] = None
+                tenant["free_inactive_warned_at"] = None
+                tenant["free_inactive_delete_at"] = None
+                tenant["free_inactive_reason"] = None
+                continue
+
+            grace_started = _parse_dt(row.get("free_inactive_grace_started_at"))
+            if not grace_started:
+                created_at = _parse_dt(row.get("created_at"))
+                grace_started = created_at or now
+                if created_at and created_at < now - timedelta(days=1):
+                    grace_started = now
+                grace_started_text = _fmt_dt(grace_started)
+                db.execute(
+                    "UPDATE tenants SET free_inactive_grace_started_at=?, free_inactive_warned_at=NULL, free_inactive_delete_at=NULL, free_inactive_reason=NULL WHERE slug=?",
+                    [grace_started_text, slug],
+                )
+                row["free_inactive_grace_started_at"] = grace_started_text
+                row["free_inactive_warned_at"] = None
+                row["free_inactive_delete_at"] = None
+                row["free_inactive_reason"] = None
+            tenant["free_inactive_grace_started_at"] = row.get("free_inactive_grace_started_at")
+
+            grace_days = max(0, (now - grace_started).days) if grace_started else 0
+            if grace_days < FREE_INACTIVE_WARNING_DAYS:
                 if row.get("free_inactive_warned_at") or row.get("free_inactive_delete_at") or row.get("free_inactive_reason"):
                     db.execute(
                         "UPDATE tenants SET free_inactive_warned_at=NULL, free_inactive_delete_at=NULL, free_inactive_reason=NULL WHERE slug=?",
@@ -330,11 +366,10 @@ def _sync_free_inactive_accounts(tenants):
                 tenant["free_inactive_reason"] = None
                 continue
 
-            created_days = _days_since(tenant.get("created_at"))
             items = tenant["stats"].get("items", 0)
             days_since_activity = tenant.get("days_since_activity")
             warn_reason = None
-            if items == 0 and created_days is not None and created_days >= FREE_INACTIVE_WARNING_DAYS:
+            if items == 0:
                 warn_reason = "no_inventory"
             elif items > 0 and (days_since_activity is None or days_since_activity >= FREE_INACTIVE_WARNING_DAYS):
                 warn_reason = "no_activity"

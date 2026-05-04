@@ -43,6 +43,7 @@ def init_platform_db():
             cancellation_reason TEXT,
             cancelled_at TEXT,
             free_access INTEGER NOT NULL DEFAULT 0,
+            free_inactive_grace_started_at TEXT,
             free_inactive_warned_at TEXT,
             free_inactive_delete_at TEXT,
             free_inactive_reason TEXT
@@ -121,6 +122,8 @@ def init_platform_db():
         db.execute("ALTER TABLE tenants ADD COLUMN cancelled_at TEXT")
     if "free_access" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN free_access INTEGER NOT NULL DEFAULT 0")
+    if "free_inactive_grace_started_at" not in cols:
+        db.execute("ALTER TABLE tenants ADD COLUMN free_inactive_grace_started_at TEXT")
     if "free_inactive_warned_at" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN free_inactive_warned_at TEXT")
     if "free_inactive_delete_at" not in cols:
