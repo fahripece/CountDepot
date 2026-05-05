@@ -76,7 +76,7 @@ function ensureStyles() {
     .cd-tour-spotlight{position:fixed;display:none;border:2px solid #6442D6;border-radius:18px;box-shadow:0 0 0 9999px rgba(15,23,42,.48),0 24px 48px rgba(15,23,42,.28);pointer-events:none;z-index:12001}
     .cd-tour-target{position:relative;z-index:12002!important}
     .cd-tour-card,.cd-tour-choice,.cd-tour-end{position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:20px;box-shadow:0 24px 64px rgba(15,23,42,.28);color:#111827;z-index:12003}
-    .cd-tour-card{width:min(360px,calc(100vw - 24px));padding:18px;display:none}
+    .cd-tour-card{width:min(420px,calc(100vw - 24px));max-height:min(460px,calc(100vh - 24px));overflow:auto;padding:18px;display:none}
     .cd-tour-choice,.cd-tour-end{width:min(520px,calc(100vw - 24px));left:50%;top:50%;transform:translate(-50%,-50%);padding:26px;display:none}
     .cd-tour-visible{display:block}
     .cd-tour-arrow{position:absolute;width:16px;height:16px;background:#fff;border-left:1px solid #e2e8f0;border-top:1px solid #e2e8f0;transform:rotate(45deg)}
@@ -172,6 +172,17 @@ function ensureDom() {
   root.querySelector(".cd-tour-next").addEventListener("click", () => moveStep(1));
   root.querySelector(".cd-tour-skip").addEventListener("click", async () => {
     await updateStatus("skipped");
+    clearTourQuery();
+    hideAll();
+  });
+  backdrop.addEventListener("click", async () => {
+    await updateStatus("remind_later");
+    clearTourQuery();
+    hideAll();
+  });
+  document.addEventListener("keydown", async (event) => {
+    if (event.key !== "Escape" || !root.classList.contains("active")) return;
+    await updateStatus("remind_later");
     clearTourQuery();
     hideAll();
   });
@@ -325,6 +336,8 @@ function renderStep(index) {
   callout.classList.add("cd-tour-visible");
   choice.classList.remove("cd-tour-visible");
   endCard.classList.remove("cd-tour-visible");
+  document.querySelectorAll(".cd-tour-target").forEach((node) => node.classList.remove("cd-tour-target"));
+  target.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
   target.classList.add("cd-tour-target");
 
   callout.querySelector(".cd-tour-step").textContent = `${index + 1} of ${steps.length}`;
