@@ -1084,8 +1084,8 @@ def tenant_impersonate(slug, user_id):
     expires_at = (now + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
     pdb = get_platform_db()
     pdb.execute(
-        "INSERT INTO cross_login_tokens (tenant_slug,user_id,token,expires_at,created_at) VALUES (?,?,?,?,?)",
-        [slug, user_id, token, expires_at, now.strftime("%Y-%m-%d %H:%M:%S")])
+        "INSERT INTO cross_login_tokens (tenant_slug,user_id,token,expires_at,impersonation,created_at) VALUES (?,?,?,?,?,?)",
+        [slug, user_id, token, expires_at, 1, now.strftime("%Y-%m-%d %H:%M:%S")])
     pdb.commit(); pdb.close()
 
     host = request.host

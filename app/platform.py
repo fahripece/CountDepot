@@ -77,6 +77,7 @@ def init_platform_db():
             user_id     INTEGER NOT NULL,
             token       TEXT NOT NULL UNIQUE,
             expires_at  TEXT NOT NULL,
+            impersonation INTEGER NOT NULL DEFAULT 0,
             used        INTEGER NOT NULL DEFAULT 0,
             created_at  TEXT NOT NULL
         );
@@ -131,6 +132,9 @@ def init_platform_db():
     if "free_inactive_reason" not in cols:
         db.execute("ALTER TABLE tenants ADD COLUMN free_inactive_reason TEXT")
     pending_cols = [r[1] for r in db.execute("PRAGMA table_info(pending_signups)").fetchall()]
+    cross_login_cols = [r[1] for r in db.execute("PRAGMA table_info(cross_login_tokens)").fetchall()]
+    if "impersonation" not in cross_login_cols:
+        db.execute("ALTER TABLE cross_login_tokens ADD COLUMN impersonation INTEGER NOT NULL DEFAULT 0")
     if "selected_plan" not in pending_cols:
         db.execute("ALTER TABLE pending_signups ADD COLUMN selected_plan TEXT")
     if "selected_period" not in pending_cols:

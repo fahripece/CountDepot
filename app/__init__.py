@@ -244,7 +244,10 @@ def create_app():
             [session["user_id"]],
             one=True,
         )
-        if not db_user or db_user["session_token"] != session.get("session_token"):
+        if not db_user or (
+            not session.get("platform_impersonation")
+            and db_user["session_token"] != session.get("session_token")
+        ):
             session.clear()
             if request.path.startswith("/api/") or request.is_json:
                 return jsonify({"ok": False, "msg": "Session invalidated"}), 401

@@ -8,7 +8,7 @@ from flask import g, session
 
 from config import Config
 from app.helpers import PERM_KEYS, hash_pw, verify_pw
-from app.blueprints.auth import auto_login, auth_google_callback, login_page, verify_2fa
+from app.blueprints.auth import auto_login, auth_google_callback, login_page, verify_2fa, logout
 from app.blueprints.main import (admin_page, categories_page, docs_page, forecasting_page,
                                  integrations_page, inventory, products_page, sites_page, checkout_page,
                                  reservations_page, profile_page, add_item_page)
@@ -690,6 +690,68 @@ def test_docs_tour_targets_full_docs_shell(app, tenant):
     body = page.get_data(as_text=True)
     assert '<section class="docs-shell" data-tour="sops-list">' in body
     assert '<section class="docs-list card" data-tour="sops-list">' not in body
+
+
+def test_platform_impersonation_does_not_overwrite_user_login_state(app, tenant):
+    from app.platform import get_platform_db
+
+    user_db = sqlite3.connect(tenant["db_path"])
+    user_db.row_factory = sqlite3.Row
+    user_db.execute(
+        "UPDATE users SET last_login=?, session_token=? WHERE id=1",
+        ["2026-05-01 09:00:00", "real-user-token"],
+    )
+    user_db.commit()
+    user_db.close()
+
+    pdb = get_platform_db()
+    pdb.execute(
+        "INSERT INTO cross_login_tokens (tenant_slug,user_id,token,expires_at,impersonation,created_at,used) VALUES (?,?,?,?,?,?,0)",
+        [tenant["slug"], 1, "impersonation-token", "2099-01-01 00:00:00", 1, "2026-05-05 12:00:00"],
+    )
+    pdb.commit()
+    pdb.close()
+
+    with app.test_request_context(
+        "/auto-login?token=impersonation-token",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        response = _as_response(app, app.preprocess_request() or auto_login())
+        saved_session = dict(session)
+
+    assert response.status_code == 303
+    assert saved_session["platform_impersonation"] is True
+
+    user_db = sqlite3.connect(tenant["db_path"])
+    row = user_db.execute("SELECT last_login, session_token FROM users WHERE id=1").fetchone()
+    user_db.close()
+    assert row[0] == "2026-05-01 09:00:00"
+    assert row[1] == "real-user-token"
+
+
+def test_platform_impersonation_logout_preserves_real_user_session_token(app, tenant):
+    expires_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)).isoformat()
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute("UPDATE users SET session_token=? WHERE id=1", ["real-user-token"])
+    db.commit()
+    db.close()
+
+    with app.test_request_context("/logout", base_url=f"http://{tenant['host']}", method="GET"):
+        session["user_id"] = 1
+        session["username"] = "admin"
+        session["role"] = "admin"
+        session["permissions"] = ",".join(PERM_KEYS)
+        session["session_token"] = "impersonated-session-token"
+        session["expires_at"] = expires_at
+        session["platform_impersonation"] = True
+        response = _as_response(app, app.preprocess_request() or logout())
+
+    assert response.status_code == 302
+    db = sqlite3.connect(tenant["db_path"])
+    row = db.execute("SELECT session_token FROM users WHERE id=1").fetchone()
+    db.close()
+    assert row[0] == "real-user-token"
 
 
 def test_onboarding_gate_redirects_unfinished_tenant(app):

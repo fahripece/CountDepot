@@ -65,6 +65,28 @@ def _build_session(user, perms):
     return sess
 
 
+def _finalize_session(user, perms, *, next_target=None, track_login=True, login_result="ok", auth_detail=None, impersonation=False):
+    sess = _build_session(user, perms)
+    session.clear()
+    session.update(sess)
+    if next_target:
+        session["post_login_redirect"] = next_target
+    if impersonation:
+        session["platform_impersonation"] = True
+    if track_login:
+        now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
+        execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
+                [now_str, sess["session_token"], user["id"]])
+        execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
+                [user["id"], user["username"], request.remote_addr or "", request.user_agent.string, login_result, now_str])
+    if auth_detail:
+        log_auth_event(auth_detail, username=user["username"], ip=request.remote_addr or "", tenant=getattr(g, "tenant_slug", ""))
+    return redirect(
+        _safe_next_target(session.pop("post_login_redirect", None)) or url_for("main.inventory"),
+        code=303 if not track_login else 302,
+    )
+
+
 def _safe_next_target(raw_target):
     target = (raw_target or "").strip()
     if not target.startswith("/"):
@@ -214,15 +236,17 @@ def logout():
     username = session.get("username", "")
     uid      = session.get("user_id")
     ip       = request.remote_addr or ""
+    impersonating = bool(session.get("platform_impersonation"))
     log_auth_event("LOGOUT", username=username, ip=ip, tenant=getattr(g, "tenant_slug", ""))
-    try:
-        execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
-                [uid, username, ip, request.user_agent.string, "logout",
-                 _utc_now().strftime("%Y-%m-%d %H:%M:%S")])
-    except Exception:
-        pass
+    if not impersonating:
+        try:
+            execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
+                    [uid, username, ip, request.user_agent.string, "logout",
+                     _utc_now().strftime("%Y-%m-%d %H:%M:%S")])
+        except Exception:
+            pass
     session.clear()
-    if uid:
+    if uid and not impersonating:
         try:
             execute("UPDATE users SET session_token=NULL WHERE id=?", [uid])
         except Exception:
@@ -300,20 +324,23 @@ def verify_2fa():
             clear_login_rate(ip)
             perms = get_user_perms(user["id"], user["role"],
                                    user["permissions"] if "permissions" in user.keys() else "")
-            sess = _build_session(user, perms)
             redirect_target = _safe_next_target(session.get("post_login_redirect"))
-            session.clear()
-            session.update(sess)
-            now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
-            execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
-                    [now_str, sess["session_token"], user["id"]])
-            execute("INSERT INTO login_log (user_id,username,ip_address,user_agent,result,ts) VALUES (?,?,?,?,?,?)",
-                    [user["id"], user["username"], ip, request.user_agent.string, "ok", now_str])
-            log_auth_event("LOGIN_OK_2FA", username=user["username"], ip=ip,
-                           tenant=getattr(g, "tenant_slug", ""))
-            return redirect(
-                redirect_target or url_for("main.inventory"),
-                code=303,
+            pending_impersonation = bool(session.get("pending_platform_impersonation"))
+            if pending_impersonation:
+                return _finalize_session(
+                    user,
+                    perms,
+                    next_target=redirect_target,
+                    track_login=False,
+                    impersonation=True,
+                )
+            return _finalize_session(
+                user,
+                perms,
+                next_target=redirect_target,
+                track_login=True,
+                login_result="ok",
+                auth_detail="LOGIN_OK_2FA",
             )
 
         error = "Invalid or expired code. Please try again."
@@ -585,6 +612,7 @@ def auto_login():
 
     tenant_slug = row["tenant_slug"]
     user_id     = row["user_id"]
+    impersonation = bool(row["impersonation"]) if "impersonation" in row.keys() else False
 
     # Ensure this token is for the current tenant
     current_slug = getattr(g, "tenant_slug", None)
@@ -610,6 +638,8 @@ def auto_login():
         session.clear()
         session["pending_2fa_user_id"] = user["id"]
         session["pending_2fa_method"] = "totp"
+        if impersonation:
+            session["pending_platform_impersonation"] = True
         if next_target:
             session["post_login_redirect"] = next_target
         log_auth_event("2FA_TOTP_CHALLENGE", username=user["username"], ip=ip,
@@ -648,6 +678,8 @@ def auto_login():
         session.clear()
         session["pending_2fa_user_id"] = user["id"]
         session["pending_2fa_method"] = "email"
+        if impersonation:
+            session["pending_platform_impersonation"] = True
         if next_target:
             session["post_login_redirect"] = next_target
         log_auth_event("2FA_SENT", username=user["username"], ip=ip,
@@ -656,17 +688,22 @@ def auto_login():
 
     perms  = get_user_perms(user["id"], user["role"],
                             user["permissions"] if "permissions" in user.keys() else "")
-    sess = _build_session(user, perms)
-    session.clear()
-    session.update(sess)
-    if next_target:
-        session["post_login_redirect"] = next_target
-    execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
-                    [_utc_now().strftime("%Y-%m-%d %H:%M:%S"), sess["session_token"], user["id"]])
-    log_auth_event("LOGIN_OK", username=user["username"],
-                   ip=request.remote_addr or "", tenant=tenant_slug,
-                   detail="via cross-login token")
-    return redirect(_safe_next_target(session.pop("post_login_redirect", None)) or url_for("main.inventory"))
+    if impersonation:
+        return _finalize_session(
+            user,
+            perms,
+            next_target=next_target,
+            track_login=False,
+            impersonation=True,
+        )
+    return _finalize_session(
+        user,
+        perms,
+        next_target=next_target,
+        track_login=True,
+        login_result="ok",
+        auth_detail="LOGIN_OK",
+    )
 
 
 @bp.route("/auth/google")
