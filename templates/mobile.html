@@ -2,6 +2,12 @@
 {% block title %}Mobile Scanner - CountDepot{% endblock %}
 {% block body_class %}mobile-page{% endblock %}
 {% block content %}
+{% set user_perms = (session.get('permissions') or '').split(',') %}
+{% set is_admin_like = session.get('is_admin_like') %}
+{% set can_write_items = is_admin_like or 'write_items' in user_perms %}
+{% set can_checkout = is_admin_like or 'checkout_checkin' in user_perms %}
+{% set can_view_docs = is_admin_like or 'view_docs' in user_perms %}
+{% set can_view_dashboard = is_admin_like or 'view_dashboard' in user_perms %}
 <main class="m-app">
   <header class="m-head">
     <div>
@@ -17,18 +23,32 @@
 
   <section class="m-shortcuts" aria-label="Full CountDepot shortcuts">
     <a href="/" class="m-shortcut"><strong>All inventory</strong><span>Search, filter, edit, bulk actions</span></a>
+    {% if can_write_items %}
     <a href="/add-item" class="m-shortcut"><strong>Add item</strong><span>Full add workflow and product fields</span></a>
+    {% endif %}
+    {% if can_checkout %}
     <a href="/reservations" class="m-shortcut"><strong>Reservations</strong><span>View, create, manage holds</span></a>
+    {% endif %}
     <a href="/sites" class="m-shortcut"><strong>Sites</strong><span>Locations and site inventory</span></a>
+    {% if can_view_docs %}
     <a href="/docs" class="m-shortcut"><strong>SOPs &amp; Docs</strong><span>Team procedures and permissions</span></a>
+    {% endif %}
+    {% if is_admin_like %}
     <a href="/procurement" class="m-shortcut"><strong>Purchasing</strong><span>POs, receiving, accounting sync</span></a>
+    {% endif %}
+    {% if can_write_items %}
     <a href="/products" class="m-shortcut"><strong>Products</strong><span>Templates, fields, clone settings</span></a>
+    {% endif %}
+    {% if can_view_dashboard %}
     <a href="/report/financial" class="m-shortcut"><strong>Reports</strong><span>Financial and inventory reports</span></a>
+    {% endif %}
   </section>
 
   <section class="m-scan">
     <button class="m-scan-btn" type="button" onclick="scanWithCamera()">Scan Item Barcode</button>
+    {% if can_checkout %}
     <div class="m-bulk-toggle"><label><input id="mBulkToggle" type="checkbox" onchange="toggleMobileBulkMode()"> Bulk checkout queue</label></div>
+    {% endif %}
     <div class="m-search">
       <input id="mQuery" placeholder="Serial, SKU, item name..." autocomplete="off" autocapitalize="none" enterkeyhint="search" onkeydown="if(event.key==='Enter')lookupInput()">
       <button type="button" onclick="lookupInput()">Find</button>
@@ -50,15 +70,22 @@
 
   <section class="m-tabs" role="tablist" aria-label="Mobile inventory actions">
     <button class="active" data-tab="lookup" onclick="setTab('lookup')" type="button">Item</button>
+    {% if can_checkout %}
     <button data-tab="reserve" onclick="setTab('reserve')" type="button">Reserve</button>
+    {% endif %}
+    {% if can_write_items %}
     <button data-tab="add" onclick="setTab('add')" type="button">Add</button>
+    {% endif %}
+    {% if can_checkout %}
     <button data-tab="active" onclick="setTab('active')" type="button">Active</button>
+    {% endif %}
   </section>
 
   <section class="m-panel" id="lookupPanel">
     <div id="mResult" class="m-empty">Scan or search an item to start.</div>
   </section>
 
+  {% if can_checkout %}
   <section class="m-panel" id="reservePanel" hidden>
     <h2>Create Reservation</h2>
     <div id="reserveItemLabel" class="m-note">Scan or search an item first, then reserve it.</div>
@@ -71,7 +98,9 @@
     <label>Reason / title<input id="resPurpose" placeholder="Install, job, customer, project"></label>
     <button class="m-primary" type="button" onclick="createReservation()">Reserve Item</button>
   </section>
+  {% endif %}
 
+  {% if can_write_items %}
   <section class="m-panel" id="addPanel" hidden>
     <h2>Add Item</h2>
     <label>Product
@@ -99,7 +128,9 @@
     </label>
     <button class="m-primary" type="button" onclick="addItem()">Add Inventory</button>
   </section>
+  {% endif %}
 
+  {% if can_checkout %}
   <section class="m-panel" id="activePanel" hidden>
     <div class="m-row-head">
       <h2>Active Reservations</h2>
@@ -107,12 +138,15 @@
     </div>
     <div id="activeReservations" class="m-empty">Loading...</div>
   </section>
+  {% endif %}
 </main>
 
 <div class="m-actionbar" id="actionBar" hidden>
+  {% if can_checkout %}
   <button type="button" onclick="confirmCheckout()">Check Out</button>
   <button type="button" onclick="confirmCheckin()">Check In</button>
   <button type="button" onclick="setTab('reserve')">Reserve</button>
+  {% endif %}
   <button type="button" onclick="resetLookup()">Scan</button>
 </div>
 
@@ -184,6 +218,8 @@ body.mobile-page{background:#eef2f7}
 <script>
 const csrf=document.querySelector('meta[name="csrf-token"]').content;
 const userName={{ session.get('username','')|tojson }};
+const MOBILE_CAN_WRITE_ITEMS={{ can_write_items|tojson }};
+const MOBILE_CAN_CHECKOUT={{ can_checkout|tojson }};
 let currentItem=null;
 let searchResults=[];
 let mobileBulkMode=false;
@@ -193,11 +229,17 @@ function toastMsg(msg,type='info'){ if(window.toast) toast(msg,type); else alert
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 function today(){return new Date().toISOString().slice(0,10);}
 function setTab(tab){
+  if(tab==='reserve'&&!MOBILE_CAN_CHECKOUT){toastMsg('Reservation permission required','error');return;}
+  if(tab==='add'&&!MOBILE_CAN_WRITE_ITEMS){toastMsg('Add-item permission required','error');return;}
   document.querySelectorAll('.m-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-  ['lookup','reserve','add','active'].forEach(id=>document.getElementById(id+'Panel').hidden=id!==tab);
+  ['lookup','reserve','add','active'].forEach(id=>{
+    const panel=document.getElementById(id+'Panel');
+    if(panel)panel.hidden=id!==tab;
+  });
   if(tab==='active') loadReservations();
 }
 function toggleMobileBulkMode(){
+  if(!MOBILE_CAN_CHECKOUT)return;
   mobileBulkMode=!!document.getElementById('mBulkToggle').checked;
   document.getElementById('mobileBulkPanel').hidden=!mobileBulkMode;
 }
@@ -239,6 +281,7 @@ function clearMobileBulkQueue(){
   renderMobileBulkQueue();
 }
 async function submitMobileBulkCheckout(){
+  if(!MOBILE_CAN_CHECKOUT){toastMsg('Checkout permission required','error');return;}
   if(!mobileBulkQueue.length)return;
   const who=document.getElementById('mBulkWho').value.trim()||userName;
   if(!who){toastMsg('Tech name is required','error');document.getElementById('mBulkWho').focus();return;}
@@ -324,7 +367,8 @@ async function selectHydratedItem(item){
 function selectItem(item){
   currentItem=item;
   document.getElementById('actionBar').hidden=false;
-  document.getElementById('reserveItemLabel').textContent=`Reserving: ${item.name} (#${item.id})`;
+  const reserveLabel=document.getElementById('reserveItemLabel');
+  if(reserveLabel)reserveLabel.textContent=`Reserving: ${item.name} (#${item.id})`;
   const qtyTracked=item.qty!==null&&item.qty!==undefined;
   const reserved=Number(item.reserved_qty||0);
   const available=qtyTracked?Number(item.available ?? Math.max(0,(item.qty||0)-(item.qty_out||0)-reserved)):null;
@@ -342,10 +386,10 @@ function selectItem(item){
       </div>
       ${resWarn}
       <div class="m-actions">
-        <button type="button" onclick="confirmCheckout()">Check Out</button>
-        <button type="button" onclick="confirmCheckin()">Check In</button>
-        <button type="button" onclick="setTab('reserve')">Reserve</button>
-        <button type="button" onclick="setTab('add')">Add Similar</button>
+        ${MOBILE_CAN_CHECKOUT?'<button type="button" onclick="confirmCheckout()">Check Out</button>':''}
+        ${MOBILE_CAN_CHECKOUT?'<button type="button" onclick="confirmCheckin()">Check In</button>':''}
+        ${MOBILE_CAN_CHECKOUT?'<button type="button" onclick="setTab(\\'reserve\\')">Reserve</button>':''}
+        ${MOBILE_CAN_WRITE_ITEMS?'<button type="button" onclick="setTab(\\'add\\')">Add Similar</button>':''}
       </div>
     </article>`;
 }
@@ -366,6 +410,7 @@ async function chooseReservationIfNeeded(item){
   return {use_reservation:true,reservation_id:active[idx].id};
 }
 async function confirmCheckout(){
+  if(!MOBILE_CAN_CHECKOUT){toastMsg('Checkout permission required','error');return;}
   if(!currentItem){toastMsg('Scan an item first','error');return;}
   const qtyTracked=currentItem.qty!==null&&currentItem.qty!==undefined;
   const qty=qtyTracked?Number(prompt('Quantity to check out:', '1')||0):1;
@@ -380,6 +425,7 @@ async function confirmCheckout(){
   }catch(e){ if(e.message!=='Cancelled') toastMsg(e.message,'error'); }
 }
 async function confirmCheckin(){
+  if(!MOBILE_CAN_CHECKOUT){toastMsg('Check-in permission required','error');return;}
   if(!currentItem){toastMsg('Scan an item first','error');return;}
   const qtyTracked=currentItem.qty!==null&&currentItem.qty!==undefined;
   const qty=qtyTracked?Number(prompt('Quantity to check in:', '1')||0):1;
@@ -392,6 +438,7 @@ async function confirmCheckin(){
   }catch(e){toastMsg(e.message||'Check-in failed','error');}
 }
 async function createReservation(){
+  if(!MOBILE_CAN_CHECKOUT){toastMsg('Reservation permission required','error');return;}
   if(!currentItem){toastMsg('Scan an item first','error');return;}
   const from=document.getElementById('resFrom').value||today();
   const to=document.getElementById('resTo').value||from;
@@ -422,6 +469,7 @@ function fillProductName(){
   if(opt.dataset.category)document.getElementById('addCategory').value=opt.dataset.category;
 }
 async function addItem(){
+  if(!MOBILE_CAN_WRITE_ITEMS){toastMsg('Add-item permission required','error');return;}
   const productId=document.getElementById('addProduct').value||null;
   const qtyVal=document.getElementById('addQty').value;
   const name=document.getElementById('addName').value.trim();
@@ -435,8 +483,8 @@ async function addItem(){
 }
 document.getElementById('resFrom').value=today();
 document.getElementById('resTo').value=today();
-if(new URLSearchParams(location.search).get('action')==='add')setTab('add');
-loadReservations();
+if(new URLSearchParams(location.search).get('action')==='add' && MOBILE_CAN_WRITE_ITEMS)setTab('add');
+if(MOBILE_CAN_CHECKOUT)loadReservations();
 renderMobileBulkQueue();
 </script>
 {% endblock %}

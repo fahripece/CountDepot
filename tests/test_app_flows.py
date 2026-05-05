@@ -663,6 +663,35 @@ def test_tour_target_attributes_and_profile_restart_entry_point_render(app, tena
         assert needle in page.get_data(as_text=True)
 
 
+def test_add_item_tour_step_reveals_manual_entry_fields(app, tenant):
+    response, saved_session = _login(app, tenant)
+    assert response.status_code == 302
+
+    with app.test_request_context("/items/add?tour=1&tour_step=2", base_url=f"http://{tenant['host']}", method="GET"):
+        session.update(saved_session)
+        page = _as_response(app, app.preprocess_request() or add_item_page())
+
+    assert page.status_code == 200
+    body = page.get_data(as_text=True)
+    assert "skipProduct();" in body
+    assert "params.get('tour_step')" in body
+    assert "if (step !== '2' && step !== '1') return;" in body
+
+
+def test_docs_tour_targets_full_docs_shell(app, tenant):
+    response, saved_session = _login(app, tenant)
+    assert response.status_code == 302
+
+    with app.test_request_context("/docs", base_url=f"http://{tenant['host']}", method="GET"):
+        session.update(saved_session)
+        page = _as_response(app, app.preprocess_request() or docs_page())
+
+    assert page.status_code == 200
+    body = page.get_data(as_text=True)
+    assert '<section class="docs-shell" data-tour="sops-list">' in body
+    assert '<section class="docs-list card" data-tour="sops-list">' not in body
+
+
 def test_onboarding_gate_redirects_unfinished_tenant(app):
     slug = "fresh"
     email = "fresh@example.com"
@@ -2525,6 +2554,60 @@ def test_viewer_cannot_open_checkout_or_reservations_pages(app, tenant):
     assert checkout_response.headers["Location"] == "/"
     assert reservations_response.status_code == 302
     assert reservations_response.headers["Location"] == "/"
+
+
+def test_worker_without_checkout_permission_cannot_use_reservations_api_or_see_checkout_ui(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,?,?)",
+        [
+            "readonly.worker@example.com",
+            hash_pw("Password1!"),
+            "worker",
+            "view_inventory",
+            "readonly.worker@example.com",
+            1,
+            0,
+        ],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant, email="readonly.worker@example.com", password="Password1!")
+    assert response.status_code == 302
+
+    with app.test_request_context("/", base_url=f"http://{tenant['host']}", method="GET"):
+        session.update(saved_session)
+        inventory_response = _as_response(app, app.preprocess_request() or inventory())
+
+    inventory_body = inventory_response.get_data(as_text=True)
+    assert inventory_response.status_code == 200
+    assert 'href="/checkout" class="navlink' not in inventory_body
+    assert 'href="/reservations" data-tour="reservations" class="navlink' not in inventory_body
+    assert 'href="/add-item" data-tour="add-item" class="navlink' not in inventory_body
+    assert "selectionCheckoutBtn" in inventory_body
+
+    with app.test_request_context("/mobile", base_url=f"http://{tenant['host']}", method="GET"):
+        session.update(saved_session)
+        mobile_response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    mobile_body = mobile_response.get_data(as_text=True)
+    assert mobile_response.status_code == 200
+    assert "Bulk checkout queue" not in mobile_body
+    assert 'data-tab="reserve"' not in mobile_body
+    assert 'data-tab="add"' not in mobile_body
+    assert '<a href="/reservations" class="m-shortcut">' not in mobile_body
+    assert '<a href="/add-item" class="m-shortcut">' not in mobile_body
+
+    with app.test_request_context("/api/reservations?active=1", base_url=f"http://{tenant['host']}", method="GET"):
+        session.update(saved_session)
+        api_response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+        api_data = api_response.get_json()
+
+    assert api_response.status_code == 403
+    assert api_data["ok"] is False
+    assert "Permission denied" in api_data["msg"]
 
 
 def test_enterprise_plan_includes_unlimited_sites():

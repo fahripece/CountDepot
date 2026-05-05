@@ -3,13 +3,16 @@
 {% block content %}
 {% set is_admin_like = session.get('is_admin_like') %}
 {% set is_viewer = session.get('role') == 'viewer' %}
+{% set can_checkout = is_admin_like or 'checkout_checkin' in (session.get('permissions') or '').split(',') %}
 <!-- SCAN BAR -->
 <div class="scan-bar" id="scanBar" style="display:none">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M3 5h3M3 9h3M3 19h3M3 15h3M18 5h3M18 9h3M18 15h3M18 19h3M7 3v5M7 16v5M17 3v5M17 16v5M7 8h10v8H7z"/></svg>
   <div class="scan-mode-tabs">
     <button class="smt active" onclick="setScanMode('lookup')">🔍 Look Up</button>
+    {% if can_checkout %}
     <button class="smt" onclick="setScanMode('checkout')">📤 Check Out</button>
     <button class="smt" onclick="setScanMode('checkin')">📥 Check In</button>
+    {% endif %}
   </div>
   <input id="scanInput" placeholder="Scan barcode or type serial / model / SKU…" autocomplete="off" onkeydown="if(event.key==='Enter')doScan(this.value)">
   <button title="Scan with camera" onclick="openCameraScanner(c=>{document.getElementById('scanInput').value=c;doScan(c);})" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:5px 9px;cursor:pointer;flex-shrink:0;display:flex;align-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
@@ -1181,13 +1184,13 @@ function showDetail(item){
   } else {
     acts=CAN_CHECKOUT?`<button class="btn btn-danger" onclick="closeDetail();openCheckout(${item.id})">📤 Check Out</button>`:'';
   }
-  acts+=`<button class="btn btn-danger" onclick="selectedIds=new Set([${item.id}]);updateSelectionUI();closeDetail();openReserveSelected()">Reserve</button>`;
+  if(CAN_CHECKOUT)acts+=`<button class="btn btn-danger" onclick="selectedIds=new Set([${item.id}]);updateSelectionUI();closeDetail();openReserveSelected()">Reserve</button>`;
   if(CAN_WRITE_ITEMS)acts+=`<button class="btn btn-secondary" onclick="closeDetail();editItem(allItems.find(i=>i.id===${item.id}))">Edit</button>`;
   acts+=`<button class="btn btn-secondary" onclick="printLabel(${item.id})" style="font-size:11px">Print Label</button>`;
   if(item.is_incomplete){
     acts+=`<button class="btn btn-secondary" style="background:#fef3c7;color:#92400e;border-color:#fde68a;font-size:11px" onclick="openConfirmScan(${item.id})" title="Scan the label to confirm this item">Scan to Confirm</button>`;
   }
-  if(!item.sold&&!item.retired){
+  if(CAN_WRITE_ITEMS&&!item.sold&&!item.retired){
     acts+=`<button class="btn btn-secondary" style="font-size:11px;color:#475569" onclick="openRetireModal(${item.id})" title="Retire this item">♻ Retire</button>`;
   }
   document.getElementById('dp-actions').innerHTML=acts;
@@ -2096,6 +2099,7 @@ function openSelectedClone(){
   cloneItem([...selectedIds][0]);
 }
 function openReserveSelected(){
+  if(!CAN_CHECKOUT){toast('You do not have permission to reserve items','err');return;}
   if(!selectedIds.size){toast('Select item(s) to reserve','warn');return;}
   const items=allItems.filter(i=>selectedIds.has(i.id));
   const qtyItems=items.filter(i=>i.qty!==null);
@@ -2380,7 +2384,7 @@ async function confirmImport(){
 // ── Scanner ──
 function toggleScan(){scanOpen=!scanOpen;document.getElementById('scanBar').style.display=scanOpen?'flex':'none';if(scanOpen)setTimeout(()=>document.getElementById('scanInput').focus(),50);}
 function setScanMode(mode){scanMode=mode;document.querySelectorAll('.smt').forEach((el,i)=>el.classList.toggle('active',['lookup','checkout','checkin'][i]===mode));document.getElementById('scanInput').focus();}
-async function doScan(code){code=(code||'').trim();document.getElementById('scanInput').value='';if(!code)return;const data=await fetch('/api/scan?code='+encodeURIComponent(code)).then(r=>r.json());const resEl=document.getElementById('scanResult');resEl.style.display='';if(!data.found){resEl.className='scan-result err';resEl.textContent=`Not found: ${code}`;return}const item=data.item;if(scanMode==='lookup'){resEl.className='scan-result found';resEl.textContent=`✓ ${item.name} — Shelf ${item.shelf}`;await loadItems();showDetail(allItems.find(i=>i.id===item.id));}else if(scanMode==='checkout'){if(item.checked_out){resEl.className='scan-result warn';resEl.textContent=`Already out: ${item.name}`}else{openCheckout(item.id);resEl.className='scan-result found';resEl.textContent=`Ready: ${item.name}`}}else if(scanMode==='checkin'){if(!item.checked_out){resEl.className='scan-result warn';resEl.textContent=`Already in: ${item.name}`}else{const res=await api('/api/checkin',{id:item.id});if(res.ok){resEl.className='scan-result found';resEl.textContent=`✓ Checked in: ${item.name}`;loadItems();}}}setTimeout(()=>{resEl.style.display='none'},4000);}
+async function doScan(code){code=(code||'').trim();document.getElementById('scanInput').value='';if(!code)return;const data=await fetch('/api/scan?code='+encodeURIComponent(code)).then(r=>r.json());const resEl=document.getElementById('scanResult');resEl.style.display='';if(!data.found){resEl.className='scan-result err';resEl.textContent=`Not found: ${code}`;return}const item=data.item;if(scanMode==='lookup'){resEl.className='scan-result found';resEl.textContent=`✓ ${item.name} — Shelf ${item.shelf}`;await loadItems();showDetail(allItems.find(i=>i.id===item.id));}else if(scanMode==='checkout'){if(!CAN_CHECKOUT){resEl.className='scan-result err';resEl.textContent='Checkout permission required';}else if(item.checked_out){resEl.className='scan-result warn';resEl.textContent=`Already out: ${item.name}`}else{openCheckout(item.id);resEl.className='scan-result found';resEl.textContent=`Ready: ${item.name}`}}else if(scanMode==='checkin'){if(!CAN_CHECKOUT){resEl.className='scan-result err';resEl.textContent='Check-in permission required';}else if(!item.checked_out){resEl.className='scan-result warn';resEl.textContent=`Already in: ${item.name}`}else{const res=await api('/api/checkin',{id:item.id});if(res.ok){resEl.className='scan-result found';resEl.textContent=`✓ Checked in: ${item.name}`;loadItems();}}}setTimeout(()=>{resEl.style.display='none'},4000);}
 
 function toggleExportMenu(){const m=document.getElementById('exportMenu');m.style.display=m.style.display==='none'?'block':'none';}
 function closeExportMenu(){document.getElementById('exportMenu').style.display='none';}

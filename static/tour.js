@@ -278,12 +278,15 @@ function placeCallout(target) {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const mobile = viewportWidth < 780;
+  const targetCenterX = rect.left + rect.width / 2;
+  const targetCenterY = rect.top + rect.height / 2;
+  const spotlightPadding = 8;
 
   spotlight.style.display = "block";
-  spotlight.style.left = `${Math.max(8, rect.left - 8)}px`;
-  spotlight.style.top = `${Math.max(8, rect.top - 8)}px`;
-  spotlight.style.width = `${rect.width + 16}px`;
-  spotlight.style.height = `${rect.height + 16}px`;
+  spotlight.style.left = `${Math.max(8, rect.left - spotlightPadding)}px`;
+  spotlight.style.top = `${Math.max(8, rect.top - spotlightPadding)}px`;
+  spotlight.style.width = `${rect.width + spotlightPadding * 2}px`;
+  spotlight.style.height = `${rect.height + spotlightPadding * 2}px`;
 
   if (mobile) {
     callout.style.left = "12px";
@@ -295,6 +298,40 @@ function placeCallout(target) {
   }
 
   arrow.style.display = "block";
+  const canPlaceLeft = rect.left >= cardRect.width + 40;
+  const canPlaceRight = viewportWidth - rect.right >= cardRect.width + 40;
+  const isLargeTarget = rect.width > viewportWidth * 0.42 || rect.height > viewportHeight * 0.38;
+  const preferSide = isLargeTarget && (canPlaceLeft || canPlaceRight);
+
+  if (preferSide) {
+    const placeRight = canPlaceRight && (!canPlaceLeft || rect.left < viewportWidth * 0.3);
+    const left = placeRight
+      ? Math.min(viewportWidth - cardRect.width - 12, rect.right + 18)
+      : Math.max(12, rect.left - cardRect.width - 18);
+    const top = Math.max(
+      12,
+      Math.min(viewportHeight - cardRect.height - 12, targetCenterY - cardRect.height / 2),
+    );
+    callout.style.left = `${left}px`;
+    callout.style.top = `${top}px`;
+    callout.style.right = "auto";
+    callout.style.bottom = "auto";
+
+    const arrowTop = Math.max(24, Math.min(cardRect.height - 24, targetCenterY - top));
+    arrow.style.top = `${arrowTop - 8}px`;
+    arrow.style.bottom = "auto";
+    if (placeRight) {
+      arrow.style.left = "-8px";
+      arrow.style.transform = "rotate(-45deg)";
+    } else {
+      arrow.style.left = "auto";
+      arrow.style.right = "-8px";
+      arrow.style.transform = "rotate(135deg)";
+    }
+    return;
+  }
+
+  arrow.style.right = "auto";
   const spaceBelow = viewportHeight - rect.bottom;
   const showBelow = spaceBelow >= cardRect.height + 30 || rect.top < cardRect.height + 40;
   const top = showBelow
@@ -302,7 +339,7 @@ function placeCallout(target) {
     : Math.max(12, rect.top - cardRect.height - 18);
   const left = Math.min(
     viewportWidth - cardRect.width - 12,
-    Math.max(12, rect.left + rect.width / 2 - cardRect.width / 2),
+    Math.max(12, targetCenterX - cardRect.width / 2),
   );
 
   callout.style.left = `${left}px`;
@@ -310,15 +347,17 @@ function placeCallout(target) {
   callout.style.right = "auto";
   callout.style.bottom = "auto";
 
-  const arrowLeft = Math.max(24, Math.min(cardRect.width - 24, rect.left + rect.width / 2 - left));
+  const arrowLeft = Math.max(24, Math.min(cardRect.width - 24, targetCenterX - left));
   arrow.style.left = `${arrowLeft - 8}px`;
   if (showBelow) {
     arrow.style.top = "-8px";
     arrow.style.bottom = "auto";
+    arrow.style.right = "auto";
     arrow.style.transform = "rotate(45deg)";
   } else {
     arrow.style.top = "auto";
     arrow.style.bottom = "-8px";
+    arrow.style.right = "auto";
     arrow.style.transform = "rotate(225deg)";
   }
 }

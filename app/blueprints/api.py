@@ -2670,6 +2670,7 @@ def api_add_note(item_id):
 
 @bp.route("/api/item/<int:item_id>/reservations")
 @login_required
+@perm_required("checkout_checkin")
 def api_item_reservations(item_id):
     if not _item_location_allowed(item_id):
         return jsonify([])
@@ -6137,6 +6138,7 @@ def import_excel():
 
 @bp.route("/api/reservations")
 @login_required
+@perm_required("checkout_checkin")
 def api_reservations_list():
     from_d = request.args.get("from", "")
     to_d   = request.args.get("to", "")
@@ -6166,6 +6168,7 @@ def api_reservations_list():
 
 @bp.route("/api/reservations", methods=["POST"])
 @login_required
+@perm_required("checkout_checkin")
 def api_reservations_create():
     d          = request.json or {}
     item_id    = int(d.get("item_id", 0))
@@ -6237,6 +6240,7 @@ def api_reservations_create():
 
 @bp.route("/api/reservations/<int:res_id>/cancel", methods=["POST"])
 @login_required
+@perm_required("checkout_checkin")
 def api_reservations_cancel(res_id):
     res = query("SELECT r.*, i.name as item_name FROM item_reservations r JOIN items i ON i.id=r.item_id WHERE r.id=?",
                 [res_id], one=True)
@@ -6262,6 +6266,7 @@ def api_reservations_cancel(res_id):
 
 @bp.route("/api/reservations/availability")
 @login_required
+@perm_required("checkout_checkin")
 def api_reservations_availability():
     """Return booked date ranges for an item — used to highlight unavailable dates in the picker."""
     item_id = request.args.get("item_id", "")

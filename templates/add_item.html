@@ -642,6 +642,16 @@ function skipScanConfirm(){
   }
   if(sel.value) onProductChange();
 })();
+
+(function(){
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('tour') !== '1') return;
+  const step = params.get('tour_step');
+  if (step !== '2' && step !== '1') return;
+  const step2 = document.getElementById('fi-step2');
+  if (!step2 || step2.style.display !== 'none') return;
+  skipProduct();
+})();
 </script>
 
 
