@@ -65,7 +65,7 @@ def _build_session(user, perms):
     return sess
 
 
-def _finalize_session(user, perms, *, next_target=None, track_login=True, login_result="ok", auth_detail=None, impersonation=False):
+def _finalize_session(user, perms, *, next_target=None, track_login=True, login_result="ok", auth_detail=None, impersonation=False, redirect_code=None):
     sess = _build_session(user, perms)
     session.clear()
     session.update(sess)
@@ -83,7 +83,7 @@ def _finalize_session(user, perms, *, next_target=None, track_login=True, login_
         log_auth_event(auth_detail, username=user["username"], ip=request.remote_addr or "", tenant=getattr(g, "tenant_slug", ""))
     return redirect(
         _safe_next_target(session.pop("post_login_redirect", None)) or url_for("main.inventory"),
-        code=303 if not track_login else 302,
+        code=redirect_code or (303 if not track_login else 302),
     )
 
 
@@ -333,6 +333,7 @@ def verify_2fa():
                     next_target=redirect_target,
                     track_login=False,
                     impersonation=True,
+                    redirect_code=303,
                 )
             return _finalize_session(
                 user,
@@ -341,6 +342,7 @@ def verify_2fa():
                 track_login=True,
                 login_result="ok",
                 auth_detail="LOGIN_OK_2FA",
+                redirect_code=303,
             )
 
         error = "Invalid or expired code. Please try again."
