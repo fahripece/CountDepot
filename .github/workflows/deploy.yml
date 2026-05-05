@@ -26,6 +26,11 @@ jobs:
 
       - name: Run test suite
         run: pytest -q
+        shell: bash
+      - name: Re-run failed tests with verbose output
+        if: failure()
+        run: pytest -vv -x
+        shell: bash
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
