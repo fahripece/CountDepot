@@ -188,7 +188,7 @@ RESOURCE_GUIDES = {
             },
         ],
         "cta_title": "Replace the spreadsheet before the process gets expensive",
-        "cta_copy": "Start with a 30-day free trial and move the inventory workflow into a system built for scanning, reservations, and location-based visibility.",
+        "cta_copy": "Start free and move the inventory workflow into a system built for scanning, reservations, and location-based visibility.",
         "related_slugs": [
             "what-to-look-for-in-inventory-management-software",
             "how-low-stock-alerts-should-work-across-multiple-locations",

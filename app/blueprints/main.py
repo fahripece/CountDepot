@@ -353,6 +353,7 @@ def add_item_page():
 
 @bp.route("/checkout")
 @login_required
+@perm_required("checkout_checkin")
 def checkout_page():
     return render_template("checkout.html")
 
@@ -384,6 +385,7 @@ def categories_page():
 
 @bp.route("/checked-out")
 @login_required
+@perm_required("checkout_checkin")
 def checked_out_page():
     return render_template("sold_items.html",
         categories=query("SELECT * FROM categories ORDER BY name"))
@@ -1024,6 +1026,7 @@ def invoice_import_redirect():
 
 @bp.route("/reservations")
 @login_required
+@perm_required("checkout_checkin")
 def reservations_page():
     items = query("""SELECT i.id, i.name, i.serial, i.sku, i.internal_sku,
                             c.name as category, c.color

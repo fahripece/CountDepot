@@ -617,7 +617,21 @@ const _csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
 function api(url,data){return fetch(url,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-CSRF-Token':_csrfToken}:{},body:data?JSON.stringify(data):undefined}).then(r=>r.json())}
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
-// Modals ONLY close via the ✕ button — clicking the backdrop does nothing
+document.addEventListener('click',e=>{
+  const overlay=e.target.closest('.overlay.open');
+  if(!overlay||!e.target.classList.contains('overlay'))return;
+  overlay.classList.remove('open');
+});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  const overlays=[...document.querySelectorAll('.overlay.open')];
+  const topOverlay=overlays[overlays.length-1];
+  if(topOverlay){topOverlay.classList.remove('open');return;}
+  const cam=document.getElementById('camScanOverlay');
+  if(cam&&cam.style.display==='flex'){closeCameraScanner();return;}
+  if(document.getElementById('notifPanel')?.style.display==='block'){closeNotifPanel();return;}
+  if(document.getElementById('mobSidebar')?.classList.contains('open')){closeMobSidebar();}
+});
 async function refreshAlertBadge(){try{const a=await fetch('/api/alerts').then(r=>r.json());const b=document.getElementById('alert-badge');if(b){b.textContent=a.length;b.style.display=a.length>0?'':'none'}}catch(e){}}
 refreshAlertBadge();setInterval(refreshAlertBadge,60000);
 // ── Notifications ──
@@ -774,7 +788,7 @@ function toggleAccordion(hdr,id){
     closeRow.innerHTML='<button onclick="closeMobSidebar()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:20px;line-height:1;padding:4px">✕</button>';
     mob.insertBefore(closeRow,mob.firstChild);
     // Close sidebar when a nav link is clicked
-    mob.querySelectorAll('a.navlink').forEach(a=>a.addEventListener('click',()=>closeMobSidebar()));
+    mob.querySelectorAll('.navlink').forEach(a=>a.addEventListener('click',()=>closeMobSidebar()));
   }
   // Inject hamburger into every .topbar
   const topbar=document.querySelector('.topbar');

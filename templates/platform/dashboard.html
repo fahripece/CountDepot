@@ -333,9 +333,9 @@ tr:hover td{background:#1a2947}
               {% if t.free_inactive_delete_at %}
               <div class="{% if t.free_inactive_due %}risk{% else %}muted{% endif %}" style="margin-top:4px">
                 {% if t.free_inactive_due %}
-                  Free cleanup due
+                  Inactive free cleanup due
                 {% else %}
-                  Free cleanup {{ t.free_inactive_delete_at[:10] }}
+                  Inactive free cleanup {{ t.free_inactive_delete_at[:10] }}
                 {% endif %}
               </div>
               {% endif %}
@@ -723,7 +723,7 @@ tr:hover td{background:#1a2947}
           </select>
         </div>
         <div class="field">
-          <label>Access end date</label>
+          <label>Access ends</label>
           <input name="trial_ends_at" id="billing-trial-ends" type="date">
           <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
             <button type="button" class="btn btn-muted btn-xs" onclick="addDays(7)">+7 days</button>

@@ -87,10 +87,10 @@ def _trial_days_remaining(tenant) -> int | None:
 @login_required
 def billing_page():
     tenant   = dict(_tenant_row(g.tenant_slug))
-    plan_key = tenant.get("plan") or "starter"
+    plan_key = tenant.get("plan") or "free"
     if plan_key not in PLANS:
-        plan_key = "starter"
-    status       = tenant.get("subscription_status", "trial")
+        plan_key = "free"
+    status       = tenant.get("subscription_status", "active")
     trial_days   = _trial_days_remaining(tenant) if status == "trial" else None
     current_plan = PLANS.get(plan_key, PLANS["starter"])
     stripe_ok    = bool(Config.STRIPE_SECRET_KEY)
@@ -222,8 +222,8 @@ def billing_portal():
 def billing_status():
     tenant = dict(_tenant_row(g.tenant_slug))
     return jsonify({
-        "status":     tenant.get("subscription_status", "trial"),
-        "plan":       tenant.get("plan", "starter"),
+        "status":     tenant.get("subscription_status", "active"),
+        "plan":       tenant.get("plan", "free"),
         "trial_days": _trial_days_remaining(tenant),
     })
 

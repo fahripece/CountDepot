@@ -78,6 +78,7 @@ PLANS = {
         "api_access": True,
         "features":   [
             "Unlimited users",
+            "Unlimited sites",
             "Unlimited items",
             "Everything in Pro",
             "Dedicated support",

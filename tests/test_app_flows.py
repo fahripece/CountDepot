@@ -4,13 +4,13 @@ import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-from flask import session
+from flask import g, session
 
 from config import Config
 from app.helpers import PERM_KEYS, hash_pw, verify_pw
-from app.blueprints.auth import auto_login, login_page, verify_2fa
+from app.blueprints.auth import auto_login, auth_google_callback, login_page, verify_2fa
 from app.blueprints.main import (admin_page, categories_page, docs_page, forecasting_page,
-                                 integrations_page, inventory, products_page, sites_page,
+                                 integrations_page, inventory, products_page, sites_page, checkout_page,
                                  reservations_page, profile_page, add_item_page)
 from app.blueprints.api import (
     api_add_reservation,
@@ -374,6 +374,72 @@ def test_auto_login_requires_email_otp_when_enabled(app, tenant, monkeypatch):
         method="GET",
     ):
         response = _as_response(app, app.preprocess_request() or auto_login())
+        saved_session = dict(session)
+
+    body = response.get_data(as_text=True)
+    otp_db = sqlite3.connect(tenant["db_path"])
+    otp_row = otp_db.execute(
+        "SELECT otp FROM login_otp WHERE user_id=1 AND used=0 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    otp_db.close()
+
+    assert response.status_code == 200
+    assert "Two-factor verification" in body
+    assert saved_session["pending_2fa_method"] == "email"
+    assert saved_session["pending_2fa_user_id"] == 1
+    assert sent["to"] == tenant["email"]
+    assert sent["subject"] == "Your CountDepot login code"
+    assert otp_row is not None
+    assert 'action="/verify-2fa"' in body
+
+
+def test_google_tenant_signin_requires_email_otp_when_workspace_2fa_enabled(app, tenant, monkeypatch):
+    sent = {}
+
+    class _FakeGoogle:
+        @staticmethod
+        def authorize_access_token():
+            return {
+                "userinfo": {
+                    "email": tenant["email"],
+                    "email_verified": True,
+                    "given_name": "Admin",
+                    "family_name": "User",
+                }
+            }
+
+    class _FakeOAuth:
+        google = _FakeGoogle()
+
+    monkeypatch.setattr(Config, "SMTP_HOST", "smtp.example.com", raising=False)
+    monkeypatch.setattr("app.oauth", _FakeOAuth(), raising=False)
+
+    def fake_send_email(to, subject, html, text):
+        sent["to"] = to
+        sent["subject"] = subject
+        sent["html"] = html
+        sent["text"] = text
+        return True
+
+    monkeypatch.setattr("app.mailer.send_email", fake_send_email)
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "INSERT INTO settings (key,value) VALUES ('workspace_email_2fa_enabled','1') "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+    )
+    db.execute("UPDATE users SET totp_enabled=0, totp_secret=NULL, two_fa_enabled=0 WHERE id=1")
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/auth/google/callback",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        app.preprocess_request()
+        g.tenant_slug = tenant["slug"]
+        response = _as_response(app, auth_google_callback())
         saved_session = dict(session)
 
     body = response.get_data(as_text=True)
@@ -2426,6 +2492,49 @@ def test_viewer_cannot_add_items(app, tenant):
     assert "Permission denied" in add_data["msg"]
 
 
+def test_viewer_cannot_open_checkout_or_reservations_pages(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "INSERT INTO users (username,password,role,permissions,email,email_verified,must_change_password) "
+        "VALUES (?,?,?,?,?,?,?)",
+        [
+            "viewer.flow@example.com",
+            hash_pw("Password1!"),
+            "viewer",
+            "",
+            "viewer.flow@example.com",
+            1,
+            0,
+        ],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant, email="viewer.flow@example.com", password="Password1!")
+    assert response.status_code == 302
+
+    with app.test_request_context("/checkout", base_url=f"http://{tenant['host']}", method="GET"):
+        session.update(saved_session)
+        checkout_response = _as_response(app, app.preprocess_request() or checkout_page())
+
+    with app.test_request_context("/reservations", base_url=f"http://{tenant['host']}", method="GET"):
+        session.update(saved_session)
+        reservations_response = _as_response(app, app.preprocess_request() or reservations_page())
+
+    assert checkout_response.status_code == 302
+    assert checkout_response.headers["Location"] == "/"
+    assert reservations_response.status_code == 302
+    assert reservations_response.headers["Location"] == "/"
+
+
+def test_enterprise_plan_includes_unlimited_sites():
+    from app.stripe_billing import PLANS
+
+    assert "Unlimited users" in PLANS["enterprise"]["features"]
+    assert "Unlimited sites" in PLANS["enterprise"]["features"]
+    assert "Unlimited items" in PLANS["enterprise"]["features"]
+
+
 def test_public_demo_request_skips_csrf_and_bare_domain_landing(app):
     client = app.test_client()
 
@@ -2692,6 +2801,32 @@ def test_free_signup_success_page_fires_marketing_conversion_events(app, monkeyp
     assert "free_trial_signup" in body
     assert 'lintrk(\'track\', { conversion_id: "77" })' in body
     assert "https://freeplan.countdepot.com/login" in body
+
+
+def test_billing_page_falls_back_to_free_plan_defaults(app, tenant):
+    from app.platform import get_platform_db
+    from app.blueprints.billing import billing_page
+
+    db = get_platform_db()
+    db.execute(
+        "UPDATE tenants SET plan=?, subscription_status=? WHERE slug=?",
+        ["legacy", "active", tenant["slug"]],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant)
+    assert response.status_code == 302
+
+    with app.test_request_context("/billing", base_url=f"http://{tenant['host']}", method="GET"):
+        session.update(saved_session)
+        billing_response = _as_response(app, app.preprocess_request() or billing_page())
+
+    body = billing_response.get_data(as_text=True)
+    assert billing_response.status_code == 200
+    assert "Current Plan" in body
+    assert "Free workspace active" in body
+    assert "legacy" not in body
 
 
 def test_signup_flow_sends_platform_admin_alerts(app, monkeypatch):
@@ -4337,6 +4472,9 @@ def test_platform_dashboard_renders_owner_metrics(app):
     assert "Ready for deletion" in body
     assert "Cancellations and churn notes" in body
     assert "Too expensive" in body
+    assert "Access ends" in body
+    assert "Access end date" not in body
+    assert "Free cleanup due" not in body
 
 
 def test_platform_dashboard_resets_existing_free_workspace_inactivity_baseline(app, monkeypatch):
@@ -4410,6 +4548,7 @@ def test_platform_dashboard_warns_after_free_inactivity_grace_window(app, monkey
     body = response.get_data(as_text=True)
     assert "Quiet Free" in body
     assert "No inventory after 30 days" in body
+    assert "Inactive free cleanup" in body
 
     db = get_platform_db()
     row = db.execute(
