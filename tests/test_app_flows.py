@@ -4330,6 +4330,38 @@ def test_scan_returns_multiple_matches_for_broad_checkout_search(app, tenant):
     assert {row["name"] for row in data["matches"]} >= {"Laptop A", "Laptop B"}
 
 
+def test_scan_exact_lookup_is_case_insensitive_for_checkout(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Case Insensitive Scan", "#ffffff"],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO items (name,category_id,serial,sku,internal_sku,manufacturer,shelf,active,created_at) "
+        "VALUES (?,?,?,?,?,?,?,1,'2026-01-01 00:00:00')",
+        ["Edge Switch", category_id, "AbC-123", "Sku-77", "Int-9", "Ubiquiti", "RackA",],
+    )
+    db.commit()
+    db.close()
+
+    for query_code in ["abc-123", "SKU-77", "int-9", "ubiquiti", "racka", "EDGE SWITCH"]:
+        with app.test_request_context(
+            f"/api/scan?code={query_code}",
+            base_url=f"http://{tenant['host']}",
+            method="GET",
+        ):
+            session.update(saved_session)
+            response = _as_response(app, app.preprocess_request() or api_scan())
+            data = response.get_json()
+
+        assert response.status_code == 200
+        assert data["found"] is True
+        assert data["item"]["name"] == "Edge Switch"
+
+
 def test_admin_page_shows_email_otp_only_for_2fa(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302

@@ -2227,45 +2227,46 @@ def api_scan():
     if not code:
         return jsonify({"found": False})
     loc_sql, loc_args = location_filter_sql("i")
-    exact_args = [code, code, code, code, code, code, code]
+    code_lower = code.lower()
+    exact_args = [code_lower, code_lower, code_lower, code_lower, code_lower, code_lower, code]
     row = query(f"""SELECT i.*, c.name as category, c.color
                    FROM items i LEFT JOIN categories c ON c.id=i.category_id
                    WHERE i.active=1
                      {loc_sql}
                      AND (
-                       i.serial=? OR
-                       i.model=? OR
-                       i.sku=? OR
-                       i.internal_sku=? OR
-                       i.name=? OR
-                       CAST(i.shelf AS TEXT)=? OR
+                       LOWER(COALESCE(i.serial,''))=? OR
+                       LOWER(COALESCE(i.model,''))=? OR
+                       LOWER(COALESCE(i.sku,''))=? OR
+                       LOWER(COALESCE(i.internal_sku,''))=? OR
+                       LOWER(COALESCE(i.name,''))=? OR
+                       LOWER(CAST(COALESCE(i.shelf,'') AS TEXT))=? OR
                        CAST(i.id AS TEXT)=?
                      )
                    LIMIT 1""",
                 exact_args + loc_args, one=True)
     if not row:
-        like = f"%{code}%"
+        like = f"%{code_lower}%"
         rows = query(f"""SELECT i.*, c.name as category, c.color
                        FROM items i LEFT JOIN categories c ON c.id=i.category_id
                        WHERE i.active=1
                          {loc_sql}
                          AND (
-                           i.serial LIKE ? OR
-                           i.model LIKE ? OR
-                           i.sku LIKE ? OR
-                           i.internal_sku LIKE ? OR
-                           i.name LIKE ? OR
-                           i.manufacturer LIKE ? OR
-                           CAST(i.shelf AS TEXT) LIKE ? OR
+                           LOWER(COALESCE(i.serial,'')) LIKE ? OR
+                           LOWER(COALESCE(i.model,'')) LIKE ? OR
+                           LOWER(COALESCE(i.sku,'')) LIKE ? OR
+                           LOWER(COALESCE(i.internal_sku,'')) LIKE ? OR
+                           LOWER(COALESCE(i.name,'')) LIKE ? OR
+                           LOWER(COALESCE(i.manufacturer,'')) LIKE ? OR
+                           LOWER(CAST(COALESCE(i.shelf,'') AS TEXT)) LIKE ? OR
                            CAST(i.id AS TEXT) LIKE ?
                          )
                        ORDER BY CASE
-                           WHEN i.serial LIKE ? THEN 0
-                           WHEN i.sku LIKE ? THEN 1
-                           WHEN i.internal_sku LIKE ? THEN 2
-                           WHEN i.model LIKE ? THEN 3
-                           WHEN i.name LIKE ? THEN 4
-                           WHEN i.manufacturer LIKE ? THEN 5
+                           WHEN LOWER(COALESCE(i.serial,'')) LIKE ? THEN 0
+                           WHEN LOWER(COALESCE(i.sku,'')) LIKE ? THEN 1
+                           WHEN LOWER(COALESCE(i.internal_sku,'')) LIKE ? THEN 2
+                           WHEN LOWER(COALESCE(i.model,'')) LIKE ? THEN 3
+                           WHEN LOWER(COALESCE(i.name,'')) LIKE ? THEN 4
+                           WHEN LOWER(COALESCE(i.manufacturer,'')) LIKE ? THEN 5
                            ELSE 6
                          END, i.id DESC
                        LIMIT 6""",
