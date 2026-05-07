@@ -651,7 +651,7 @@ def test_tour_target_attributes_and_profile_restart_entry_point_render(app, tena
         ("/items/add", add_item_page, 'data-tour="item-name-field"'),
         ("/sites", sites_page, 'data-tour="site-list"'),
         ("/reservations", reservations_page, 'data-tour="create-reservation"'),
-        ("/docs", docs_page, 'data-tour="sops-list"'),
+        ("/docs", docs_page, 'data-tour="docs-header"'),
         ("/items", inventory, 'data-tour="inventory-list"'),
         ("/profile", profile_page, "Restart onboarding tour"),
     ]
@@ -688,8 +688,9 @@ def test_docs_tour_targets_full_docs_shell(app, tenant):
 
     assert page.status_code == 200
     body = page.get_data(as_text=True)
-    assert '<section class="docs-shell" data-tour="sops-list">' in body
-    assert '<section class="docs-list card" data-tour="sops-list">' not in body
+    assert 'data-tour="docs-header"' in body
+    assert 'data-tour="new-sop"' in body
+    assert 'data-tour="sops-list"' not in body
 
 
 def test_platform_impersonation_does_not_overwrite_user_login_state(app, tenant):
