@@ -17,6 +17,26 @@
 
     <!-- Body -->
     <div class="modal-body" style="padding:18px 22px">
+      {% if not products %}
+      <div id="addItemEmptyState" data-tour="item-name-field" data-empty-products="1" style="padding:16px 4px 8px">
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:20px 18px">
+          <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 10px;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px">
+            Products come first
+          </div>
+          <h2 style="margin:0 0 8px;font-size:26px;line-height:1.08;letter-spacing:-.04em">You have no products yet.</h2>
+          <p style="margin:0 0 14px;color:#475569;line-height:1.65;font-size:14px">
+            Add a product first so CountDepot knows the reusable name, category, and tracking rules for the item you want to create.
+          </p>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 10px">
+            <a class="btn btn-primary" href="/products">Go to Products</a>
+            <a class="btn btn-secondary" href="/">Back to Inventory</a>
+          </div>
+          <div style="font-size:12px;color:#64748b">
+            Once your first product exists, come back here to add individual items.
+          </div>
+        </div>
+      </div>
+      {% else %}
       <input type="hidden" id="fi-cat">
 
       <!-- Step 1: Product picker -->
@@ -223,12 +243,17 @@
         </details>
 
       </div><!-- end fi-step2 -->
+      {% endif %}
     </div><!-- end modal-body -->
 
     <!-- Footer -->
     <div class="modal-footer">
       <a href="/" class="btn btn-secondary">Cancel</a>
+      {% if products %}
       <button class="btn btn-primary" id="saveItemBtn" onclick="saveItem()">Save Item</button>
+      {% else %}
+      <a class="btn btn-primary" href="/products">Create Product</a>
+      {% endif %}
     </div>
 
   </div>

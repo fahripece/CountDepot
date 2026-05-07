@@ -2394,8 +2394,8 @@ def test_quantity_reservation_reduces_available_and_blocks_over_reserve(app, ten
         method="POST",
         json={
             "reserved_by": "Install Team",
-            "reserved_from": "2026-05-01",
-            "reserved_to": "2026-05-05",
+            "reserved_from": "2099-05-01",
+            "reserved_to": "2099-05-05",
             "qty_reserved": 5,
         },
         headers={"X-CSRF-Token": "test-csrf-token"},
@@ -2425,8 +2425,8 @@ def test_quantity_reservation_reduces_available_and_blocks_over_reserve(app, ten
         method="POST",
         json={
             "reserved_by": "Second Team",
-            "reserved_from": "2026-05-02",
-            "reserved_to": "2026-05-04",
+            "reserved_from": "2099-05-02",
+            "reserved_to": "2099-05-04",
             "qty_reserved": 6,
         },
         headers={"X-CSRF-Token": "test-csrf-token"},
@@ -2456,7 +2456,7 @@ def test_quantity_use_for_reservation_fulfills_remaining_units(app, tenant):
         """INSERT INTO item_reservations
            (item_id,reserved_by,reserved_from,reserved_to,purpose,qty_reserved,qty_remaining,created_by,created_at,cancelled)
            VALUES (?,?,?,?,?,?,?,?,datetime('now'),0)""",
-        [item_id, "Install Team", "2026-05-01", "2026-05-05", "", 3, 3, "admin"],
+        [item_id, "Install Team", "2099-05-01", "2099-05-05", "", 3, 3, "admin"],
     ).lastrowid
     db.commit()
     db.close()
@@ -4126,6 +4126,19 @@ def test_add_item_identifier_fields_have_camera_scan_buttons(app, tenant):
     login_response, saved_session = _login(app, tenant)
     assert login_response.status_code == 302
 
+    db = sqlite3.connect(tenant["db_path"])
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Camera Scan Category", "#ffffff"],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO products (name,category_id,require_serial,require_vendor_sku,active,created_at) "
+        "VALUES (?,?,1,1,1,datetime('now'))",
+        ["Camera Scan Product", category_id],
+    )
+    db.commit()
+    db.close()
+
     with app.test_request_context(
         "/add-item",
         base_url=f"http://{tenant['host']}",
@@ -4142,6 +4155,25 @@ def test_add_item_identifier_fields_have_camera_scan_buttons(app, tenant):
     assert "openCameraScanner(code=>" in body
     assert 'placeholder="Scan or type serial number"' in body
     assert 'placeholder="Scan or type supplier part number"' in body
+
+
+def test_add_item_page_shows_products_required_empty_state_when_no_products(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    with app.test_request_context(
+        "/add-item",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "You have no products yet." in body
+    assert "Go to Products" in body
+    assert 'data-empty-products="1"' in body
 
 
 def test_inventory_clone_modal_has_single_and_bulk_scan_actions(app, tenant):

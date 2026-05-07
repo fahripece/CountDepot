@@ -14,7 +14,7 @@ const TOUR_STEPS = {
     { path: "/items/add", target: "item-name-field", headline: "Add Your First Item", copy: "This is where individual tracked items live — scan a barcode or type a name to add your first one now." },
     { path: "/sites", target: "add-site", headline: "Set Up Your Locations", copy: "Sites let you track where each item lives — a room, office, van, or warehouse." },
     { path: "/reservations", target: "create-reservation", headline: "Manage Reservations", copy: "Reserve items for people or projects in advance so nothing goes missing or gets double-booked." },
-    { path: "/docs", target: "sops-list", headline: "SOPs and Docs", copy: "Store your team's procedures and documents here so everyone follows the same process." },
+    { path: "/docs", target: "new-sop", headline: "SOPs and Docs", copy: "Store your team's procedures and documents here so everyone follows the same process." },
   ],
   worker: [
     { path: "/items", target: "inventory-list", headline: "Your Inventory", copy: "Every item your team tracks lives here. Search, filter, or scan to find anything fast." },
@@ -379,9 +379,12 @@ function renderStep(index) {
   target.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
   target.classList.add("cd-tour-target");
 
+  const emptyProductsState = step.path === "/items/add" && document.querySelector("[data-empty-products='1']");
   callout.querySelector(".cd-tour-step").textContent = `${index + 1} of ${steps.length}`;
-  callout.querySelector(".cd-tour-title").textContent = step.headline;
-  callout.querySelector(".cd-tour-copy").textContent = step.copy;
+  callout.querySelector(".cd-tour-title").textContent = emptyProductsState ? "Create a Product First" : step.headline;
+  callout.querySelector(".cd-tour-copy").textContent = emptyProductsState
+    ? "You cannot add items until at least one product template exists. Use the page button to create your first product, then come back here."
+    : step.copy;
   callout.querySelector(".cd-tour-progress-label").textContent = "Progress";
   callout.querySelector(".cd-tour-progress-fraction").textContent = `${index + 1} of ${steps.length}`;
   callout.querySelector(".cd-tour-progress-bar span").style.width = `${((index + 1) / steps.length) * 100}%`;
