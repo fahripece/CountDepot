@@ -46,6 +46,16 @@ def _resolved_tour_status(user) -> str:
     return "completed" if legacy_done else "pending"
 
 
+def _should_suppress_tour_prompt(user, tour_status: str) -> bool:
+    if tour_status == "remind_later":
+        return False
+    if tour_status in {"skipped", "completed"}:
+        return True
+    last_login = user["last_login"] if "last_login" in user.keys() else None
+    intro_done = user["intro_tour_completed_at"] if "intro_tour_completed_at" in user.keys() else None
+    return bool(last_login or intro_done)
+
+
 def _build_session(user, perms):
     """Return a dict of session keys for a logged-in user."""
     loc_ids = get_user_location_ids(user["id"], user["role"])
@@ -60,7 +70,7 @@ def _build_session(user, perms):
         "session_token":        _secrets.token_hex(32),
         "location_ids":         loc_ids,
         "tour_status":          tour_status,
-        "tour_prompt_suppressed": False,
+        "tour_prompt_suppressed": _should_suppress_tour_prompt(user, tour_status),
     }
     return sess
 

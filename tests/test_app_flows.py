@@ -571,7 +571,7 @@ def test_first_login_uses_server_backed_tour_status_and_base_loads_tour_module(a
     second_response, second_session = _login(app, tenant)
     assert second_response.status_code == 302
     assert second_session["tour_status"] == "completed"
-    assert second_session["tour_prompt_suppressed"] is False
+    assert second_session["tour_prompt_suppressed"] is True
 
 
 def test_low_stock_alerts_are_scoped_per_site(app, client, tenant):
@@ -639,6 +639,22 @@ def test_tour_status_stays_pending_until_user_updates_it(app, tenant):
     response, saved_session = _login(app, tenant)
     assert response.status_code == 302
     assert saved_session["tour_status"] == "pending"
+    assert saved_session["tour_prompt_suppressed"] is True
+
+
+def test_tour_remind_later_reprompts_on_next_login(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "UPDATE users SET last_login='2026-04-17 09:00:00', intro_tour_completed_at=NULL, tour_status='remind_later' WHERE email=?",
+        [tenant["email"]],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant)
+    assert response.status_code == 302
+    assert saved_session["tour_status"] == "remind_later"
+    assert saved_session["tour_prompt_suppressed"] is False
 
 
 def test_tour_target_attributes_and_profile_restart_entry_point_render(app, tenant):
