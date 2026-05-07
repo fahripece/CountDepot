@@ -14,13 +14,13 @@ const TOUR_STEPS = {
     { path: "/items/add", target: "item-name-field", headline: "Add Your First Item", copy: "This is where individual tracked items live — scan a barcode or type a name to add your first one now." },
     { path: "/sites", target: "add-site", headline: "Set Up Your Locations", copy: "Sites let you track where each item lives — a room, office, van, or warehouse." },
     { path: "/reservations", target: "create-reservation", headline: "Manage Reservations", copy: "Reserve items for people or projects in advance so nothing goes missing or gets double-booked." },
-    { path: "/docs", target: ["new-sop", "docs-header"], headline: "SOPs and Docs", copy: "Store your team's procedures and documents here so everyone follows the same process." },
+    { path: "/docs", target: ["new-sop", "docs-intro"], headline: "SOPs and Docs", copy: "Store your team's procedures and documents here so everyone follows the same process." },
   ],
   worker: [
     { path: "/items", target: "inventory-list", headline: "Your Inventory", copy: "Every item your team tracks lives here. Search, filter, or scan to find anything fast." },
     { path: "/items/add", target: "item-name-field", headline: "Add an Item", copy: "Use this form to add new items. Scan a barcode or type the name — it takes under a minute." },
     { path: "/reservations", target: "create-reservation", headline: "Reserve Items", copy: "Need something for a job or project? Reserve it here so it's held for you." },
-    { path: "/docs", target: "docs-header", headline: "Procedures and Docs", copy: "Find your team's SOPs and reference docs here before starting any task." },
+    { path: "/docs", target: "docs-intro", headline: "Procedures and Docs", copy: "Find your team's SOPs and reference docs here before starting any task." },
   ],
   client_viewer: [
     { path: "/items", target: "inventory-list", headline: "Your Inventory View", copy: "This shows all items at your site. Use search or filters to find what you need." },
