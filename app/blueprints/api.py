@@ -310,6 +310,11 @@ def api_tour_status():
     status = str(data.get("status") or "").strip()
     if not _apply_tour_status(status):
         return jsonify({"ok": False, "msg": "Invalid tour status"}), 400
+    if data.get("prompted"):
+        execute(
+            "UPDATE users SET tour_prompted_at=COALESCE(tour_prompted_at, ?) WHERE id=?",
+            [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), session.get("user_id")],
+        )
     if status in {"remind_later", "skipped", "completed"}:
         session["tour_prompt_suppressed"] = True
     else:

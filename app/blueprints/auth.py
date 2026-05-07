@@ -51,9 +51,10 @@ def _should_suppress_tour_prompt(user, tour_status: str) -> bool:
         return False
     if tour_status in {"skipped", "completed"}:
         return True
+    prompted_at = user["tour_prompted_at"] if "tour_prompted_at" in user.keys() else None
     last_login = user["last_login"] if "last_login" in user.keys() else None
     intro_done = user["intro_tour_completed_at"] if "intro_tour_completed_at" in user.keys() else None
-    return bool(last_login or intro_done)
+    return bool(prompted_at or last_login or intro_done)
 
 
 def _build_session(user, perms):

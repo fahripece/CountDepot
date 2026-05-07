@@ -536,7 +536,7 @@ def test_first_login_uses_server_backed_tour_status_and_base_loads_tour_module(a
 
     body = page.get_data(as_text=True)
     assert "COUNTDEPOT_TOUR_CONTEXT" in body
-    assert 'src="/static/tour.js"' in body
+    assert 'src="/static/tour.js?v=20260507-2"' in body
     assert "tourStatus:" in body
     assert "'pending'" in body or '"pending"' in body
     assert "Take the tour again" in body
@@ -657,6 +657,21 @@ def test_tour_remind_later_reprompts_on_next_login(app, tenant):
     assert saved_session["tour_prompt_suppressed"] is False
 
 
+def test_tour_prompted_users_do_not_get_reprompted_on_later_logins(app, tenant):
+    db = sqlite3.connect(tenant["db_path"])
+    db.execute(
+        "UPDATE users SET last_login=NULL, intro_tour_completed_at=NULL, tour_status='pending', tour_prompted_at='2026-05-07 09:00:00' WHERE email=?",
+        [tenant["email"]],
+    )
+    db.commit()
+    db.close()
+
+    response, saved_session = _login(app, tenant)
+    assert response.status_code == 302
+    assert saved_session["tour_status"] == "pending"
+    assert saved_session["tour_prompt_suppressed"] is True
+
+
 def test_tour_target_attributes_and_profile_restart_entry_point_render(app, tenant):
     response, saved_session = _login(app, tenant)
     assert response.status_code == 302
@@ -694,7 +709,7 @@ def test_add_item_tour_step_reveals_manual_entry_fields(app, tenant):
     assert "if (step !== '2' && step !== '1') return;" in body
 
 
-def test_docs_tour_targets_full_docs_shell(app, tenant):
+def test_docs_page_keeps_tour_targets_narrow_and_clears_stale_tour_query(app, tenant):
     response, saved_session = _login(app, tenant)
     assert response.status_code == 302
 
@@ -708,6 +723,7 @@ def test_docs_tour_targets_full_docs_shell(app, tenant):
     assert 'data-tour="docs-intro"' in body
     assert 'data-tour="new-sop"' in body
     assert 'data-tour="sops-list"' not in body
+    assert "url.searchParams.get('tour') === '1'" in body
 
 
 def test_platform_impersonation_does_not_overwrite_user_login_state(app, tenant):

@@ -196,7 +196,7 @@ function tourStepIndexFromUrl() {
   const active = params.get("tour");
   const raw = parseInt(params.get("tour_step") || "", 10);
   if (active !== "1" || Number.isNaN(raw)) return null;
-  return Math.max(0, Math.min(steps.length - 1, raw));
+  return raw;
 }
 
 function withTourQuery(path, index) {
@@ -240,11 +240,13 @@ function hideAll() {
 
 function showChoice() {
   ensureDom();
+  choice.querySelector(".cd-tour-copy").textContent = `We'll walk you through the ${steps.length} key areas in about 2 minutes.`;
   root.classList.add("active");
   choice.classList.add("cd-tour-visible");
   callout.classList.remove("cd-tour-visible");
   endCard.classList.remove("cd-tour-visible");
   spotlight.style.display = "none";
+  updateStatus("pending", { prompted: true, suppress_prompt: false }).catch(() => null);
 }
 
 function showEndScreen() {
@@ -402,7 +404,11 @@ function renderStep(index) {
 
 function goToStep(index) {
   const step = steps[index];
-  if (!step) return;
+  if (!step) {
+    clearTourQuery();
+    hideAll();
+    return;
+  }
   if (currentPath() !== step.path) {
     window.location.assign(withTourQuery(step.path, index));
     return;
@@ -450,6 +456,11 @@ function init() {
   ensureDom();
   bindResize();
   const activeIndex = tourStepIndexFromUrl();
+  if (activeIndex !== null && (activeIndex < 0 || activeIndex >= steps.length || currentPath() === "/docs")) {
+    clearTourQuery();
+    hideAll();
+    return;
+  }
   if (activeIndex !== null) {
     goToStep(activeIndex);
     return;
