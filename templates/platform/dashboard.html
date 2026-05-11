@@ -478,10 +478,10 @@ tr:hover td{background:#1a2947}
               <tr>
                 <td><strong>{{ t.name }}</strong><div class="slug">{{ t.slug }}</div></td>
                 <td style="color:#94a3b8">
-                  {% if t.free_inactive_reason == 'no_inventory' %}
-                  No inventory after 30 days
+                  {% if t.free_inactive_reason == 'no_inventory_no_login' %}
+                  No login and no inventory after 7 days
                   {% else %}
-                  No add/remove activity in 30 days
+                  No add/remove activity in 14 days
                   {% endif %}
                 </td>
                 <td>

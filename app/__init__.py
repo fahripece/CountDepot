@@ -17,10 +17,38 @@ except ImportError:
     _oauth_available = False
 
 oauth = None  # set in create_app()
+_last_platform_lifecycle_run = None
+_PLATFORM_LIFECYCLE_INTERVAL_SECONDS = 900
 
 
 def _utc_now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def run_platform_lifecycle(force=False):
+    global _last_platform_lifecycle_run
+    now = _utc_now()
+    if (
+        not force
+        and
+        _last_platform_lifecycle_run
+        and (now - _last_platform_lifecycle_run).total_seconds() < _PLATFORM_LIFECYCLE_INTERVAL_SECONDS
+    ):
+        return
+    from app.blueprints.platform import (
+        _all_tenants,
+        _enrich_tenant,
+        _sync_free_inactive_accounts,
+        _sync_trial_expirations,
+        _tenant_stats,
+    )
+    _sync_trial_expirations()
+    tenants = _all_tenants()
+    for tenant in tenants:
+        tenant["stats"] = _tenant_stats(tenant["slug"])
+        _enrich_tenant(tenant)
+    _sync_free_inactive_accounts(tenants)
+    _last_platform_lifecycle_run = now
 
 
 def create_app():
@@ -70,6 +98,7 @@ def create_app():
 
     # Ensure platform.db (tenant registry) exists on startup
     init_platform_db()
+    run_platform_lifecycle()
 
     @app.context_processor
     def _inject_csrf():
@@ -85,6 +114,10 @@ def create_app():
 
     @app.before_request
     def before():
+        try:
+            run_platform_lifecycle()
+        except Exception:
+            pass
         host = request.host.split(":")[0]
         if host == "www.countdepot.com":
             target = request.url.replace("//www.countdepot.com", "//countdepot.com", 1)

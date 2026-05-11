@@ -169,9 +169,9 @@ def send_free_inactive_warning_email(to: str, name: str, slug: str, delete_at: s
     domain = Config.APP_DOMAIN
     workspace_url = f"https://{slug}.{domain}"
     reason_text = {
-        "no_inventory": "No inventory has been added in the last 30 days.",
-        "no_activity": "No inventory activity has been recorded in the last 30 days.",
-    }.get(reason, "This free workspace has been inactive for 30 days.")
+        "no_inventory_no_login": "No one has signed in and no inventory has been added in the last 7 days.",
+        "no_activity": "Inventory exists, but no inventory activity has been recorded in the last 14 days.",
+    }.get(reason, "This free workspace has been inactive long enough to trigger cleanup.")
     subject = "Your CountDepot free workspace is scheduled for cleanup"
     html = f"""
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#0f172a">

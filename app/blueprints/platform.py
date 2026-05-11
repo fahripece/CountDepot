@@ -11,6 +11,7 @@ a compromised tenant admin account cannot reach these routes.
 import os
 import re
 import secrets
+import shutil
 from datetime import datetime, timedelta, timezone
 
 from flask import (Blueprint, render_template, request, session,
@@ -24,7 +25,8 @@ from app.mailer   import send_free_inactive_warning_email
 
 bp = Blueprint("platform", __name__, url_prefix="/_platform")
 
-FREE_INACTIVE_WARNING_DAYS = 30
+FREE_NO_ITEMS_NO_LOGIN_WARNING_DAYS = 7
+FREE_NO_ACTIVITY_WARNING_DAYS = 14
 FREE_INACTIVE_DELETE_GRACE_DAYS = 7
 
 # ── Platform-admin auth ───────────────────────────────────────────────────────
@@ -115,6 +117,21 @@ def _all_tenants():
             d["scheduled_delete_at"] = None
         tenants.append(d)
     return tenants
+
+
+def _delete_tenant_workspace(slug, db=None):
+    owns_db = db is None
+    if db is None:
+        db = get_platform_db()
+    try:
+        db.execute("DELETE FROM tenants WHERE slug=?", [slug])
+        db.commit()
+    finally:
+        if owns_db:
+            db.close()
+    tenant_dir = os.path.join(Config.TENANTS_DIR, slug)
+    if os.path.exists(tenant_dir):
+        shutil.rmtree(tenant_dir, ignore_errors=True)
 
 
 def _tenant_db_cols(db, table):
@@ -317,6 +334,7 @@ def _sync_free_inactive_accounts(tenants):
             tenant["free_inactive_warned_at"] = row.get("free_inactive_warned_at")
             tenant["free_inactive_delete_at"] = row.get("free_inactive_delete_at")
             tenant["free_inactive_reason"] = row.get("free_inactive_reason")
+            tenant["_deleted"] = False
 
             is_free_plan = (row.get("plan") or "").lower() == "free"
             is_paid = (row.get("subscription_status") or "active") != "active" or not is_free_plan or row.get("free_access")
@@ -355,7 +373,19 @@ def _sync_free_inactive_accounts(tenants):
             tenant["free_inactive_grace_started_at"] = row.get("free_inactive_grace_started_at")
 
             grace_days = max(0, (now - grace_started).days) if grace_started else 0
-            if grace_days < FREE_INACTIVE_WARNING_DAYS:
+            items = tenant["stats"].get("items", 0)
+            days_since_login = tenant.get("days_since_login")
+            days_since_activity = tenant.get("days_since_activity")
+            warn_reason = None
+            warning_threshold = None
+            if items == 0 and (days_since_login is None or days_since_login >= FREE_NO_ITEMS_NO_LOGIN_WARNING_DAYS):
+                warn_reason = "no_inventory_no_login"
+                warning_threshold = FREE_NO_ITEMS_NO_LOGIN_WARNING_DAYS
+            elif items > 0 and (days_since_activity is None or days_since_activity >= FREE_NO_ACTIVITY_WARNING_DAYS):
+                warn_reason = "no_activity"
+                warning_threshold = FREE_NO_ACTIVITY_WARNING_DAYS
+
+            if warning_threshold is None or grace_days < warning_threshold:
                 if row.get("free_inactive_warned_at") or row.get("free_inactive_delete_at") or row.get("free_inactive_reason"):
                     db.execute(
                         "UPDATE tenants SET free_inactive_warned_at=NULL, free_inactive_delete_at=NULL, free_inactive_reason=NULL WHERE slug=?",
@@ -365,14 +395,6 @@ def _sync_free_inactive_accounts(tenants):
                 tenant["free_inactive_delete_at"] = None
                 tenant["free_inactive_reason"] = None
                 continue
-
-            items = tenant["stats"].get("items", 0)
-            days_since_activity = tenant.get("days_since_activity")
-            warn_reason = None
-            if items == 0:
-                warn_reason = "no_inventory"
-            elif items > 0 and (days_since_activity is None or days_since_activity >= FREE_INACTIVE_WARNING_DAYS):
-                warn_reason = "no_activity"
 
             if warn_reason:
                 warned_at = row.get("free_inactive_warned_at")
@@ -395,6 +417,11 @@ def _sync_free_inactive_accounts(tenants):
                 tenant["free_inactive_warned_at"] = warned_at
                 tenant["free_inactive_delete_at"] = delete_at
                 tenant["free_inactive_reason"] = warn_reason
+                delete_dt = _parse_dt(delete_at)
+                if delete_dt and delete_dt <= now:
+                    _delete_tenant_workspace(slug, db=db)
+                    tenant["_deleted"] = True
+                    continue
             else:
                 if row.get("free_inactive_warned_at") or row.get("free_inactive_delete_at") or row.get("free_inactive_reason"):
                     db.execute(
@@ -672,6 +699,7 @@ def dashboard():
     for t in tenants:
         t["stats"] = _tenant_stats(t["slug"])
     _sync_free_inactive_accounts(tenants)
+    tenants = [t for t in tenants if not t.get("_deleted")]
     for t in tenants:
         _enrich_tenant(t)
     recent_signups, signup_summary = _recent_signups()

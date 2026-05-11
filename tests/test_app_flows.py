@@ -4790,7 +4790,7 @@ def test_platform_dashboard_warns_after_free_inactivity_grace_window(app, monkey
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Quiet Free" in body
-    assert "No inventory after 30 days" in body
+    assert "No login and no inventory after 7 days" in body
     assert "Inactive free cleanup" in body
 
     db = get_platform_db()
@@ -4802,6 +4802,103 @@ def test_platform_dashboard_warns_after_free_inactivity_grace_window(app, monkey
 
     assert row["free_inactive_warned_at"] is not None
     assert row["free_inactive_delete_at"] is not None
-    assert row["free_inactive_reason"] == "no_inventory"
+    assert row["free_inactive_reason"] == "no_inventory_no_login"
     assert sent["to"] == "quiet@example.com"
     assert sent["slug"] == "quietfree"
+
+
+def test_platform_dashboard_warns_item_holding_free_workspace_after_14_days_of_no_activity(app, monkeypatch):
+    from app.platform import get_platform_db
+    from app.blueprints.platform import SESSION_KEY
+
+    sent = {}
+    monkeypatch.setattr(
+        "app.blueprints.platform.send_free_inactive_warning_email",
+        lambda to, name, slug, delete_at, reason: sent.update(
+            {"to": to, "name": name, "slug": slug, "delete_at": delete_at, "reason": reason}
+        ) or True,
+    )
+
+    db = get_platform_db()
+    db.execute(
+        "INSERT INTO tenants (slug,name,plan,sector,onboarded,active,created_at,owner_email,subscription_status,trial_ends_at,free_access,free_inactive_grace_started_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        ["steadyfree", "Steady Free", "free", "", 1, 1, "2026-03-01 00:00:00", "steady@example.com", "active", None, 0, "2026-03-01 00:00:00"],
+    )
+    db.commit()
+    db.close()
+
+    tenant_dir = os.path.join(app.config["TENANTS_DIR"], "steadyfree")
+    os.makedirs(tenant_dir, exist_ok=True)
+    tenant_db = sqlite3.connect(os.path.join(tenant_dir, "inventory.db"))
+    tenant_db.execute("CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, active INTEGER NOT NULL DEFAULT 1, sold INTEGER NOT NULL DEFAULT 0, sold_price REAL, sale_price REAL, cost_price REAL)")
+    tenant_db.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, last_login TEXT, session_token TEXT)")
+    tenant_db.execute("CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, active INTEGER NOT NULL DEFAULT 1)")
+    tenant_db.execute("CREATE TABLE IF NOT EXISTS login_log (id INTEGER PRIMARY KEY AUTOINCREMENT, result TEXT, ts TEXT)")
+    tenant_db.execute("CREATE TABLE IF NOT EXISTS checkout_log (id INTEGER PRIMARY KEY AUTOINCREMENT, checkout_date TEXT)")
+    tenant_db.execute("CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, item_id INTEGER, username TEXT, ts TEXT)")
+    tenant_db.execute("INSERT INTO items (active) VALUES (1)")
+    tenant_db.execute("INSERT INTO audit_log (action, item_id, username, ts) VALUES ('created', 1, 'admin', '2026-03-01 00:00:00')")
+    tenant_db.commit()
+    tenant_db.close()
+
+    with app.test_request_context("/_platform/", base_url="http://localhost:5000"):
+        session[SESSION_KEY] = True
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Steady Free" in body
+    assert "No add/remove activity in 14 days" in body
+
+    db = get_platform_db()
+    row = db.execute(
+        "SELECT free_inactive_warned_at, free_inactive_delete_at, free_inactive_reason FROM tenants WHERE slug=?",
+        ["steadyfree"],
+    ).fetchone()
+    db.close()
+
+    assert row["free_inactive_warned_at"] is not None
+    assert row["free_inactive_delete_at"] is not None
+    assert row["free_inactive_reason"] == "no_activity"
+    assert sent["slug"] == "steadyfree"
+
+
+def test_platform_dashboard_auto_deletes_free_workspace_after_cleanup_date(app, monkeypatch):
+    from app.platform import get_platform_db
+    from app.blueprints.platform import SESSION_KEY
+
+    monkeypatch.setattr(
+        "app.blueprints.platform.send_free_inactive_warning_email",
+        lambda *args, **kwargs: True,
+    )
+
+    db = get_platform_db()
+    db.execute(
+        "INSERT INTO tenants (slug,name,plan,sector,onboarded,active,created_at,owner_email,subscription_status,trial_ends_at,free_access,free_inactive_grace_started_at,free_inactive_warned_at,free_inactive_delete_at,free_inactive_reason) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ["deletefree", "Delete Free", "free", "", 1, 1, "2026-03-01 00:00:00", "delete@example.com", "active", None, 0, "2026-03-01 00:00:00", "2026-03-08 00:00:00", "2026-03-09 00:00:00", "no_inventory_no_login"],
+    )
+    db.commit()
+    db.close()
+
+    tenant_dir = os.path.join(app.config["TENANTS_DIR"], "deletefree")
+    os.makedirs(tenant_dir, exist_ok=True)
+    tenant_db = sqlite3.connect(os.path.join(tenant_dir, "inventory.db"))
+    tenant_db.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT)")
+    tenant_db.commit()
+    tenant_db.close()
+
+    with app.test_request_context("/_platform/", base_url="http://localhost:5000"):
+        session[SESSION_KEY] = True
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Delete Free" not in body
+
+    db = get_platform_db()
+    row = db.execute("SELECT slug FROM tenants WHERE slug=?", ["deletefree"]).fetchone()
+    db.close()
+    assert row is None
+    assert not os.path.exists(tenant_dir)
