@@ -2746,10 +2746,10 @@ def test_public_demo_request_skips_csrf_and_bare_domain_landing(app):
 def test_homepage_has_core_seo_meta_tags(app):
     response = app.test_client().get("/", base_url="http://countdepot.com")
     body = response.get_data(as_text=True)
-    title = "CountDepot - Inventory Management Software for Small Businesses | Free Plan"
+    title = "CountDepot - Barcode Inventory Software with Free Plan"
     description = (
-        "Ditch the spreadsheets. CountDepot is simple inventory management software with "
-        "barcode scanning, asset tracking and reservations. Free plan available - no credit card needed."
+        "Barcode inventory software with reservations, site tracking, and mobile scanning. "
+        "Free plan for 1 user, 2 sites, and 250 items - no credit card required."
     )
 
     assert response.status_code == 200
@@ -3299,8 +3299,8 @@ def test_seo_landing_links_to_inventory_management_resource(app):
     assert 'href="/resources/inventory-management"' in body
     assert "Inventory management guide" in body
     assert "Repair Shops teams waste hours tracking assets in spreadsheets. CountDepot fixes that." in body
-    assert "Replaced our Excel sheet in one afternoon" in body
-    assert "Trusted by teams across New York, San Jose, Des Moines and growing." in body
+    assert "Teams choose CountDepot when they need scanning, reservations, and site-based inventory without a heavy enterprise rollout." in body
+    assert "Built for practical operations teams replacing spreadsheets and disconnected trackers." in body
     assert "countdepot-exit-intent-seen" in body
 
 
@@ -3389,7 +3389,9 @@ def test_generic_seo_pages_do_not_show_repair_shop_phase_two_content(app):
     assert "Is there free inventory software for nonprofits?" in body
     assert "free forever plan for nonprofits with 2 sites and 250 items" in body
     assert 'href="/">inventory management software for nonprofits</a>' in body
-    assert "Used by mission-driven teams" in body
+    assert "Mission-driven teams use CountDepot" in body
+    assert "Built for nonprofits that need better donation and equipment accountability" in body
+    assert "built-in method copy of dict object" not in body
     assert "Free inventory management for nonprofits" in body
     assert "Phone repair shop tracking screens" not in body
 
@@ -4152,8 +4154,83 @@ def test_checkout_page_has_camera_scan_button(app, tenant):
     assert "renderScanMatches" in body
     assert "Pick the correct item." in body
     assert 'id="recentSearch"' in body
-    assert "Find what is already out" in body
+    assert "Checkout Explorer" in body
+    assert "setCheckoutMode('history')" in body
+    assert 'id="recentSiteFilter"' in body
+    assert 'id="recentStatusFilter"' in body
+    assert "Expected return: soonest" in body
     assert "renderRecentList()" in body
+
+
+def test_checkout_feed_returns_current_and_history_rows(app, tenant):
+    login_response, saved_session = _login(app, tenant)
+    assert login_response.status_code == 302
+
+    db = sqlite3.connect(tenant["db_path"])
+    db.row_factory = sqlite3.Row
+    category_id = db.execute(
+        "INSERT INTO categories (name,color,is_expense) VALUES (?,?,0)",
+        ["Checkout Feed Category", "#123456"],
+    ).lastrowid
+    product_id = db.execute(
+        "INSERT INTO products (name,category_id,active,created_at) VALUES (?,?,1,datetime('now'))",
+        ["Checkout Feed Product", category_id],
+    ).lastrowid
+    location_id = db.execute(
+        "INSERT INTO locations (name,created_at) VALUES (?,datetime('now'))",
+        ["Main Site"],
+    ).lastrowid
+    item_id = db.execute(
+        "INSERT INTO items (product_id,category_id,name,serial,sku,internal_sku,manufacturer,model,location_id,active,sold,checked_out,checkout_by,job_ref,checkout_date,expected_return_date,created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,1,0,1,?,?,?,?,datetime('now'))",
+        [
+            product_id,
+            category_id,
+            "Feed Item",
+            "SER-123",
+            "SKU-123",
+            "INT-123",
+            "Maker",
+            "Model X",
+            location_id,
+            "Tech One",
+            "Job 99",
+            "05/10/26",
+            "2026-05-20",
+        ],
+    ).lastrowid
+    db.execute(
+        "INSERT INTO checkout_log (item_id,item_name,checked_out_by,job_ref,checkout_date,expected_return_date,checkin_date,created_at) VALUES (?,?,?,?,?,?,?,datetime('now'))",
+        [item_id, "Feed Item", "Tech One", "Job 99", "05/10/26", "2026-05-20", "2026-05-12 10:00:00"],
+    )
+    db.commit()
+    db.close()
+
+    with app.test_request_context(
+        "/api/checkout-feed?mode=current",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+    current_payload = json.loads(response.get_data(as_text=True))
+    assert response.status_code == 200
+    assert current_payload["ok"] is True
+    assert current_payload["mode"] == "current"
+    assert any(row["item_name"] == "Feed Item" for row in current_payload["rows"])
+
+    with app.test_request_context(
+        "/api/checkout-feed?mode=history",
+        base_url=f"http://{tenant['host']}",
+        method="GET",
+    ):
+        session.update(saved_session)
+        response = _as_response(app, app.preprocess_request() or app.dispatch_request())
+    history_payload = json.loads(response.get_data(as_text=True))
+    assert response.status_code == 200
+    assert history_payload["ok"] is True
+    assert history_payload["mode"] == "history"
+    assert any(row["checkout_status"] == "returned" for row in history_payload["rows"])
 
 
 def test_add_item_identifier_fields_have_camera_scan_buttons(app, tenant):

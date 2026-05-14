@@ -2225,6 +2225,95 @@ def api_items():
                     "totals": totals})
 
 
+@bp.route("/api/checkout-feed")
+@login_required
+@perm_required("checkout_checkin")
+def api_checkout_feed():
+    mode = (request.args.get("mode") or "current").strip().lower()
+    today_iso = datetime.now().strftime("%Y-%m-%d")
+    if mode == "history":
+        loc_sql, loc_args = location_filter_sql("i")
+        rows = query(
+            f"""
+            SELECT
+                cl.id,
+                cl.item_id,
+                COALESCE(i.name, cl.item_name) AS item_name,
+                i.serial,
+                i.sku,
+                i.internal_sku,
+                i.manufacturer,
+                i.model,
+                COALESCE(c.name, pc.name) AS category,
+                l.name AS location_name,
+                cl.checked_out_by,
+                cl.job_ref,
+                cl.checkout_date,
+                cl.expected_return_date,
+                cl.checkin_date,
+                CASE
+                    WHEN cl.checkin_date IS NOT NULL THEN 'returned'
+                    WHEN cl.expected_return_date IS NOT NULL AND cl.expected_return_date < ? THEN 'overdue'
+                    ELSE 'checked_out'
+                END AS checkout_status
+            FROM checkout_log cl
+            LEFT JOIN items i ON i.id = cl.item_id
+            LEFT JOIN products p ON p.id = i.product_id
+            LEFT JOIN categories c ON c.id = i.category_id
+            LEFT JOIN categories pc ON pc.id = p.category_id
+            LEFT JOIN locations l ON l.id = i.location_id
+            WHERE 1=1
+              {loc_sql}
+            ORDER BY cl.id DESC
+            """,
+            [today_iso] + loc_args,
+        )
+    else:
+        loc_sql, loc_args = location_filter_sql("i")
+        rows = query(
+            f"""
+            SELECT
+                i.id,
+                i.id AS item_id,
+                i.name AS item_name,
+                i.serial,
+                i.sku,
+                i.internal_sku,
+                i.manufacturer,
+                i.model,
+                COALESCE(c.name, pc.name) AS category,
+                l.name AS location_name,
+                i.checkout_by AS checked_out_by,
+                i.job_ref,
+                i.checkout_date,
+                i.expected_return_date,
+                NULL AS checkin_date,
+                CASE
+                    WHEN i.expected_return_date IS NOT NULL AND i.expected_return_date < ? THEN 'overdue'
+                    ELSE 'checked_out'
+                END AS checkout_status
+            FROM items i
+            LEFT JOIN products p ON p.id = i.product_id
+            LEFT JOIN categories c ON c.id = i.category_id
+            LEFT JOIN categories pc ON pc.id = p.category_id
+            LEFT JOIN locations l ON l.id = i.location_id
+            WHERE i.active=1
+              AND COALESCE(i.retired,0)=0
+              AND COALESCE(i.sold,0)=0
+              AND i.checked_out=1
+              {loc_sql}
+            ORDER BY i.id DESC
+            """,
+            [today_iso] + loc_args,
+        )
+    result = []
+    for row in rows:
+        d = dict(row)
+        d["location_name"] = d.get("location_name") or "Unassigned"
+        result.append(d)
+    return jsonify({"ok": True, "mode": mode, "rows": result})
+
+
 @bp.route("/api/scan")
 @login_required
 def api_scan():

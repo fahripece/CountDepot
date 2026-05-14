@@ -162,18 +162,23 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
     <div class="hero-proof" aria-label="Customer proof">
       <div class="hero-stars">★★★★★</div>
       <div class="hero-proof-copy">
-        <strong>“Replaced our Excel sheet in one afternoon” — IT Manager, Des Moines</strong>
-        <span>Trusted by teams across New York, San Jose, Des Moines and growing.</span>
+        {% if page.phase2 and page.phase2.hero_proof %}
+        <strong>{{ page.phase2.hero_proof.quote }}</strong>
+        <span>{{ page.phase2.hero_proof.subtext }}</span>
+        {% else %}
+        <strong>Teams choose CountDepot when they need scanning, reservations, and site-based inventory without a heavy enterprise rollout.</strong>
+        <span>Built for practical operations teams replacing spreadsheets and disconnected trackers.</span>
+        {% endif %}
       </div>
     </div>
   </div>
 </header>
 
 <div class="stats" aria-label="CountDepot highlights">
-    <div class="stat"><div class="stat-val">Free</div><div class="stat-label">1 user / 2 sites / 250 items</div></div>
-  <div class="stat"><div class="stat-val">$20</div><div class="stat-label">paid plans start</div></div>
-  <div class="stat"><div class="stat-val">Mobile</div><div class="stat-label">scanner workflow</div></div>
-  <div class="stat"><div class="stat-val">SOPs</div><div class="stat-label">docs included</div></div>
+  <div class="stat"><div class="stat-val">Free</div><div class="stat-label">1 user / 2 sites / 250 items</div></div>
+  <div class="stat"><div class="stat-val">Sites</div><div class="stat-label">location-based inventory</div></div>
+  <div class="stat"><div class="stat-val">Mobile</div><div class="stat-label">browser scanner workflow</div></div>
+  <div class="stat"><div class="stat-val">SOPs</div><div class="stat-label">docs and procedures included</div></div>
 </div>
 
 <section>
@@ -188,7 +193,7 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
       <div class="feature">
         <div class="feature-icon">{{ loop.index }}</div>
         <h3>{{ use_case }}</h3>
-        <p>Use CountDepot to keep this workflow visible, searchable, and tied to real item records instead of scattered spreadsheets.</p>
+        <p>{% if page.use_case_details and page.use_case_details[loop.index0] %}{{ page.use_case_details[loop.index0] }}{% else %}Use CountDepot to keep this workflow visible, searchable, and tied to real item records instead of scattered spreadsheets.{% endif %}</p>
       </div>
       {% endfor %}
       <div class="feature">
@@ -220,7 +225,7 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
       <div class="steps">
         {% if page.phase2 %}
           {% for step in page.phase2.workflow %}
-          <div class="step"><div class="step-num">{{ loop.index }}</div><div><h3>{{ step.title }}</h3><p>{{ step.copy }}</p></div></div>
+          <div class="step"><div class="step-num">{{ loop.index }}</div><div><h3>{{ step["title"] }}</h3><p>{{ step["copy"] }}</p></div></div>
           {% endfor %}
         {% else %}
           <div class="step"><div class="step-num">1</div><div><h3>Create clean records</h3><p>Store item names, SKUs, serials, locations, costs, category fields, notes, and photos in one searchable place.</p></div></div>
@@ -318,8 +323,8 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
       {% for point in page.phase2.spreadsheet_points %}
       <div class="feature">
         <div class="feature-icon">{{ loop.index }}</div>
-        <h3>{{ point.title }}</h3>
-        <p>{{ point.copy }}</p>
+        <h3>{{ point["title"] }}</h3>
+        <p>{{ point["copy"] }}</p>
       </div>
       {% endfor %}
     </div>
@@ -397,7 +402,7 @@ section{padding:96px 24px}.section-alt{background:var(--bg2)}.container{max-widt
     <p>Start free with 1 user, 2 sites, and 250 items, then upgrade when the team needs more capacity.</p>
     <div class="hero-actions">
       <a class="btn-primary" href="/signup">Start free</a>
-      <a class="btn-secondary" href="/#pricing">Compare plans</a>
+      <a class="btn-secondary" href="/#pricing">See pricing</a>
     </div>
     <div class="trial-note">Built for {{ page.keyword }}.</div>
   </div>

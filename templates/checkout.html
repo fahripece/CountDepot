@@ -8,7 +8,6 @@
 
 <div style="flex:1;overflow-y:auto;padding:30px 24px">
 
-  <!-- ── Scanner hero ── -->
   <div style="max-width:620px;margin:0 auto 32px">
     <div style="background:#fff;border:1px solid #e5e3de;border-radius:14px;padding:28px 32px;box-shadow:0 2px 12px rgba(0,0,0,.05)">
       <div style="text-align:center;margin-bottom:20px">
@@ -61,21 +60,70 @@
     </div>
   </div>
 
-  <!-- ── Recently checked out today ── -->
-<div style="max-width:900px;margin:0 auto">
+  <div style="max-width:1200px;margin:0 auto">
     <div style="background:#fff;border:1px solid #e5e3de;border-radius:14px;padding:22px 24px;box-shadow:0 2px 12px rgba(0,0,0,.05)">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px">
         <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8">Currently Checked Out</div>
-          <div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:4px">Find what is already out</div>
-          <div style="font-size:12.5px;color:#64748b;margin-top:4px">Search by item name, serial, SKU, internal SKU, tech, or job reference.</div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8">Checkout Explorer</div>
+          <div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:4px">Search, filter, and sort checked out inventory</div>
+          <div style="font-size:12.5px;color:#64748b;margin-top:4px">Switch between items currently out and full checkout history without hunting through a dropdown list.</div>
         </div>
-        <div style="min-width:260px;flex:1;max-width:360px">
-          <input id="recentSearch" class="input mono" placeholder="Search checked out items..." autocomplete="off" oninput="renderRecentList()">
+        <div class="co-view-toggle" role="tablist" aria-label="Checkout views">
+          <button id="coModeCurrent" class="co-view-pill active" type="button" onclick="setCheckoutMode('current')">Currently Out</button>
+          <button id="coModeHistory" class="co-view-pill" type="button" onclick="setCheckoutMode('history')">History</button>
+        </div>
+      </div>
+      <div class="co-filter-grid" style="margin-bottom:14px">
+        <div class="field" style="margin-bottom:0">
+          <label class="label">Search</label>
+          <input id="recentSearch" class="input mono" placeholder="Search item, serial, SKU, tech, job, site..." autocomplete="off" oninput="renderRecentList()">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label class="label">Site</label>
+          <select id="recentSiteFilter" class="input" onchange="renderRecentList()">
+            <option value="">All sites</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label class="label">Checked Out To</label>
+          <select id="recentTechFilter" class="input" onchange="renderRecentList()">
+            <option value="">All people</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label class="label">Category</label>
+          <select id="recentCategoryFilter" class="input" onchange="renderRecentList()">
+            <option value="">All categories</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label class="label">Status</label>
+          <select id="recentStatusFilter" class="input" onchange="renderRecentList()">
+            <option value="">All statuses</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label class="label">Sort</label>
+          <select id="recentSort" class="input" onchange="renderRecentList()">
+            <option value="checkout_desc">Most recent first</option>
+            <option value="checkout_asc">Earliest first</option>
+            <option value="due_asc">Expected return: soonest</option>
+            <option value="due_desc">Expected return: latest</option>
+            <option value="item_asc">Item name: A-Z</option>
+            <option value="item_desc">Item name: Z-A</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label class="label">Checked Out From</label>
+          <input id="recentFrom" class="input" type="date" onchange="renderRecentList()">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label class="label">Checked Out To</label>
+          <input id="recentTo" class="input" type="date" onchange="renderRecentList()">
         </div>
       </div>
       <div id="recentSummary" style="font-size:12.5px;color:#64748b;margin-bottom:12px">Loading checked out items...</div>
-      <div id="recent-list">
+      <div class="co-table-wrap" id="recent-list">
         <div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">Loading...</div>
       </div>
     </div>
@@ -83,7 +131,6 @@
 
 </div>
 
-<!-- ══ CHECKOUT CONFIRM MODAL ══ -->
 <div id="coModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px)">
   <div class="modal" style="width:480px">
     <div class="modal-header">
@@ -93,7 +140,6 @@
       </div>
     </div>
     <div class="modal-body" style="padding:20px 22px">
-      <!-- Item preview -->
       <div style="background:#f8f8f7;border-radius:8px;padding:12px 14px;margin-bottom:18px;display:flex;align-items:center;gap:12px">
         <div id="co-cat-dot" style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:#6b7280"></div>
         <div style="flex:1;min-width:0">
@@ -105,7 +151,6 @@
           <div style="font-size:14px;font-weight:600;color:#0f172a" id="co-item-shelf">—</div>
         </div>
       </div>
-      <!-- Fields -->
       <div class="field">
         <label class="label">Tech Name / Initials *</label>
         <input class="input" id="co-who" placeholder="e.g. JD, John D." style="font-size:14px"
@@ -130,12 +175,23 @@
 </div>
 
 <style>
-.recent-card{background:#fff;border:1px solid #e5e3de;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;transition:box-shadow .12s}
-.recent-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.06)}
-.co-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
-.recent-status{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:999px;padding:4px 8px}
-.recent-meta{font-size:11.5px;color:#475569;margin-top:4px;display:flex;flex-wrap:wrap;gap:8px}
-.recent-ident{font-size:11px;color:#94a3b8;margin-top:2px;font-family:'IBM Plex Mono',monospace}
+.co-table-wrap{overflow:auto;border:1px solid #e5e7eb;border-radius:12px}
+.co-table{width:100%;border-collapse:collapse;min-width:980px;background:#fff}
+.co-table th{background:#f8fafc;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;padding:12px 14px;text-align:left;border-bottom:1px solid #e5e7eb;white-space:nowrap}
+.co-table td{padding:13px 14px;border-bottom:1px solid #eef2f7;vertical-align:top;font-size:13px;color:#0f172a}
+.co-table tr:last-child td{border-bottom:0}
+.co-table tr:hover td{background:#fcfcfd}
+.co-item-title{font-weight:700;color:#0f172a}
+.co-item-ident{font-size:11px;color:#64748b;font-family:'IBM Plex Mono',monospace;margin-top:4px}
+.co-muted-line{font-size:12px;color:#64748b;margin-top:4px}
+.co-chip{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border-radius:999px;padding:4px 8px;white-space:nowrap}
+.co-chip.checked_out{color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe}
+.co-chip.overdue{color:#b91c1c;background:#fef2f2;border:1px solid #fecaca}
+.co-chip.returned{color:#166534;background:#f0fdf4;border:1px solid #bbf7d0}
+.co-view-toggle{display:flex;gap:8px;flex-wrap:wrap}
+.co-view-pill{border:1px solid #dbe4f0;background:#fff;color:#475569;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer}
+.co-view-pill.active{background:#ede9fe;border-color:#c4b5fd;color:#5b21b6}
+.co-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .co-mode-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}
 .co-mode-pill{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:#0f172a;background:#f8fafc;border:1px solid #e2e8f0;border-radius:999px;padding:7px 12px}
 .co-mode-hint{font-size:12px;color:#94a3b8}
@@ -145,11 +201,15 @@
 .co-bulk-row:last-child{border-bottom:0}
 .co-bulk-meta{font-size:11.5px;color:#64748b;margin-top:4px;font-family:'IBM Plex Mono',monospace}
 .co-bulk-remove{background:#fff1f2;color:#b91c1c;border:1px solid #fecdd3;border-radius:999px;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer}
+@media(max-width:920px){
+  .co-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 @media(max-width:640px){
   .co-scan-row{display:grid!important;grid-template-columns:1fr 1fr;gap:8px!important}
   .co-scan-row #scanBox{grid-column:1 / -1}
   .co-scan-row .btn{width:100%;min-height:46px}
   .co-bulk-fields{grid-template-columns:1fr}
+  .co-filter-grid{grid-template-columns:1fr}
 }
 </style>
 
@@ -158,9 +218,41 @@ let _pendingItem=null;
 let _bulkCheckoutMode=false;
 let _bulkQueue=[];
 let _recentRows=[];
+let _checkoutMode='current';
 
 function escHtml(value){
   return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function parseLooseDate(value){
+  if(!value) return null;
+  const raw=String(value).trim();
+  if(!raw) return null;
+  const direct=Date.parse(raw);
+  if(!Number.isNaN(direct)) return new Date(direct);
+  const mdY=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s.*)?$/);
+  if(mdY){
+    let year=Number(mdY[3]);
+    if(year < 100) year += 2000;
+    return new Date(year, Number(mdY[1]) - 1, Number(mdY[2]));
+  }
+  return null;
+}
+
+function dateOnlyKey(value){
+  const dt=parseLooseDate(value);
+  if(!dt) return '';
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+}
+
+function identifierForRow(row){
+  return row.serial || row.internal_sku || row.sku || '—';
+}
+
+function statusLabel(status){
+  if(status === 'overdue') return 'Overdue';
+  if(status === 'returned') return 'Returned';
+  return 'Checked Out';
 }
 
 function scanCheckoutWithCamera(){
@@ -169,6 +261,7 @@ function scanCheckoutWithCamera(){
     doScan();
   });
 }
+
 function toggleBulkMode(){
   _bulkCheckoutMode=!!document.getElementById('bulkModeToggle').checked;
   document.getElementById('bulkQueueWrap').style.display=_bulkCheckoutMode?'block':'none';
@@ -177,6 +270,7 @@ function toggleBulkMode(){
     :'Single item mode opens the checkout card right away.';
   document.getElementById('scanBox').focus();
 }
+
 function renderBulkQueue(){
   const list=document.getElementById('bulkQueueList');
   const summary=document.getElementById('bulkQueueSummary');
@@ -191,20 +285,23 @@ function renderBulkQueue(){
   list.innerHTML=_bulkQueue.map((row,idx)=>`
     <div class="co-bulk-row">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:13px;color:#0f172a">${row.item.name}${row.amount>1?` <span style="color:#1d4ed8">× ${row.amount}</span>`:''}</div>
+        <div style="font-weight:700;font-size:13px;color:#0f172a">${escHtml(row.item.name)}${row.amount>1?` <span style="color:#1d4ed8">× ${row.amount}</span>`:''}</div>
         <div class="co-bulk-meta">${[row.item.serial||row.item.internal_sku||row.item.sku||('ID-'+row.item.id),row.item.shelf?('Shelf '+row.item.shelf):null].filter(Boolean).join(' · ')}</div>
       </div>
       <button type="button" class="co-bulk-remove" onclick="removeBulkQueueItem(${idx})">Remove</button>
     </div>`).join('');
 }
+
 function removeBulkQueueItem(idx){
   _bulkQueue.splice(idx,1);
   renderBulkQueue();
 }
+
 function clearBulkQueue(){
   _bulkQueue=[];
   renderBulkQueue();
 }
+
 function queueCheckoutItem(item){
   const existing=_bulkQueue.find(row=>row.item.id===item.id);
   if(existing){
@@ -219,6 +316,7 @@ function queueCheckoutItem(item){
   renderBulkQueue();
   return `Queued ${item.name}`;
 }
+
 async function submitBulkCheckout(){
   if(!_bulkQueue.length)return;
   const who=document.getElementById('bulkWho').value.trim();
@@ -385,58 +483,146 @@ async function confirmCheckout(){
   }
 }
 
+function populateRecentFilters(rows){
+  const fill=(id, values, emptyLabel)=>{
+    const select=document.getElementById(id);
+    const current=select.value;
+    const sorted=[...values].sort((a,b)=>a.localeCompare(b));
+    select.innerHTML=['<option value="">'+emptyLabel+'</option>'].concat(
+      sorted.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`)
+    ).join('');
+    if(sorted.includes(current)) select.value=current;
+  };
+  fill('recentSiteFilter', new Set(rows.map(r=>r.location_name).filter(Boolean)), 'All sites');
+  fill('recentTechFilter', new Set(rows.map(r=>r.checked_out_by).filter(Boolean)), 'All people');
+  fill('recentCategoryFilter', new Set(rows.map(r=>r.category).filter(Boolean)), 'All categories');
+  const statusSelect=document.getElementById('recentStatusFilter');
+  const current=statusSelect.value;
+  const statuses=_checkoutMode==='history'
+    ? [['','All statuses'],['checked_out','Still out'],['returned','Returned'],['overdue','Overdue']]
+    : [['','All statuses'],['checked_out','Checked out'],['overdue','Overdue']];
+  statusSelect.innerHTML=statuses.map(([value,label])=>`<option value="${value}">${label}</option>`).join('');
+  if(statuses.some(([value])=>value===current)) statusSelect.value=current;
+}
+
+function setCheckoutMode(mode){
+  _checkoutMode=mode==='history'?'history':'current';
+  document.getElementById('coModeCurrent').classList.toggle('active', _checkoutMode==='current');
+  document.getElementById('coModeHistory').classList.toggle('active', _checkoutMode==='history');
+  loadRecent();
+}
+
 function renderRecentList(){
   const el=document.getElementById('recent-list');
   const summary=document.getElementById('recentSummary');
   const q=(document.getElementById('recentSearch')?.value||'').trim().toLowerCase();
-  const rows=!q?_recentRows:_recentRows.filter(i=>{
+  const site=document.getElementById('recentSiteFilter')?.value||'';
+  const tech=document.getElementById('recentTechFilter')?.value||'';
+  const category=document.getElementById('recentCategoryFilter')?.value||'';
+  const status=document.getElementById('recentStatusFilter')?.value||'';
+  const sort=document.getElementById('recentSort')?.value||'checkout_desc';
+  const fromDate=document.getElementById('recentFrom')?.value||'';
+  const toDate=document.getElementById('recentTo')?.value||'';
+  let rows=_recentRows.filter(row=>{
     const haystack=[
-      i.name,
-      i.serial,
-      i.internal_sku,
-      i.sku,
-      i.checkout_by,
-      i.job_ref,
-      i.manufacturer,
-      i.model,
-      i.shelf,
-      i.checkout_date
+      row.item_name,
+      row.serial,
+      row.internal_sku,
+      row.sku,
+      row.checked_out_by,
+      row.job_ref,
+      row.location_name,
+      row.category,
+      row.manufacturer,
+      row.model,
+      row.expected_return_date,
+      row.checkin_date,
+      row.checkout_date
     ].filter(Boolean).join(' ').toLowerCase();
-    return haystack.includes(q);
+    if(q && !haystack.includes(q)) return false;
+    if(site && (row.location_name||'') !== site) return false;
+    if(tech && (row.checked_out_by||'') !== tech) return false;
+    if(category && (row.category||'') !== category) return false;
+    if(status && (row.checkout_status||'') !== status) return false;
+    const checkoutKey=dateOnlyKey(row.checkout_date);
+    if(fromDate && checkoutKey && checkoutKey < fromDate) return false;
+    if(toDate && checkoutKey && checkoutKey > toDate) return false;
+    return true;
+  });
+  rows.sort((a,b)=>{
+    const aCheckout=parseLooseDate(a.checkout_date)?.getTime() || 0;
+    const bCheckout=parseLooseDate(b.checkout_date)?.getTime() || 0;
+    const aDue=parseLooseDate(a.expected_return_date)?.getTime() || 0;
+    const bDue=parseLooseDate(b.expected_return_date)?.getTime() || 0;
+    const aName=(a.item_name || '').toLowerCase();
+    const bName=(b.item_name || '').toLowerCase();
+    switch(sort){
+      case 'checkout_asc': return aCheckout - bCheckout;
+      case 'due_asc': return (aDue || Number.MAX_SAFE_INTEGER) - (bDue || Number.MAX_SAFE_INTEGER);
+      case 'due_desc': return (bDue || 0) - (aDue || 0);
+      case 'item_asc': return aName.localeCompare(bName);
+      case 'item_desc': return bName.localeCompare(aName);
+      case 'checkout_desc':
+      default: return bCheckout - aCheckout;
+    }
   });
   if(summary){
-    summary.textContent=q
-      ? `${rows.length} result${rows.length===1?'':'s'} for "${q}"`
-      : `${_recentRows.length} item${_recentRows.length===1?'':'s'} currently checked out`;
+    const modeLabel=_checkoutMode==='history'?'history rows':'items currently out';
+    const searchBit=q ? ` for "${q}"` : '';
+    summary.textContent=`${rows.length} result${rows.length===1?'':'s'}${searchBit} · ${_recentRows.length} total ${modeLabel}`;
   }
   if(!rows.length){
-    el.innerHTML='<div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">No matching checked out items.</div>';
+    el.innerHTML='<div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">No matching checkout records.</div>';
     return;
   }
-  el.innerHTML=`<div class="co-grid">${rows.map(i=>`
-    <div class="recent-card">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.name}</div>
-        <div class="recent-ident">${i.serial||i.internal_sku||i.sku||'—'}</div>
-        <div class="recent-meta">
-          <span>Tech: ${i.checkout_by||'—'}</span>
-          ${i.job_ref?`<span>Job: ${i.job_ref}</span>`:''}
-          ${i.shelf?`<span>Shelf: ${i.shelf}</span>`:''}
-        </div>
-      </div>
-      <div style="flex-shrink:0;text-align:right">
-        <div class="recent-status">Checked Out</div>
-        <div style="font-size:12px;font-weight:600;color:#0f172a;margin-top:6px">${i.checkout_date||'—'}</div>
-      </div>
-    </div>`).join('')}</div>`;
+  el.innerHTML=`<table class="co-table">
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Site</th>
+        <th>Checked Out To</th>
+        <th>Job / Customer</th>
+        <th>Category</th>
+        <th>Checked Out</th>
+        <th>Expected Return</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(row=>{
+        const status=row.checkout_status || 'checked_out';
+        return `<tr>
+          <td>
+            <div class="co-item-title">${escHtml(row.item_name || '—')}</div>
+            <div class="co-item-ident">${escHtml(identifierForRow(row))}</div>
+          </td>
+          <td>${escHtml(row.location_name || 'Unassigned')}</td>
+          <td>${escHtml(row.checked_out_by || '—')}</td>
+          <td>${escHtml(row.job_ref || '—')}</td>
+          <td>${escHtml(row.category || '—')}</td>
+          <td>${escHtml(row.checkout_date || '—')}</td>
+          <td>${escHtml(row.expected_return_date || '—')}</td>
+          <td>
+            <span class="co-chip ${status}">${statusLabel(status)}</span>
+            ${row.checkin_date ? `<div class="co-muted-line">Checked in ${escHtml(row.checkin_date)}</div>` : ''}
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
 }
 
 async function loadRecent(){
-  _recentRows=await fetch('/api/items?status=out&hide_out=0').then(r=>r.json());
+  const el=document.getElementById('recent-list');
+  const summary=document.getElementById('recentSummary');
+  if(summary) summary.textContent='Loading checkout records...';
+  if(el) el.innerHTML='<div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">Loading...</div>';
+  const data=await fetch('/api/checkout-feed?mode='+encodeURIComponent(_checkoutMode)).then(r=>r.json());
+  _recentRows=(data && data.rows) ? data.rows : [];
+  populateRecentFilters(_recentRows);
   renderRecentList();
 }
 
-// Keyboard shortcut — focus scan box on any key if not already focused
 document.addEventListener('keydown',e=>{
   if(document.getElementById('coModal').style.display==='flex') return;
   if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;

@@ -63,6 +63,12 @@ SEO_PAGES = {
         "hero": "Simple inventory software for nonprofits managing donations, supplies, and shared equipment.",
         "pain": "Nonprofits need accountability without complex systems, expensive seats, or manual spreadsheets that fall apart during busy donation cycles.",
         "use_cases": ["Track donated goods by category and location", "Assign equipment to staff or programs", "Keep audit-friendly item history", "Manage supplies across storage rooms and sites"],
+        "use_case_details": [
+            "Keep donated goods organized by category, site, and program so staff can find stock without calling around or reconciling multiple sheets.",
+            "Assign laptops, tablets, and shared gear to staff, volunteers, or programs with a visible handoff record.",
+            "Maintain an audit-friendly item history for grants, board reviews, and internal accountability.",
+            "Track pantry stock, outreach kits, and supply rooms across multiple nonprofit locations in one system.",
+        ],
         "phase2": {
             "intro": "CountDepot helps nonprofits track donated inventory, shared equipment, volunteer handoffs, and storage locations without building another spreadsheet that only one person understands.",
             "workflow": [
@@ -108,7 +114,11 @@ SEO_PAGES = {
                     "copy": "Keep an audit-friendly history of item movement, assignments, and status changes so reviews are based on actual records instead of guesswork."
                 },
             ],
-            "social_proof": "Used by mission-driven teams that need cleaner donation tracking, better volunteer handoffs, and less spreadsheet cleanup before audits.",
+            "social_proof": "Mission-driven teams use CountDepot to keep donation inventory visible, volunteer handoffs accountable, and audit prep cleaner than spreadsheet-based tracking.",
+            "hero_proof": {
+                "quote": "Built for nonprofits that need better donation and equipment accountability without paying for heavy enterprise software.",
+                "subtext": "Common fits include food programs, outreach teams, church operations, and grant-funded community organizations."
+            },
             "homepage_link": {
                 "href": "/",
                 "text": "inventory management software for nonprofits",

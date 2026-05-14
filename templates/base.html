@@ -623,11 +623,6 @@ const _csrfToken=document.querySelector('meta[name="csrf-token"]')?.content||'';
 function api(url,data){return fetch(url,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-CSRF-Token':_csrfToken}:{},body:data?JSON.stringify(data):undefined}).then(r=>r.json())}
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
-document.addEventListener('click',e=>{
-  const overlay=e.target.closest('.overlay.open');
-  if(!overlay||!e.target.classList.contains('overlay'))return;
-  overlay.classList.remove('open');
-});
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
   const overlays=[...document.querySelectorAll('.overlay.open')];
