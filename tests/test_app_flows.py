@@ -4159,6 +4159,9 @@ def test_checkout_page_has_camera_scan_button(app, tenant):
     assert 'id="recentSiteFilter"' in body
     assert 'id="recentStatusFilter"' in body
     assert "Expected return: soonest" in body
+    assert 'id="scan-action-card"' in body
+    assert "openCiModal(_lastActionItem)" in body
+    assert "confirmCheckin()" in body
     assert "renderRecentList()" in body
 
 

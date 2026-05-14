@@ -28,6 +28,7 @@
         <span id="bulkModeHint" class="co-mode-hint">Single item mode opens the checkout card right away.</span>
       </div>
       <div id="scan-feedback" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:500"></div>
+      <div id="scan-action-card" style="display:none;margin-top:14px"></div>
     </div>
   </div>
 
@@ -174,6 +175,41 @@
   </div>
 </div>
 
+<div id="ciModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px)">
+  <div class="modal" style="width:480px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">📥 Check In Item</div>
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:2px" id="ci-item-sub"></div>
+      </div>
+      <button class="modal-close" onclick="closeCiModal()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:20px 22px">
+      <div style="background:#f8f8f7;border-radius:8px;padding:12px 14px;margin-bottom:18px;display:flex;align-items:center;gap:12px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14px;color:#0f172a" id="ci-item-name">—</div>
+          <div style="font-size:11.5px;color:#94a3b8;font-family:'IBM Plex Mono',monospace;margin-top:2px" id="ci-item-meta">—</div>
+          <div style="font-size:12px;color:#475569;margin-top:6px" id="ci-current-meta">—</div>
+        </div>
+      </div>
+      <div class="field" id="ci-qty-wrap" style="display:none">
+        <label class="label">Quantity to Check In *</label>
+        <input class="input" id="ci-qty" type="number" min="1" value="1" style="font-size:14px">
+        <div id="ci-qty-help" style="font-size:12px;color:#64748b;margin-top:5px"></div>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label class="label">Check In Note</label>
+        <input class="input" id="ci-note" placeholder="Optional note" style="font-size:14px"
+          onkeydown="if(event.key==='Enter')confirmCheckin()">
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn btn-secondary" onclick="closeCiModal()">Cancel</button>
+      <button class="btn btn-primary" id="ci-confirm-btn" onclick="confirmCheckin()" style="padding:9px 24px;font-size:14px">📥 Check In</button>
+    </div>
+  </div>
+</div>
+
 <style>
 .co-table-wrap{overflow:auto;border:1px solid #e5e7eb;border-radius:12px}
 .co-table{width:100%;border-collapse:collapse;min-width:980px;background:#fff}
@@ -192,6 +228,10 @@
 .co-view-pill{border:1px solid #dbe4f0;background:#fff;color:#475569;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer}
 .co-view-pill.active{background:#ede9fe;border-color:#c4b5fd;color:#5b21b6}
 .co-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.co-action-card{background:#f8fafc;border:1px solid #dbe4f0;border-radius:12px;padding:14px 16px}
+.co-action-title{font-size:14px;font-weight:700;color:#0f172a}
+.co-action-meta{font-size:12px;color:#64748b;margin-top:4px;display:flex;flex-wrap:wrap;gap:10px}
+.co-action-buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
 .co-mode-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}
 .co-mode-pill{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:#0f172a;background:#f8fafc;border:1px solid #e2e8f0;border-radius:999px;padding:7px 12px}
 .co-mode-hint{font-size:12px;color:#94a3b8}
@@ -215,6 +255,7 @@
 
 <script>
 let _pendingItem=null;
+let _pendingCheckinItem=null;
 let _bulkCheckoutMode=false;
 let _bulkQueue=[];
 let _recentRows=[];
@@ -253,6 +294,49 @@ function statusLabel(status){
   if(status === 'overdue') return 'Overdue';
   if(status === 'returned') return 'Returned';
   return 'Checked Out';
+}
+
+function clearActionCard(){
+  const card=document.getElementById('scan-action-card');
+  if(card){
+    card.style.display='none';
+    card.innerHTML='';
+  }
+}
+
+function renderActionCard(item){
+  const card=document.getElementById('scan-action-card');
+  if(!card)return;
+  const isQty=item.qty!==null&&item.qty!==undefined;
+  const status=item.checked_out ? (item.overdue ? 'Overdue' : 'Checked Out') : 'Available';
+  const primaryLabel=item.checked_out?'Check In':'Check Out';
+  const meta=[
+    item.serial ? `SN: ${escHtml(item.serial)}` : null,
+    item.internal_sku ? `Internal SKU: ${escHtml(item.internal_sku)}` : (item.sku ? `SKU: ${escHtml(item.sku)}` : null),
+    item.checkout_by ? `Out to: ${escHtml(item.checkout_by)}` : null,
+    item.job_ref ? `Job: ${escHtml(item.job_ref)}` : null,
+    item.checkout_date ? `Checked out: ${escHtml(item.checkout_date)}` : null
+  ].filter(Boolean);
+  card.style.display='';
+  card.innerHTML=`
+    <div class="co-action-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="min-width:0;flex:1">
+          <div class="co-action-title">${escHtml(item.name)}</div>
+          <div class="co-item-ident">${escHtml(identifierForRow(item))}</div>
+          <div class="co-action-meta">
+            <span>Status: ${escHtml(status)}</span>
+            ${item.location_name ? `<span>Site: ${escHtml(item.location_name)}</span>` : ''}
+            ${item.category ? `<span>Category: ${escHtml(item.category)}</span>` : ''}
+            ${isQty ? `<span>${escHtml(String(item.qty_out || 0))} out / ${escHtml(String(item.qty || 0))} total</span>` : ''}
+          </div>
+          ${meta.length ? `<div class="co-muted-line">${meta.join(' · ')}</div>` : ''}
+        </div>
+        <div class="co-action-buttons">
+          <button class="btn ${item.checked_out ? 'btn-primary' : 'btn-danger'}" type="button" onclick="${item.checked_out ? 'openCiModal(_lastActionItem)' : 'openCoModal(_lastActionItem)'}">${primaryLabel}</button>
+        </div>
+      </div>
+    </div>`;
 }
 
 function scanCheckoutWithCamera(){
@@ -347,23 +431,29 @@ async function submitBulkCheckout(){
 }
 
 function handleScannedItem(item, fb){
-  if(item.checked_out){
-    fb.style.background='#fffbeb';fb.style.color='#d97706';
-    fb.textContent='Already checked out: '+item.name+' (by '+( item.checkout_by||'unknown')+')';
-    return;
-  }
+  window._lastActionItem=item;
   if(item.sold){
     fb.style.background='#fef2f2';fb.style.color='#b91c1c';
     fb.textContent='This item has been marked as sold.';
+    clearActionCard();
     return;
   }
-  fb.style.background='#f0fdf4';fb.style.color='#15803d';
+  fb.style.background=item.checked_out?'#fffbeb':'#f0fdf4';
+  fb.style.color=item.checked_out?'#d97706':'#15803d';
   if(_bulkCheckoutMode){
+    if(item.checked_out){
+      fb.textContent='This item is already checked out. Use the action card below to check it in.';
+      renderActionCard(item);
+      return;
+    }
     fb.textContent='Queued: '+queueCheckoutItem(item);
+    renderActionCard(item);
     return;
   }
-  fb.textContent='Found: '+item.name;
-  openCoModal(item);
+  fb.textContent=item.checked_out
+    ?'Found checked-out item: '+item.name
+    :'Found available item: '+item.name;
+  renderActionCard(item);
 }
 
 function renderScanMatches(code, matches){
@@ -409,6 +499,7 @@ async function doScan(){
   if(!data.found){
     fb.style.background='#fef2f2';fb.style.color='#b91c1c';
     fb.textContent='Not found: '+code+' - try serial, SKU, internal SKU, shelf, or item name.';
+    clearActionCard();
     return;
   }
   if(data.ambiguous && Array.isArray(data.matches) && data.matches.length>1){
@@ -419,6 +510,7 @@ async function doScan(){
 }
 
 function openCoModal(item){
+  clearActionCard();
   _pendingItem=item;
   const qtyTracked=item.qty!==null&&item.qty!==undefined;
   document.getElementById('co-item-name').textContent=item.name;
@@ -452,6 +544,74 @@ function closeCoModal(){
   document.getElementById('coModal').style.display='none';
   _pendingItem=null;
   document.getElementById('scanBox').focus();
+}
+
+function openCiModal(item){
+  if(!item) return;
+  clearActionCard();
+  _pendingCheckinItem=item;
+  const qtyTracked=item.qty!==null&&item.qty!==undefined;
+  document.getElementById('ci-item-name').textContent=item.name;
+  document.getElementById('ci-item-sub').textContent=[item.category,'Shelf: '+(item.shelf||'—')].filter(Boolean).join(' · ');
+  document.getElementById('ci-item-meta').textContent=[item.manufacturer,item.model,item.serial?'SN: '+item.serial:null,item.internal_sku||item.sku].filter(Boolean).join(' · ')||'—';
+  document.getElementById('ci-current-meta').textContent=[
+    item.checkout_by ? `Checked out by ${item.checkout_by}` : null,
+    item.job_ref ? `Job ${item.job_ref}` : null,
+    item.checkout_date ? `On ${item.checkout_date}` : null
+  ].filter(Boolean).join(' · ') || 'Currently checked out';
+  document.getElementById('ci-note').value='';
+  const qtyWrap=document.getElementById('ci-qty-wrap');
+  const qtyInput=document.getElementById('ci-qty');
+  const qtyHelp=document.getElementById('ci-qty-help');
+  if(qtyTracked){
+    qtyWrap.style.display='';
+    qtyInput.value='1';
+    qtyInput.max=Math.max(0, Number(item.qty_out || 0));
+    qtyHelp.textContent=`${item.qty_out || 0} currently checked out / ${item.qty || 0} total`;
+  }else{
+    qtyWrap.style.display='none';
+    qtyInput.value='1';
+    qtyInput.removeAttribute('max');
+    qtyHelp.textContent='';
+  }
+  document.getElementById('ci-confirm-btn').disabled=false;
+  document.getElementById('ci-confirm-btn').textContent='📥 Check In';
+  document.getElementById('ciModal').style.display='flex';
+  setTimeout(()=>document.getElementById('ci-note').focus(),80);
+}
+
+function closeCiModal(){
+  document.getElementById('ciModal').style.display='none';
+  _pendingCheckinItem=null;
+  document.getElementById('scanBox').focus();
+}
+
+async function confirmCheckin(){
+  if(!_pendingCheckinItem)return;
+  const qtyTracked=_pendingCheckinItem.qty!==null&&_pendingCheckinItem.qty!==undefined;
+  const amount=qtyTracked?Number(document.getElementById('ci-qty').value||0):1;
+  if(qtyTracked&&(!Number.isFinite(amount)||amount<1)){toast('Enter a valid check-in quantity','warn');document.getElementById('ci-qty').focus();return;}
+  const btn=document.getElementById('ci-confirm-btn');
+  btn.disabled=true;
+  btn.innerHTML='<span style="width:13px;height:13px;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px"></span>Processing…';
+  const note=document.getElementById('ci-note').value.trim();
+  const payload=qtyTracked
+    ? {id:_pendingCheckinItem.id,amount,action:'return',note:note||'Checkout page check-in'}
+    : {id:_pendingCheckinItem.id,checkin_note:note||''};
+  const res=await api(qtyTracked?'/api/qty_adjust':'/api/checkin',payload);
+  if(res.ok){
+    const itemName=_pendingCheckinItem.name;
+    closeCiModal();
+    toast(qtyTracked?`✓ Checked in ${amount} unit(s) of ${itemName}`:`✓ Checked in: ${itemName}`,'ok');
+    const fb=document.getElementById('scan-feedback');
+    fb.style.display='';fb.style.background='#f0fdf4';fb.style.color='#15803d';
+    fb.textContent=qtyTracked?`✓ Checked in ${amount} unit(s) of ${itemName}`:`✓ Checked in: ${itemName}`;
+    loadRecent();
+  }else{
+    btn.disabled=false;
+    btn.textContent='📥 Check In';
+    toast(res.msg||'Error','err');
+  }
 }
 
 async function confirmCheckout(){
